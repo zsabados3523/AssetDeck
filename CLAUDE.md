@@ -27,3 +27,4 @@ Rafael usa o app desktop, não o terminal — execute os comandos você mesmo.
 ## Documentos de contexto
 - SCHEMA.md — modelo de dados. Fonte da verdade.
 - TODO.md — roadmap e estado atual.
+- Os dois ainda NÃO existem: serão criados na sessão de arquitetura. Até lá, NÃO crie nenhuma tabela.
