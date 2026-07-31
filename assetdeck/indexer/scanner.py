@@ -20,7 +20,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
 
+from assetdeck.sidecar.reader import read_sidecar, restorable_fields
+from assetdeck.sidecar.writer import sidecar_path
+
 log = logging.getLogger(__name__)
+
+
+def _uuid_livre(conn: sqlite3.Connection, uuid: str) -> bool:
+    return conn.execute("SELECT 1 FROM assets WHERE uuid = ?", (uuid,)).fetchone() is None
 
 # Extensão (minúscula, sem ponto) → asset_type do schema.
 # O que não está aqui é ignorado (contado e logado, nunca erro).
@@ -57,6 +64,7 @@ class ScanStats:
     unchanged: int = 0
     missing: int = 0
     reappeared: int = 0
+    restored: int = 0   # metadados recuperados de sidecars .json
     ignored: int = 0
     errors: int = 0
     aborted: bool = False
@@ -64,6 +72,8 @@ class ScanStats:
 
     def summary(self) -> str:
         parts = [f"{self.added} novos", f"{self.unchanged} inalterados"]
+        if self.restored:
+            parts.append(f"{self.restored} restaurados de sidecar")
         if self.updated:
             parts.append(f"{self.updated} atualizados")
         if self.missing:
@@ -206,10 +216,35 @@ def _process_file(conn, library_id, root, path, known, seen, stats) -> None:
 
     row = known.get(rel_path)
     if row is None:
-        # Arquivo novo → novo asset (1:1 nesta fatia) + file principal
+        # Arquivo novo → novo asset (1:1 nesta fatia) + file principal.
+        # Se há um sidecar .json ao lado, os metadados voltam do espelho —
+        # é o caminho de recuperação quando o banco se perde.
+        campos = {
+            "uuid": str(uuid_mod.uuid4()), "name": path.stem,
+            "rating": None, "starred": 0, "notes": None,
+        }
+        side = read_sidecar(sidecar_path(path))
+        if side:
+            recuperados = restorable_fields(side)
+            if "uuid" in recuperados and _uuid_livre(conn, recuperados["uuid"]):
+                campos["uuid"] = recuperados["uuid"]
+            elif "uuid" in recuperados:
+                log.warning(
+                    "Sidecar de %s traz uuid já usado (arquivo duplicado com "
+                    "sidecar copiado?) — gerando uuid novo.", rel_path,
+                )
+            for k in ("name", "rating", "starred", "notes"):
+                if k in recuperados:
+                    campos[k] = recuperados[k]
+            stats.restored += 1
+            log.info("Metadados restaurados do sidecar para %s", rel_path)
+
         cur = conn.execute(
-            "INSERT INTO assets (uuid, library_id, name, asset_type) VALUES (?, ?, ?, ?)",
-            (str(uuid_mod.uuid4()), library_id, path.stem, asset_type),
+            """INSERT INTO assets (uuid, library_id, name, asset_type,
+                                   rating, starred, notes)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (campos["uuid"], library_id, campos["name"], asset_type,
+             campos["rating"], campos["starred"], campos["notes"]),
         )
         conn.execute(
             """INSERT INTO files (asset_id, rel_path, size_bytes, mtime_ns,

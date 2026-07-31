@@ -6,11 +6,12 @@ import logging
 import sqlite3
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QUrl
+from PySide6.QtCore import Qt, QUrl, Signal
 from PySide6.QtGui import QDesktopServices, QPixmap
 from PySide6.QtWidgets import (
     QFormLayout,
     QLabel,
+    QPlainTextEdit,
     QPushButton,
     QVBoxLayout,
     QWidget,
@@ -30,10 +31,14 @@ def human_size(n: int) -> str:
 
 
 class DetailsPanel(QWidget):
+    notes_saved = Signal(int, str)  # asset_id, texto da nota
+
     def __init__(self, library_root: Path, parent=None) -> None:
         super().__init__(parent)
         self._root = library_root
         self._current: Path | None = None
+        self._current_asset_id: int | None = None
+        self._loaded_notes: str = ""
 
         self.preview = QLabel("Selecione um asset")
         self.preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -66,12 +71,24 @@ class DetailsPanel(QWidget):
         self.open_file_btn.clicked.connect(self._open_file)
         self._set_buttons(False)
 
+        notes_label = QLabel("Notas:")
+        self.notes_edit = QPlainTextEdit()
+        self.notes_edit.setPlaceholderText("Anotações suas sobre este asset…")
+        self.notes_edit.setMaximumHeight(110)
+        self.notes_edit.textChanged.connect(self._on_notes_changed)
+        self.save_notes_btn = QPushButton("Salvar nota")
+        self.save_notes_btn.setEnabled(False)
+        self.save_notes_btn.clicked.connect(self._save_notes)
+
         layout = QVBoxLayout(self)
         layout.addWidget(self.preview)
         layout.addWidget(self.name)
         layout.addLayout(form)
         layout.addWidget(self.open_folder_btn)
         layout.addWidget(self.open_file_btn)
+        layout.addWidget(notes_label)
+        layout.addWidget(self.notes_edit)
+        layout.addWidget(self.save_notes_btn)
         layout.addStretch()
 
     def _set_buttons(self, enabled: bool) -> None:
@@ -83,6 +100,12 @@ class DetailsPanel(QWidget):
     def show_asset(self, row: sqlite3.Row, thumb: QPixmap | None) -> None:
         path = self._root / row["rel_path"]
         self._current = path
+        self._current_asset_id = row["id"]
+        self._loaded_notes = row["notes"] or ""
+        self.notes_edit.blockSignals(True)
+        self.notes_edit.setPlainText(self._loaded_notes)
+        self.notes_edit.blockSignals(False)
+        self.save_notes_btn.setEnabled(False)
 
         if thumb and not thumb.isNull():
             self.preview.setPixmap(
@@ -116,6 +139,20 @@ class DetailsPanel(QWidget):
         except Exception:
             log.exception("Não consegui ler dimensões de %s", path)
             return "—"
+
+    # ---- notas ----
+
+    def _on_notes_changed(self) -> None:
+        mudou = self.notes_edit.toPlainText() != self._loaded_notes
+        self.save_notes_btn.setEnabled(mudou and self._current_asset_id is not None)
+
+    def _save_notes(self) -> None:
+        if self._current_asset_id is None:
+            return
+        texto = self.notes_edit.toPlainText()
+        self._loaded_notes = texto
+        self.save_notes_btn.setEnabled(False)
+        self.notes_saved.emit(self._current_asset_id, texto)
 
     # ---- ações ----
 

@@ -1,10 +1,10 @@
 # TODO.md — Roadmap e estado atual
 
 ## Estado atual (2026-07-31)
-- Fatias 1 e 2 concluídas e validadas pelo Rafael (740 assets da testlib
-  indexados; revarredura idempotente; 27 testes verdes).
-- **Em andamento: Fatia 3 — grid de thumbnails** (inclui .dwg→vector e
-  .mtlx→other no mapa de extensões, a pedido do Rafael).
+- **F0 (MVP) completo**: Fatias 1–4 concluídas e validadas pelo Rafael.
+  750 assets, grid com thumbs, busca FTS, árvore de pastas, 49 testes.
+- **Em andamento: Fatia 5 — sidecars JSON + notas** (inclui filtro de tipos
+  em checklist multi-seleção, sugestão do Rafael).
 
 ## Como ler este arquivo
 Uma fatia por vez, em branch própria. Cada fatia termina com: pytest verde,
@@ -28,14 +28,14 @@ Scanner em thread varre a testlib e grava `files`/`assets` (1 arquivo =
 **Deu certo quando:** a janela mostra a contagem subindo até ~753 sem
 congelar; fechar e reabrir mantém os dados.
 
-### ☐ Fatia 3 — Grid de thumbnails
+### ☑ Fatia 3 — Grid de thumbnails (concluída 2026-07-31)
 Thumbs de jpg/png/tif em grid virtualizada, cache em disco, painel de
 detalhes (resolução, tamanho, formato, caminho), abrir pasta / abrir com app
 padrão.
 **Deu certo quando:** rolar a grid é fluido; segunda abertura é instantânea
 (cache); clicar num asset mostra os detalhes; "abrir pasta" funciona.
 
-### ☐ Fatia 4 — Busca e filtros básicos *(fecha o F0)*
+### ☑ Fatia 4 — Busca e filtros básicos (concluída 2026-07-31; rolagem suave incluída) *(fechou o F0)*
 Busca por nome via FTS5, toggle "mostrar subpastas", filtro por tipo.
 **Deu certo quando:** digitar filtra em tempo real com milhares de itens.
 
@@ -43,9 +43,11 @@ Busca por nome via FTS5, toggle "mostrar subpastas", filtro por tipo.
 
 ### ☐ Fatia 5 — Sidecars JSON + notas
 Writer/reader do `.assetdeck.json` + primeiro metadado editável (notas),
-validando o ciclo db → json → (rescan) → db.
+validando o ciclo db → json → (rescan) → db. Inclui filtro de tipos em
+**checklist multi-seleção** (sugestão do Rafael: "só modelos", "modelos +
+texturas" etc.).
 **Deu certo quando:** editar a nota cria o .json ao lado do asset; apagar o
-.db e reindexar recupera a nota do sidecar.
+.db e reindexar recupera a nota do sidecar; dá para marcar 2+ tipos no filtro.
 
 ### ☐ Fatia 6 — Agrupamento PBR
 Heurística por sufixo (_basecolor/_albedo/_diff, _rough/_gloss, _nrm/_normal,

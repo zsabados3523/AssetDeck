@@ -67,8 +67,16 @@ def test_busca_com_caracteres_especiais_nao_explode(conn, lib):
 
 
 def test_filtro_por_tipo(conn, lib):
-    rows = assets_repo.list_for_grid(conn, asset_type="hdri")
+    rows = assets_repo.list_for_grid(conn, asset_types=["hdri"])
     assert _names(rows) == ["studio_small"]
+
+
+def test_filtro_multi_tipo_em_checklist(conn, lib):
+    # Sugestão do Rafael: marcar 2+ tipos ao mesmo tempo
+    rows = assets_repo.list_for_grid(conn, asset_types=["hdri", "texture"])
+    assert len(rows) == 6  # todos, já que a lib só tem esses dois tipos
+    rows = assets_repo.list_for_grid(conn, asset_types=["hdri", "model"])
+    assert _names(rows) == ["studio_small"]  # model não existe → só o hdri
 
 
 def test_filtro_por_pasta_com_subpastas(conn, lib):
@@ -88,7 +96,7 @@ def test_raiz_sem_subpastas_mostra_so_arquivos_soltos(conn, lib):
 
 def test_filtros_combinados(conn, lib):
     rows = assets_repo.list_for_grid(
-        conn, search="conc", asset_type="texture",
+        conn, search="conc", asset_types=["texture"],
         dir_prefix="Texturas/Concreto", include_subdirs=True,
     )
     assert len(rows) == 2

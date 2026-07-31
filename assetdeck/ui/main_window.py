@@ -10,7 +10,6 @@ from PySide6.QtCore import QModelIndex, Qt, QTimer
 from PySide6.QtGui import QPixmapCache
 from PySide6.QtWidgets import (
     QCheckBox,
-    QComboBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -28,8 +27,10 @@ from assetdeck.indexer.scanner import ScanStats
 from assetdeck.thumbs.pipeline import ThumbnailPipeline
 from assetdeck.ui.asset_grid import AssetGridModel, AssetGridView
 from assetdeck.ui.details_panel import DetailsPanel
+from assetdeck.sidecar import writer as sidecar_writer
 from assetdeck.ui.folder_tree import FolderTree
 from assetdeck.ui.scan_worker import ScanController
+from assetdeck.ui.type_filter import TypeFilter
 
 log = logging.getLogger(__name__)
 
@@ -58,9 +59,8 @@ class MainWindow(QMainWindow):
             lambda _t: self._search_debounce.start()
         )
 
-        self.type_combo = QComboBox()
-        self.type_combo.addItem("Todos os tipos", None)
-        self.type_combo.currentIndexChanged.connect(lambda _i: self._apply_filters())
+        self.type_filter = TypeFilter()
+        self.type_filter.changed.connect(self._apply_filters)
 
         self.subdirs_check = QCheckBox("Incluir subpastas")
         self.subdirs_check.setChecked(True)
@@ -75,7 +75,7 @@ class MainWindow(QMainWindow):
 
         top = QHBoxLayout()
         top.addWidget(self.search_box, stretch=1)
-        top.addWidget(self.type_combo)
+        top.addWidget(self.type_filter)
         top.addWidget(self.subdirs_check)
         top.addWidget(self.count_label)
         top.addWidget(self.progress)
@@ -96,6 +96,7 @@ class MainWindow(QMainWindow):
         self.details = DetailsPanel(self._library_root)
         self.details.setMinimumWidth(300)
         self.details.setMaximumWidth(380)
+        self.details.notes_saved.connect(self._on_notes_saved)
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.addWidget(self.folders)
@@ -118,17 +119,9 @@ class MainWindow(QMainWindow):
     # ---- filtros e contagem ----
 
     def _reload_all(self) -> None:
-        """Recarga completa: árvore de pastas, combo de tipos e grid."""
+        """Recarga completa: árvore de pastas, checklist de tipos e grid."""
         self.folders.reload(self._conn)
-        current_type = self.type_combo.currentData()
-        self.type_combo.blockSignals(True)
-        self.type_combo.clear()
-        self.type_combo.addItem("Todos os tipos", None)
-        for t in assets_repo.distinct_types(self._conn):
-            self.type_combo.addItem(t, t)
-        idx = self.type_combo.findData(current_type)
-        self.type_combo.setCurrentIndex(idx if idx >= 0 else 0)
-        self.type_combo.blockSignals(False)
+        self.type_filter.reload(assets_repo.distinct_types(self._conn))
         self.model.reload()
         self._apply_filters()
 
@@ -137,11 +130,23 @@ class MainWindow(QMainWindow):
         dir_prefix = current.data(0, 32) if current else ""
         self.model.set_filters(
             search=self.search_box.text().strip(),
-            asset_type=self.type_combo.currentData(),
+            asset_types=self.type_filter.selected(),
             dir_prefix=dir_prefix,
             include_subdirs=self.subdirs_check.isChecked(),
         )
         self.refresh_count()
+
+    # ---- notas / sidecar ----
+
+    def _on_notes_saved(self, asset_id: int, texto: str) -> None:
+        assets_repo.set_notes(self._conn, asset_id, texto)
+        dest = sidecar_writer.write_for_asset(self._conn, self._library_root, asset_id)
+        if dest is not None:
+            self.statusBar().showMessage(f"Nota salva e espelhada em {dest.name}")
+        else:
+            self.statusBar().showMessage(
+                "Nota salva no banco; sidecar adiado (arquivo sumido — ver log)"
+            )
 
     def refresh_count(self) -> int:
         total = assets_repo.count_active(self._conn)
