@@ -36,12 +36,15 @@ EXT_MAP = {
     # modelos 3D
     "blend": "model", "fbx": "model", "obj": "model", "gltf": "model",
     "glb": "model", "dae": "model", "stl": "model",
-    # vetores
+    # vetores (dwg incluído a pedido do Rafael — desenhos CAD)
     "svg": "vector", "ai": "vector", "eps": "vector", "cdr": "vector",
+    "dwg": "vector",
     # fotometria e color grading
     "ies": "ies", "cube": "lut", "3dl": "lut",
     # photoshop
     "psd": "psd", "psb": "psd",
+    # materiais MaterialX
+    "mtlx": "other",
 }
 
 _FINGERPRINT_CHUNK = 1024 * 1024  # 1MB de cada ponta

@@ -58,6 +58,8 @@ def test_classify_mapeia_tipos_certos():
     assert classify(Path("x.cube")) == "lut"
     assert classify(Path("x.psd")) == "psd"
     assert classify(Path("x.svg")) == "vector"
+    assert classify(Path("x.dwg")) == "vector"   # CAD, a pedido do Rafael
+    assert classify(Path("x.mtlx")) == "other"
     assert classify(Path("x.xyz")) is None
 
 

@@ -19,6 +19,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(prog="assetdeck", description="AssetDeck — DAM local")
     parser.add_argument("--screenshot", metavar="PATH",
                         help="salva um screenshot da janela em PATH e sai")
+    parser.add_argument("--screenshot-delay", type=int, default=400, metavar="MS",
+                        help="espera MS milissegundos antes do screenshot (padrão: 400)")
     parser.add_argument("--version", action="version", version=f"assetdeck {__version__}")
     return parser.parse_args(argv)
 
@@ -46,7 +48,7 @@ def run(argv: list[str]) -> int:
 
     app = QApplication(sys.argv[:1])
     win = MainWindow(conn=conn, library_root=cfg["library_root"],
-                     db_path=config.db_path())
+                     db_path=config.db_path(), thumbs_dir=config.thumbs_dir())
     win.show()
     win.start_scan()  # indexação em background a cada abertura (idempotente)
 
@@ -62,6 +64,6 @@ def run(argv: list[str]) -> int:
             win.close()  # encerra a thread de varredura com segurança
             app.exit(0 if ok else 1)
 
-        QTimer.singleShot(400, _grab)  # deixa a janela terminar de desenhar
+        QTimer.singleShot(args.screenshot_delay, _grab)  # espera a janela desenhar
 
     return app.exec()
