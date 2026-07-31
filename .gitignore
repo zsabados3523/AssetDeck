@@ -1,0 +1,15 @@
+# Ambiente virtual Python
+.venv/
+
+# Bytecode compilado do Python
+__pycache__/
+
+# Bancos de dados SQLite (e arquivos auxiliares -wal / -shm)
+*.db
+*.db-*
+
+# Cache da aplicação
+cache/
+
+# Cache do pytest
+.pytest_cache/
