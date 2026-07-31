@@ -1,9 +1,9 @@
 # TODO.md — Roadmap e estado atual
 
 ## Estado atual (2026-07-31)
-- Ambiente pronto: Python 3.12 + venv + PySide6 6.11.1 (xcb OK) + pytest 9.1.1.
-- Documentos de arquitetura escritos (PROJECT.md, SCHEMA.md, este arquivo).
-- **Nenhum código do app ainda. Próximo passo: Rafael aprova os documentos → Fatia 1.**
+- Fatia 1 concluída e validada pelo Rafael na tela (janela abre, banco v1,
+  backup diário ativo, 17 testes verdes).
+- **Em andamento: Fatia 2 — indexação em background.**
 
 ## Como ler este arquivo
 Uma fatia por vez, em branch própria. Cada fatia termina com: pytest verde,
@@ -13,7 +13,7 @@ critério de "deu certo" verificado pelo Rafael na tela, e commit.
 
 ## F0 — MVP
 
-### ☐ Fatia 1 — Esqueleto vivo
+### ☑ Fatia 1 — Esqueleto vivo (concluída 2026-07-31)
 Pacote `assetdeck`, config XDG, logging, **schema v1 COMPLETO como
 migration 001**, backup rotativo do .db, janela abrindo, `--screenshot`,
 testes de migração.
