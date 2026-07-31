@@ -43,23 +43,45 @@ class AssetGridModel(QAbstractListModel):
         self._rows: list[sqlite3.Row] = []
         self._row_by_asset: dict[int, int] = {}
         self._placeholders: dict[str, QPixmap] = {}
+        # Filtros ativos (Fatia 4)
+        self._search: str | None = None
+        self._asset_type: str | None = None
+        self._dir_prefix: str | None = None
+        self._include_subdirs: bool = True
         QPixmapCache.setCacheLimit(128 * 1024)  # 128MB de thumbs em RAM
 
     # ---- dados ----
 
+    def set_filters(self, search: str | None = None, asset_type: str | None = None,
+                    dir_prefix: str | None = None, include_subdirs: bool = True) -> None:
+        self._search = search or None
+        self._asset_type = asset_type or None
+        self._dir_prefix = dir_prefix or None
+        self._include_subdirs = include_subdirs
+        self._requery()
+
     def reload(self) -> None:
-        self.beginResetModel()
-        self._rows = assets_repo.list_for_grid(self._conn)
-        self._row_by_asset = {r["id"]: i for i, r in enumerate(self._rows)}
-        self.endResetModel()
-        log.info("Grid recarregada: %d assets.", len(self._rows))
+        """Recarga completa (pós-varredura): refaz a consulta e o pré-aquecimento."""
+        self._requery()
         self._warmup()
 
+    def _requery(self) -> None:
+        self.beginResetModel()
+        self._rows = assets_repo.list_for_grid(
+            self._conn, search=self._search, asset_type=self._asset_type,
+            dir_prefix=self._dir_prefix, include_subdirs=self._include_subdirs,
+        )
+        self._row_by_asset = {r["id"]: i for i, r in enumerate(self._rows)}
+        self.endResetModel()
+        log.info("Grid: %d assets (filtros: busca=%r tipo=%r pasta=%r subpastas=%s)",
+                 len(self._rows), self._search, self._asset_type,
+                 self._dir_prefix, self._include_subdirs)
+
     def _warmup(self) -> None:
-        """Gera em background as thumbs de toda a biblioteca (visível na frente)."""
+        """Gera em background as thumbs da biblioteca TODA (independe de filtro)."""
         items = [
             (r["id"], self._root / r["rel_path"], r["content_hash"])
-            for r in self._rows
+            for r in assets_repo.list_for_grid(self._conn)
             if r["missing_since"] is None and can_thumbnail(self._root / r["rel_path"])
         ]
         self._pipeline.warmup(items)
@@ -140,3 +162,7 @@ class AssetGridView(QListView):
         self.setWordWrap(True)
         self.setSpacing(8)
         self.setSelectionMode(QListView.SelectionMode.SingleSelection)
+        # Rolagem suave: por pixel (o padrão pula uma CÉLULA inteira de
+        # 200px por passo, o que fica rápido demais — feedback do Rafael)
+        self.setVerticalScrollMode(QListView.ScrollMode.ScrollPerPixel)
+        self.verticalScrollBar().setSingleStep(24)  # px por passo da rodinha

@@ -181,6 +181,10 @@ def scan_library(
                 log.warning("Arquivo sumido da biblioteca: %s", rel_path)
 
     conn.commit()
+    # Índice de busca sempre em dia (barato: milissegundos nessa escala)
+    from assetdeck.db.repos.assets import rebuild_fts
+
+    rebuild_fts(conn)
     if stats.ignored_exts:
         log.info("Extensões ignoradas: %s",
                  ", ".join(f".{e} ({n}x)" for e, n in sorted(stats.ignored_exts.items())))

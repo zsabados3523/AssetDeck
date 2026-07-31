@@ -6,11 +6,14 @@ import logging
 import sqlite3
 from pathlib import Path
 
-from PySide6.QtCore import QModelIndex, Qt
+from PySide6.QtCore import QModelIndex, Qt, QTimer
 from PySide6.QtGui import QPixmapCache
 from PySide6.QtWidgets import (
+    QCheckBox,
+    QComboBox,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QMainWindow,
     QProgressBar,
     QPushButton,
@@ -25,6 +28,7 @@ from assetdeck.indexer.scanner import ScanStats
 from assetdeck.thumbs.pipeline import ThumbnailPipeline
 from assetdeck.ui.asset_grid import AssetGridModel, AssetGridView
 from assetdeck.ui.details_panel import DetailsPanel
+from assetdeck.ui.folder_tree import FolderTree
 from assetdeck.ui.scan_worker import ScanController
 
 log = logging.getLogger(__name__)
@@ -42,36 +46,65 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("AssetDeck")
         self.resize(1280, 800)
 
-        # --- barra superior ---
+        # --- barra superior: busca + filtros ---
+        self.search_box = QLineEdit()
+        self.search_box.setPlaceholderText("Buscar por nome…  (ex.: concreto, wood 4k)")
+        self.search_box.setClearButtonEnabled(True)
+        self._search_debounce = QTimer(self)
+        self._search_debounce.setSingleShot(True)
+        self._search_debounce.setInterval(250)  # espera parar de digitar
+        self._search_debounce.timeout.connect(self._apply_filters)
+        self.search_box.textChanged.connect(
+            lambda _t: self._search_debounce.start()
+        )
+
+        self.type_combo = QComboBox()
+        self.type_combo.addItem("Todos os tipos", None)
+        self.type_combo.currentIndexChanged.connect(lambda _i: self._apply_filters())
+
+        self.subdirs_check = QCheckBox("Incluir subpastas")
+        self.subdirs_check.setChecked(True)
+        self.subdirs_check.toggled.connect(lambda _c: self._apply_filters())
+
         self.count_label = QLabel()
         self.progress = QProgressBar()
         self.progress.setVisible(False)
-        self.progress.setMaximumWidth(320)
+        self.progress.setMaximumWidth(280)
         self.rescan_btn = QPushButton("Reindexar")
         self.rescan_btn.clicked.connect(self.start_scan)
 
         top = QHBoxLayout()
+        top.addWidget(self.search_box, stretch=1)
+        top.addWidget(self.type_combo)
+        top.addWidget(self.subdirs_check)
         top.addWidget(self.count_label)
-        top.addStretch()
         top.addWidget(self.progress)
         top.addWidget(self.rescan_btn)
 
-        # --- grid + detalhes ---
+        # --- pastas + grid + detalhes ---
         self.model = AssetGridModel(conn, self._library_root, self._pipeline, parent=self)
         self.grid = AssetGridView()
         self.grid.setModel(self.model)
         self.grid.selectionModel().currentChanged.connect(self._on_selection)
         self.model.dataChanged.connect(self._on_data_changed)
 
+        self.folders = FolderTree()
+        self.folders.setMinimumWidth(180)
+        self.folders.setMaximumWidth(320)
+        self.folders.dir_selected.connect(lambda _d: self._apply_filters())
+
         self.details = DetailsPanel(self._library_root)
         self.details.setMinimumWidth(300)
         self.details.setMaximumWidth(380)
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
+        splitter.addWidget(self.folders)
         splitter.addWidget(self.grid)
         splitter.addWidget(self.details)
-        splitter.setStretchFactor(0, 1)
-        splitter.setStretchFactor(1, 0)
+        splitter.setStretchFactor(0, 0)
+        splitter.setStretchFactor(1, 1)
+        splitter.setStretchFactor(2, 0)
+        splitter.setSizes([220, 760, 300])
 
         central = QWidget()
         layout = QVBoxLayout(central)
@@ -80,15 +113,44 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(central)
 
         self.statusBar().showMessage(f"v{__version__} · banco: {db_path}")
+        self._reload_all()
+
+    # ---- filtros e contagem ----
+
+    def _reload_all(self) -> None:
+        """Recarga completa: árvore de pastas, combo de tipos e grid."""
+        self.folders.reload(self._conn)
+        current_type = self.type_combo.currentData()
+        self.type_combo.blockSignals(True)
+        self.type_combo.clear()
+        self.type_combo.addItem("Todos os tipos", None)
+        for t in assets_repo.distinct_types(self._conn):
+            self.type_combo.addItem(t, t)
+        idx = self.type_combo.findData(current_type)
+        self.type_combo.setCurrentIndex(idx if idx >= 0 else 0)
+        self.type_combo.blockSignals(False)
         self.model.reload()
+        self._apply_filters()
+
+    def _apply_filters(self) -> None:
+        current = self.folders.currentItem()
+        dir_prefix = current.data(0, 32) if current else ""
+        self.model.set_filters(
+            search=self.search_box.text().strip(),
+            asset_type=self.type_combo.currentData(),
+            dir_prefix=dir_prefix,
+            include_subdirs=self.subdirs_check.isChecked(),
+        )
         self.refresh_count()
 
-    # ---- contagem ----
-
     def refresh_count(self) -> int:
-        count = assets_repo.count_active(self._conn)
-        self.count_label.setText(f"{count} assets")
-        return count
+        total = assets_repo.count_active(self._conn)
+        shown = self.model.rowCount()
+        if shown == total:
+            self.count_label.setText(f"{total} assets")
+        else:
+            self.count_label.setText(f"{shown} de {total} assets")
+        return total
 
     # ---- seleção / detalhes ----
 
@@ -125,9 +187,10 @@ class MainWindow(QMainWindow):
     def _on_finished(self, stats: ScanStats) -> None:
         self.progress.setVisible(False)
         self.rescan_btn.setEnabled(True)
-        self.refresh_count()
         if stats.added or stats.updated or stats.missing or stats.reappeared:
-            self.model.reload()  # só recarrega a grid se algo mudou
+            self._reload_all()  # árvore/tipos/grid só se algo mudou
+        else:
+            self.refresh_count()
         self.statusBar().showMessage(f"Indexação concluída: {stats.summary()}")
         log.info("UI: indexação concluída — %s", stats.summary())
 
