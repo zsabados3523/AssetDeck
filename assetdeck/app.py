@@ -1,0 +1,68 @@
+"""Bootstrap do app: config → logging → banco → backup → janela."""
+
+from __future__ import annotations
+
+import argparse
+import logging
+import sys
+
+from assetdeck import __version__, config
+from assetdeck.backup.rotate import daily_backup
+from assetdeck.db.connection import connect
+from assetdeck.db.migrate import apply_migrations
+from assetdeck.db.repos import assets as assets_repo
+from assetdeck.logging_setup import setup_logging
+
+log = logging.getLogger(__name__)
+
+
+def parse_args(argv: list[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(prog="assetdeck", description="AssetDeck — DAM local")
+    parser.add_argument("--screenshot", metavar="PATH",
+                        help="salva um screenshot da janela em PATH e sai")
+    parser.add_argument("--version", action="version", version=f"assetdeck {__version__}")
+    return parser.parse_args(argv)
+
+
+def run(argv: list[str]) -> int:
+    args = parse_args(argv)
+
+    config.ensure_dirs()
+    setup_logging(config.logs_dir())
+    cfg = config.load_config()
+    log.info("AssetDeck %s iniciando — biblioteca: %s", __version__, cfg["library_root"])
+
+    conn = connect(config.db_path())
+    version = apply_migrations(conn)
+    log.info("Banco na versão %d (%s)", version, config.db_path())
+
+    created = daily_backup(config.db_path(), config.backups_dir(), keep=cfg["backup_keep"])
+    if created is None:
+        log.info("Backup de hoje já existia — nada a fazer.")
+
+    count = assets_repo.count_active(conn)
+
+    # Import tardio: os testes de banco/backup rodam sem Qt carregado.
+    from PySide6.QtWidgets import QApplication
+
+    from assetdeck.ui.main_window import MainWindow
+
+    app = QApplication(sys.argv[:1])
+    win = MainWindow(asset_count=count, library_root=cfg["library_root"],
+                     db_path=config.db_path())
+    win.show()
+
+    if args.screenshot:
+        from PySide6.QtCore import QTimer
+
+        def _grab() -> None:
+            ok = win.grab().save(args.screenshot)
+            if ok:
+                log.info("Screenshot salvo em %s", args.screenshot)
+            else:
+                log.error("Não consegui salvar o screenshot em %s", args.screenshot)
+            app.exit(0 if ok else 1)
+
+        QTimer.singleShot(400, _grab)  # deixa a janela terminar de desenhar
+
+    return app.exec()
