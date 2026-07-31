@@ -6,7 +6,7 @@ Nunca assuma conhecimento de terminal, git ou Python além do básico.
 Rafael usa o app desktop, não o terminal — execute os comandos você mesmo.
 
 ## Regras absolutas
-- A biblioteca de teste é ~/dev/assetdeck-testlib. NUNCA aponte para outro caminho.
+- A biblioteca de teste é "/home/rafael/00 - PROJETOS/assetdeck-testlib". NUNCA aponte para outro caminho.
 - O app é somente-leitura sobre a biblioteca. Nada move, renomeia ou apaga.
 - Nenhum `except` silencioso. Todo erro é logado com contexto.
 - Nenhum dado mockado no código de produção. Mock só em teste.
@@ -23,8 +23,9 @@ Rafael usa o app desktop, não o terminal — execute os comandos você mesmo.
 - Rodar app: source .venv/bin/activate && python -m assetdeck
 - Testes: pytest -q
 - Screenshot da UI: python -m assetdeck --screenshot /tmp/ui.png
+- Blender (5.2, alvo do projeto): flatpak run org.blender.Blender
 
 ## Documentos de contexto
+- PROJECT.md — visão, decisões e arquitetura de módulos.
 - SCHEMA.md — modelo de dados. Fonte da verdade.
 - TODO.md — roadmap e estado atual.
-- Os dois ainda NÃO existem: serão criados na sessão de arquitetura. Até lá, NÃO crie nenhuma tabela.
