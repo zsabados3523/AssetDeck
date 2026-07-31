@@ -1,9 +1,10 @@
 # TODO.md — Roadmap e estado atual
 
 ## Estado atual (2026-07-31)
-- Fatia 1 concluída e validada pelo Rafael na tela (janela abre, banco v1,
-  backup diário ativo, 17 testes verdes).
-- **Em andamento: Fatia 2 — indexação em background.**
+- Fatias 1 e 2 concluídas e validadas pelo Rafael (740 assets da testlib
+  indexados; revarredura idempotente; 27 testes verdes).
+- **Em andamento: Fatia 3 — grid de thumbnails** (inclui .dwg→vector e
+  .mtlx→other no mapa de extensões, a pedido do Rafael).
 
 ## Como ler este arquivo
 Uma fatia por vez, em branch própria. Cada fatia termina com: pytest verde,
@@ -21,7 +22,7 @@ testes de migração.
 0 assets"; `pytest -q` verde; existe um backup do .db em
 `~/.local/share/assetdeck/backups/`.
 
-### ☐ Fatia 2 — Indexação em background
+### ☑ Fatia 2 — Indexação em background (concluída 2026-07-31)
 Scanner em thread varre a testlib e grava `files`/`assets` (1 arquivo =
 1 asset por enquanto; agrupamento PBR vem na Fatia 6). Barra de progresso.
 **Deu certo quando:** a janela mostra a contagem subindo até ~753 sem
