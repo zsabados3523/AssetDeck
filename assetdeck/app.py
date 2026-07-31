@@ -10,7 +10,6 @@ from assetdeck import __version__, config
 from assetdeck.backup.rotate import daily_backup
 from assetdeck.db.connection import connect
 from assetdeck.db.migrate import apply_migrations
-from assetdeck.db.repos import assets as assets_repo
 from assetdeck.logging_setup import setup_logging
 
 log = logging.getLogger(__name__)
@@ -40,17 +39,16 @@ def run(argv: list[str]) -> int:
     if created is None:
         log.info("Backup de hoje já existia — nada a fazer.")
 
-    count = assets_repo.count_active(conn)
-
-    # Import tardio: os testes de banco/backup rodam sem Qt carregado.
+    # Import tardio: os testes de banco/backup/scanner rodam sem Qt carregado.
     from PySide6.QtWidgets import QApplication
 
     from assetdeck.ui.main_window import MainWindow
 
     app = QApplication(sys.argv[:1])
-    win = MainWindow(asset_count=count, library_root=cfg["library_root"],
+    win = MainWindow(conn=conn, library_root=cfg["library_root"],
                      db_path=config.db_path())
     win.show()
+    win.start_scan()  # indexação em background a cada abertura (idempotente)
 
     if args.screenshot:
         from PySide6.QtCore import QTimer
@@ -61,6 +59,7 @@ def run(argv: list[str]) -> int:
                 log.info("Screenshot salvo em %s", args.screenshot)
             else:
                 log.error("Não consegui salvar o screenshot em %s", args.screenshot)
+            win.close()  # encerra a thread de varredura com segurança
             app.exit(0 if ok else 1)
 
         QTimer.singleShot(400, _grab)  # deixa a janela terminar de desenhar
