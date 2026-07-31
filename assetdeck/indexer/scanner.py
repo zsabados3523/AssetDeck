@@ -1,0 +1,238 @@
+"""Varredura da biblioteca: descobre arquivos e grava assets/files no banco.
+
+Regras desta fatia:
+- 1 arquivo = 1 asset (o agrupamento PBR é a Fatia 6).
+- A biblioteca é SOMENTE-LEITURA: aqui só se lê o disco e se escreve no banco.
+- Idempotente: rodar de novo não duplica nada. Arquivo inalterado (mesmo
+  tamanho + mtime) é pulado; alterado é atualizado; sumido ganha
+  missing_since (nunca é apagado); reaparecido tem o missing_since limpo.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import logging
+import os
+import sqlite3
+import uuid as uuid_mod
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Callable
+
+log = logging.getLogger(__name__)
+
+# Extensão (minúscula, sem ponto) → asset_type do schema.
+# O que não está aqui é ignorado (contado e logado, nunca erro).
+EXT_MAP = {
+    # imagens comuns — tipo refinado depois (cutout na Fatia 7, PBR na 6)
+    "jpg": "texture", "jpeg": "texture", "png": "texture", "tif": "texture",
+    "tiff": "texture", "webp": "texture", "bmp": "texture", "tga": "texture",
+    "gif": "texture",
+    # alto alcance dinâmico
+    "hdr": "hdri", "exr": "hdri",
+    # referências
+    "pdf": "reference",
+    # modelos 3D
+    "blend": "model", "fbx": "model", "obj": "model", "gltf": "model",
+    "glb": "model", "dae": "model", "stl": "model",
+    # vetores
+    "svg": "vector", "ai": "vector", "eps": "vector", "cdr": "vector",
+    # fotometria e color grading
+    "ies": "ies", "cube": "lut", "3dl": "lut",
+    # photoshop
+    "psd": "psd", "psb": "psd",
+}
+
+_FINGERPRINT_CHUNK = 1024 * 1024  # 1MB de cada ponta
+
+
+@dataclass
+class ScanStats:
+    added: int = 0
+    updated: int = 0
+    unchanged: int = 0
+    missing: int = 0
+    reappeared: int = 0
+    ignored: int = 0
+    errors: int = 0
+    aborted: bool = False
+    ignored_exts: dict[str, int] = field(default_factory=dict)
+
+    def summary(self) -> str:
+        parts = [f"{self.added} novos", f"{self.unchanged} inalterados"]
+        if self.updated:
+            parts.append(f"{self.updated} atualizados")
+        if self.missing:
+            parts.append(f"{self.missing} sumidos")
+        if self.reappeared:
+            parts.append(f"{self.reappeared} reapareceram")
+        if self.ignored:
+            parts.append(f"{self.ignored} ignorados")
+        if self.errors:
+            parts.append(f"{self.errors} erros (ver log)")
+        if self.aborted:
+            parts.append("interrompida")
+        return ", ".join(parts)
+
+
+def classify(path: Path) -> str | None:
+    """asset_type pela extensão, ou None se o arquivo não nos interessa."""
+    return EXT_MAP.get(path.suffix.lower().lstrip("."))
+
+
+def fingerprint(path: Path) -> str:
+    """Impressão digital rápida: blake2b de tamanho + primeiro/último 1MB.
+
+    Suficiente para relocalização e barata mesmo em .blend de gigabytes.
+    O algoritmo fica registrado em files.hash_algo ('blake2b-fp1m').
+    """
+    size = path.stat().st_size
+    h = hashlib.blake2b(digest_size=20)
+    h.update(str(size).encode())
+    with path.open("rb") as f:
+        h.update(f.read(_FINGERPRINT_CHUNK))
+        if size > 2 * _FINGERPRINT_CHUNK:
+            f.seek(-_FINGERPRINT_CHUNK, os.SEEK_END)
+            h.update(f.read(_FINGERPRINT_CHUNK))
+    return h.hexdigest()
+
+
+def iter_library_files(root: Path):
+    """Percorre a biblioteca pulando ocultos e sidecars do próprio AssetDeck."""
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [d for d in dirnames if not d.startswith(".")]
+        for name in sorted(filenames):
+            if name.startswith(".") or name.endswith(".assetdeck.json"):
+                continue
+            yield Path(dirpath) / name
+
+
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def scan_library(
+    conn: sqlite3.Connection,
+    library_id: int,
+    root: Path,
+    progress: Callable[[int, int, ScanStats], None] | None = None,
+    should_stop: Callable[[], bool] | None = None,
+    batch_size: int = 50,
+) -> ScanStats:
+    """Uma passada completa de indexação. Retorna estatísticas do que fez."""
+    stats = ScanStats()
+    root = root.resolve()
+    if not root.is_dir():
+        raise RuntimeError(
+            f"A raiz da biblioteca não existe ou não é uma pasta: {root}. "
+            "Confira library_root no config.json."
+        )
+
+    # Estado atual do banco para esta biblioteca (rel_path → info do arquivo)
+    known = {
+        row["rel_path"]: row
+        for row in conn.execute(
+            """SELECT f.id, f.rel_path, f.size_bytes, f.mtime_ns, f.missing_since
+               FROM files f JOIN assets a ON a.id = f.asset_id
+               WHERE a.library_id = ? AND f.deleted_at IS NULL""",
+            (library_id,),
+        )
+    }
+
+    paths = list(iter_library_files(root))
+    total = len(paths)
+    log.info("Varredura de %s: %d arquivos no disco, %d já no banco.",
+             root, total, len(known))
+
+    seen: set[str] = set()
+    since_commit = 0
+    for done, path in enumerate(paths, start=1):
+        if should_stop and should_stop():
+            stats.aborted = True
+            log.warning("Varredura interrompida a pedido (%d/%d processados).", done - 1, total)
+            break
+        try:
+            _process_file(conn, library_id, root, path, known, seen, stats)
+        except OSError:
+            # Arquivo ilegível não derruba a varredura, mas fica no log.
+            stats.errors += 1
+            log.exception("Erro ao ler %s — pulando.", path)
+
+        since_commit += 1
+        if since_commit >= batch_size:
+            conn.commit()
+            since_commit = 0
+        if progress:
+            progress(done, total, stats)
+
+    if not stats.aborted:
+        # Quem está no banco mas não no disco: marca sumido (nunca apaga)
+        for rel_path, row in known.items():
+            if rel_path not in seen and row["missing_since"] is None:
+                conn.execute(
+                    "UPDATE files SET missing_since = ?, updated_at = ? WHERE id = ?",
+                    (_now(), _now(), row["id"]),
+                )
+                stats.missing += 1
+                log.warning("Arquivo sumido da biblioteca: %s", rel_path)
+
+    conn.commit()
+    if stats.ignored_exts:
+        log.info("Extensões ignoradas: %s",
+                 ", ".join(f".{e} ({n}x)" for e, n in sorted(stats.ignored_exts.items())))
+    log.info("Varredura concluída: %s", stats.summary())
+    return stats
+
+
+def _process_file(conn, library_id, root, path, known, seen, stats) -> None:
+    asset_type = classify(path)
+    if asset_type is None:
+        ext = path.suffix.lower().lstrip(".") or "(sem extensão)"
+        stats.ignored += 1
+        stats.ignored_exts[ext] = stats.ignored_exts.get(ext, 0) + 1
+        return
+
+    rel_path = path.relative_to(root).as_posix()
+    seen.add(rel_path)
+    st = path.stat()
+
+    row = known.get(rel_path)
+    if row is None:
+        # Arquivo novo → novo asset (1:1 nesta fatia) + file principal
+        cur = conn.execute(
+            "INSERT INTO assets (uuid, library_id, name, asset_type) VALUES (?, ?, ?, ?)",
+            (str(uuid_mod.uuid4()), library_id, path.stem, asset_type),
+        )
+        conn.execute(
+            """INSERT INTO files (asset_id, rel_path, size_bytes, mtime_ns,
+                                  content_hash, is_primary)
+               VALUES (?, ?, ?, ?, ?, 1)""",
+            (cur.lastrowid, rel_path, st.st_size, st.st_mtime_ns, fingerprint(path)),
+        )
+        stats.added += 1
+        return
+
+    if row["size_bytes"] == st.st_size and row["mtime_ns"] == st.st_mtime_ns:
+        if row["missing_since"] is not None:
+            # Estava sumido e voltou ao mesmo lugar
+            conn.execute(
+                "UPDATE files SET missing_since = NULL, updated_at = ? WHERE id = ?",
+                (_now(), row["id"]),
+            )
+            stats.reappeared += 1
+        else:
+            stats.unchanged += 1
+        return
+
+    # Conteúdo mudou → atualiza medidas e hash (uuid do asset não muda NUNCA)
+    conn.execute(
+        """UPDATE files SET size_bytes = ?, mtime_ns = ?, content_hash = ?,
+                            missing_since = NULL, updated_at = ?
+           WHERE id = ?""",
+        (st.st_size, st.st_mtime_ns, fingerprint(path), _now(), row["id"]),
+    )
+    if row["missing_since"] is not None:
+        stats.reappeared += 1
+    else:
+        stats.updated += 1
