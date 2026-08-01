@@ -7,12 +7,12 @@ tela dele.
 
 | | |
 |---|---|
-| Testes | 189 verdes (`pytest -q`) |
+| Testes | 195 verdes (`pytest -q`) |
 | Schema | migrations 001–005 aplicadas (ver SCHEMA.md) |
 | Biblioteca de trabalho | testlib: 750 arquivos → 391 assets → **127 visíveis** (dependências ocultas) |
 | Add-on do Blender | v0.4.0, Blender 5.2 Flatpak |
 
-**Próximo passo: F3 — Fatia 21 (Busca booleana + substring).**
+**Próximo passo: F3 — Fatia 22 (Custom properties na UI).**
 
 ## Como ler este arquivo
 Uma fatia por vez, em branch própria. Cada fatia termina com: pytest verde,
@@ -158,10 +158,20 @@ grupos e deixa o Rafael escolher o que ocultar — **nunca apaga nada**, usa
 aparecem no mesmo grupo; ocultar uma some da grade padrão sem apagar nada
 do disco nem do banco.
 
-### ☐ Fatia 21 — Busca booleana + substring
-Operadores E/OU/NÃO. Inclui a limitação encontrada na Fatia 12: hoje
-"quartzite" NÃO acha "StoneQuartziteTile", porque o FTS5 casa por início de
-palavra.
+### ☑ Fatia 21 — Busca booleana + substring
+Sem migration — `AND`/`OR`/`NOT` já são nativos do FTS5 e funcionam com o
+tokenizer de hoje (confirmado testando direto no SQLite do projeto);
+`_fts_query` só traduz E/OU/NÃO pra eles. Pra "quartzite" achar
+"StoneQuartziteTile" (limitação da Fatia 12), acrescentado um `LIKE
+'%termo%'` em `assets.name` como reforço (OR) do FTS — só ativa quando a
+busca não tem conector, pra não confundir com a lógica booleana. Testado
+com dado real: "quartzite" agora acha `Poliigon_StoneQuartziteTile_8607`
+na testlib. Cogitei trocar o tokenizer pra `trigram` (resolveria sozinho)
+mas descartei: quebra a insensibilidade a acento e termos curtos como
+"4k"/"2k" (comuns em nome de textura) nunca batem com só 2 caracteres.
+**Deu certo quando:** buscar "quartzite" acha o pack Poliigon mesmo sem
+espaço no nome; "concreto E rustico" / "OU" / "NÃO" filtram como esperado;
+buscas antigas (prefixo, "4k", sem acento) continuam iguais.
 
 ### ☐ Fatia 22 — Custom properties na UI
 EAV tipado (`property_defs` / `property_values`) existe desde o v1, sem UI.
