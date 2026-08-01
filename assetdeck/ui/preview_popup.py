@@ -81,6 +81,14 @@ class PreviewPopup(QDialog):
         self._sig.failed.connect(self._on_failed)
         self._loading_for: Path | None = None
         self._library_root: Path | None = None
+        self._was_active = False  # ver changeEvent()
+
+        # Tamanho PADRONIZADO (feedback do Rafael): a janela tem sempre o
+        # mesmo tamanho, seja a imagem 256px ou 8K — só o conteúdo escala.
+        screen = QGuiApplication.primaryScreen().availableGeometry()
+        self._win_w = min(1100, int(screen.width() * 0.70))
+        self._win_h = min(800, int(screen.height() * 0.75))
+        self.resize(self._win_w, self._win_h)
 
     def show_for(self, row: sqlite3.Row, library_root: Path,
                  thumb: QPixmap | None, maps: list | None = None) -> None:
@@ -100,6 +108,7 @@ class PreviewPopup(QDialog):
             # pelo usuário: o popup mostra a capa em resolução completa
             alvo = Path(cover)
         self._load(alvo)
+        self._was_active = False
         self.show()
         self.raise_()
         self.activateWindow()
@@ -153,11 +162,27 @@ class PreviewPopup(QDialog):
         self.info_label.setText(f"Não consegui carregar a imagem completa: {message}")
 
     def _fit(self, pix: QPixmap) -> QPixmap:
-        """Ajusta à área útil da tela (90%), sem nunca ampliar além do original."""
-        screen = QGuiApplication.primaryScreen().availableGeometry()
-        max_w, max_h = int(screen.width() * 0.9), int(screen.height() * 0.85)
-        fitted = pix.scaled(min(pix.width(), max_w), min(pix.height(), max_h),
-                            Qt.AspectRatioMode.KeepAspectRatio,
-                            Qt.TransformationMode.SmoothTransformation)
-        self.resize(fitted.width() + 40, fitted.height() + 80)
-        return fitted
+        """Encaixa a imagem na área fixa da janela, sem ampliar além do original.
+
+        A janela NÃO muda de tamanho (padronizada); imagens pequenas ficam
+        centralizadas e as gigantes são reduzidas para caber.
+        """
+        area_w = self._win_w - 40
+        area_h = self._win_h - 110  # desconta barra de mapas + rodapé
+        return pix.scaled(min(pix.width(), area_w), min(pix.height(), area_h),
+                          Qt.AspectRatioMode.KeepAspectRatio,
+                          Qt.TransformationMode.SmoothTransformation)
+
+    # ---- fechar ao clicar fora (feedback do Rafael) ----
+
+    def changeEvent(self, event) -> None:  # noqa: N802 (nome vem do Qt)
+        from PySide6.QtCore import QEvent
+
+        if event.type() == QEvent.Type.ActivationChange and self.isVisible():
+            if self.isActiveWindow():
+                self._was_active = True
+            elif self._was_active:
+                # Só fecha DEPOIS de ter recebido foco ao menos uma vez —
+                # senão um WM lento fecharia o popup assim que ele abrisse.
+                self.close()
+        super().changeEvent(event)
