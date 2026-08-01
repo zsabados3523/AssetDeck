@@ -472,7 +472,8 @@ class MainWindow(QMainWindow):
 
         token = config.ensure_bridge_token(cfg)
         porta = int(cfg.get("bridge_port", 45017))
-        self._bridge = BridgeServer(self._conn, self._library_root, token, parent=self)
+        self._bridge = BridgeServer(self._conn, self._library_root, token,
+                                    thumbs_dir=self._thumbs_dir, parent=self)
         if self._bridge.start(porta):
             self.bridge_status.setText(f"Blender: ouvindo :{self._bridge.port}")
         else:

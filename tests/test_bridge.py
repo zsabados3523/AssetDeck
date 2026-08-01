@@ -106,6 +106,46 @@ def test_get_asset_devolve_arquivos_e_papeis(env):
     assert sum(1 for f in r["files"] if f["is_primary"]) == 1
 
 
+def test_thumb_path_vai_para_o_addon_quando_existe(env, tmp_path):
+    """O add-on precisa do caminho da miniatura para mostrar preview."""
+    from assetdeck.thumbs.cache import thumb_path
+
+    conn, root = env
+    thumbs = tmp_path / "thumbs"
+    thumbs.mkdir()
+    hash_ceu = conn.execute(
+        "SELECT content_hash FROM files WHERE rel_path = 'ceu.hdr'"
+    ).fetchone()["content_hash"]
+    esperado = thumb_path(thumbs, hash_ceu)
+    esperado.write_bytes(b"png falso")
+
+    r = handlers.handle(conn, root, {"cmd": "list_assets", "types": ["hdri"]}, thumbs)
+
+    assert r["assets"][0]["thumb_path"] == str(esperado)
+
+
+def test_thumb_path_e_none_quando_nao_ha_miniatura(env, tmp_path):
+    conn, root = env
+    r = handlers.handle(conn, root, {"cmd": "list_assets"}, tmp_path / "vazio")
+    assert all(a["thumb_path"] is None for a in r["assets"])
+
+
+def test_capa_customizada_vence_a_miniatura(env, tmp_path):
+    from assetdeck.db.repos import previews as previews_repo
+
+    conn, root = env
+    capa = tmp_path / "minha_capa.png"
+    capa.write_bytes(b"png")
+    alvo = conn.execute("SELECT id FROM assets WHERE name = 'ceu'").fetchone()["id"]
+    previews_repo.add(conn, alvo, capa, tmp_path / "previews")
+
+    r = handlers.handle(conn, root, {"cmd": "list_assets", "types": ["hdri"]},
+                        tmp_path / "thumbs")
+
+    devolvido = r["assets"][0]["thumb_path"]
+    assert devolvido is not None and "previews" in devolvido
+
+
 def test_get_asset_inexistente(env):
     conn, root = env
     r = handlers.handle(conn, root, {"cmd": "get_asset", "id": 99999})

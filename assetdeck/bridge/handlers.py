@@ -15,7 +15,8 @@ log = logging.getLogger(__name__)
 LIST_LIMIT_MAX = 500
 
 
-def handle(conn: sqlite3.Connection, library_root: Path, request: dict) -> dict:
+def handle(conn: sqlite3.Connection, library_root: Path, request: dict,
+           thumbs_dir: Path | None = None) -> dict:
     """Despacha um comando já decodificado. Nunca levanta: erro vira resposta."""
     cmd = request.get("cmd")
     if cmd not in proto.KNOWN_COMMANDS:
@@ -24,11 +25,28 @@ def handle(conn: sqlite3.Connection, library_root: Path, request: dict) -> dict:
         if cmd == proto.CMD_PING:
             return _ping(library_root)
         if cmd == proto.CMD_LIST_ASSETS:
-            return _list_assets(conn, library_root, request)
-        return _get_asset(conn, library_root, request)
+            return _list_assets(conn, library_root, request, thumbs_dir)
+        return _get_asset(conn, library_root, request, thumbs_dir)
     except Exception as exc:
         log.exception("Falha ao tratar comando %r", cmd)
         return proto.error(f"Erro interno ao executar {cmd}: {exc}")
+
+
+def _thumb_for(row_or_hash, thumbs_dir: Path | None,
+               cover_path: str | None = None) -> str | None:
+    """Imagem que representa o asset, para o add-on exibir.
+
+    Preferência: capa escolhida pelo Rafael > thumbnail do cache. Devolve
+    None se não houver nada pronto (o add-on mostra só o ícone de tipo).
+    """
+    if cover_path:
+        return cover_path
+    if thumbs_dir is None or not row_or_hash:
+        return None
+    from assetdeck.thumbs.cache import thumb_path
+
+    p = thumb_path(Path(thumbs_dir), row_or_hash)
+    return str(p) if p.exists() else None
 
 
 def _ping(library_root: Path) -> dict:
@@ -38,7 +56,8 @@ def _ping(library_root: Path) -> dict:
     )
 
 
-def _list_assets(conn: sqlite3.Connection, library_root: Path, req: dict) -> dict:
+def _list_assets(conn: sqlite3.Connection, library_root: Path, req: dict,
+                 thumbs_dir: Path | None = None) -> dict:
     limit = min(int(req.get("limit") or 200), LIST_LIMIT_MAX)
     tipos = req.get("types") or None
     if tipos is not None and not isinstance(tipos, list):
@@ -56,13 +75,15 @@ def _list_assets(conn: sqlite3.Connection, library_root: Path, req: dict) -> dic
             "starred": bool(r["starred"]), "files_count": r["files_count"],
             "primary_path": str(library_root / r["rel_path"]),
             "cover_path": r["cover_path"],
+            "thumb_path": _thumb_for(r["content_hash"], thumbs_dir, r["cover_path"]),
         }
         for r in rows[:limit]
     ]
     return proto.ok(assets=itens, total=total, returned=len(itens))
 
 
-def _get_asset(conn: sqlite3.Connection, library_root: Path, req: dict) -> dict:
+def _get_asset(conn: sqlite3.Connection, library_root: Path, req: dict,
+               thumbs_dir: Path | None = None) -> dict:
     asset_id = req.get("id")
     if not isinstance(asset_id, int):
         return proto.error("'id' (int) é obrigatório.", code="bad_request")
@@ -75,6 +96,7 @@ def _get_asset(conn: sqlite3.Connection, library_root: Path, req: dict) -> dict:
             "path": str(library_root / f["rel_path"]),
             "map_role": f["map_role"],
             "is_primary": bool(f["is_primary"]),
+            "thumb_path": _thumb_for(f["content_hash"], thumbs_dir),
         }
         for f in assets_repo.list_files(conn, asset_id)
     ]
