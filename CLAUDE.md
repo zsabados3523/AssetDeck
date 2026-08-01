@@ -13,6 +13,8 @@ Rafael usa o app desktop, não o terminal — execute os comandos você mesmo.
 - Não enfraqueça um teste para ele passar. Conserte o código.
 - Se o escopo do que pedi não couber, me diga — não entregue parcial em silêncio.
 - Antes de tocar no schema do banco, leia SCHEMA.md e me avise da mudança.
+- Nenhum `setStyleSheet` fora de `ui/theme.py`. Cor, raio e fonte novos entram
+  como token lá e viram `$nome` no `ui/theme.qss`.
 
 ## Fluxo
 - Uma fatia por vez, em branch própria.

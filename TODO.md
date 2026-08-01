@@ -234,10 +234,52 @@ lote…".
 a prévia, confirmar, e os arquivos mudarem de nome no disco de verdade,
 sem sobrar nada quebrado na grade.
 
-## F4 — Opcional
+## F4 — Em andamento
 
 Dois itens abaixo já têm direção definida (pedido do Rafael em
 2026-08-01); o resto da lista ainda não foi fatiado.
+
+**Escolhas do Rafael para o redesign (2026-08-01):** tema claro lavanda,
+destaque **azul-petróleo**, fundo **cor lisa**, e a ordem "tema global
+primeiro, cards da grade depois". Fatiado em 24 → 28.
+
+### ☑ Fatia 24 — Fundação do tema + vitrine
+`ui/theme.py` (tokens de cor/raio/fonte, paleta, contraste WCAG),
+`ui/theme.qss` (template com `$token`, lido do disco) e `ui/theme_gallery.py`,
+aberta por `python -m assetdeck --theme-preview`. **Não toca no app** — existe
+para o Rafael escolher na tela (fundo liso × com grão, 3 níveis de
+translucidez, 2 raios, Inter × fonte do sistema) antes de aplicar.
+
+Regra nova do projeto: **nenhum `setStyleSheet` fora do `theme.py`.**
+
+Decisões forçadas pelo que o Qt realmente faz (medido, não presumido):
+- **Vidro fosco de verdade não existe aqui.** `QGraphicsBlurEffect` borra o
+  conteúdo do PRÓPRIO widget (borraria as miniaturas), e o Mutter não
+  implementa blur atrás da janela. Simulado com `rgba()` + fio de luz na
+  borda + sombra suave — que é o que funciona em X11, Wayland e no `grab()`.
+- **Subclasse de `QWidget` filha ignora `background` do QSS** sem
+  `WA_StyledBackground` (pega o `DetailsPanel` na Fatia 25).
+- **Seleção da árvore é barra de linha inteira, não pílula arredondada:** a
+  coluna do indicador de expandir é pintada quadrada pelo estilo e fica um
+  degrau ao lado do item arredondado. Estilizar `QTreeView::branch` para
+  corrigir é pior — o Qt volta a pintar a seleção com o azul padrão dele.
+- **Caixa de checkbox ganhou borda explícita** (exceção consciente à regra de
+  não estilizar subcontrole): com a paleta clara, o indicador do Fusion usa a
+  cor de botão e a caixa DESMARCADA ficava invisível. O "✓" branco entra na 26.
+- **Nenhuma fonte da máquina tem o glifo ★** (conferido com `QRawFont`) — o Qt
+  cai numa substituta e o desenho sai torto. É a justificativa da Fatia 26.
+- Barra de progresso ficou fina e sem texto: a porcentagem escrita por cima do
+  trecho preenchido dá 2,4:1 de contraste contra o petróleo.
+
+**Deu certo quando:** `python -m assetdeck --theme-preview` abre e o Rafael
+aponta na tela qual fundo, translucidez, raio e fonte valem. 23 testes novos
+(239 na suíte), incluindo teste de PIXEL — o Qt descarta regra de QSS com erro
+de sintaxe em silêncio, então só ler a cor do pixel prova que a folha pegou.
+
+### ☐ Fatia 25 — Aplicar o tema à janela principal
+### ☐ Fatia 26 — Ícones SVG (estrelas, lupa, ✓ do checkbox, chevron)
+### ☐ Fatia 27 — Delegate dos cards da grade
+### ☐ Fatia 28 — Acabamento: diálogos, popup, barra de filtros
 
 ### ☐ Redesign visual — tema mais estiloso e translúcido
 Hoje o app usa a aparência padrão do Qt (cinza, sem estilo). Objetivo: um
