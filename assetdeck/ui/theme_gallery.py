@@ -243,24 +243,34 @@ class ThemeGallery(QWidget):
         col.addWidget(erro)
 
         col.addSpacing(6)
-        rotulo = QLabel("TINTS POR TIPO DE ASSET")
+        rotulo = QLabel("CARD SEM MINIATURA + CHIP DE EXTENSÃO")
         rotulo.setObjectName("sectionTitle")
         col.addWidget(rotulo)
 
+        # Não é mais cor por tipo (decisão do Rafael): uma pastilha cinza só
+        # (TYPE_TINT == ACCENT) e o reconhecimento do tipo vem do rótulo de
+        # extensão no canto, como no Connecter.
         grade = QGridLayout()
-        grade.setSpacing(6)
-        for i, (tipo, cor) in enumerate(theme.TYPE_TINTS.items()):
-            amostra = QLabel(tipo)
-            amostra.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            amostra.setFixedHeight(30)
+        grade.setSpacing(8)
+        for i, ext in enumerate((".fbx", ".exr", ".blend", ".png")):
+            card = QLabel(ext[1:].upper())
+            card.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            card.setFixedHeight(60)
             # Exceção consciente à regra "nada de setStyleSheet fora do
-            # theme.py": aqui a cor É o conteúdo sendo demonstrado, e ela vem
-            # do próprio theme.TYPE_TINTS.
-            amostra.setStyleSheet(
-                f"background-color: {cor}; color: {theme.ON_TYPE_TINT};"
+            # theme.py": aqui a cor É o conteúdo sendo demonstrado.
+            card.setStyleSheet(
+                f"background-color: {theme.TYPE_TINT}; color: {theme.ON_TYPE_TINT};"
                 f" border-radius: 8px; font-size: 11px;"
             )
-            grade.addWidget(amostra, i // 3, i % 3)
+            chip = QLabel(ext)
+            chip.setParent(card)
+            chip.setStyleSheet(
+                "background-color: rgba(0,0,0,0.55); color: white;"
+                " border-radius: 4px; font-size: 9px; padding: 1px 4px;"
+            )
+            chip.move(4, 40)
+            chip.adjustSize()
+            grade.addWidget(card, i // 2, i % 2)
         col.addLayout(grade)
         col.addStretch(1)
         return w

@@ -120,10 +120,9 @@ def test_contraste_do_texto_sobre_o_destaque_e_sobre_o_popup():
     assert theme.contrast_ratio(theme.TEXT, theme.BG) >= 4.5
 
 
-@pytest.mark.parametrize("tipo,tint", sorted(theme.TYPE_TINTS.items()))
-def test_contraste_do_rotulo_sobre_a_pastilha_do_tipo(tipo, tint):
-    """O nome do tipo escrito no card sem miniatura (LUT, IES...)."""
-    assert theme.contrast_ratio(theme.ON_TYPE_TINT, tint) >= 4.5
+def test_contraste_do_rotulo_sobre_o_card_sem_miniatura():
+    """Não há mais cor por tipo — uma pastilha cinza só (TYPE_TINT)."""
+    assert theme.contrast_ratio(theme.ON_TYPE_TINT, theme.TYPE_TINT) >= 4.5
 
 
 # ---------------------------------------------------------- fundo (grão) --

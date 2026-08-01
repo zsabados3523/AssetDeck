@@ -50,9 +50,9 @@ BG_TINT = "#F0F0F2"     # variação do fundo (trilho de barra de rolagem, cabe�
 # Monocromático: o "destaque" não é mais uma cor, é um cinza bem escuro. Serve
 # ao botão principal e à ênfase de texto. Cor de verdade sobrou só em dois
 # lugares onde ela CARREGA informação: a cor da tag e o tipo do asset.
-ACCENT = "#2E2E33"
-ACCENT_HOVER = "#3D3D43"
-ACCENT_PRESS = "#1B1B1F"
+ACCENT = "#4A4A52"
+ACCENT_HOVER = "#5A5A63"
+ACCENT_PRESS = "#38383F"
 ON_ACCENT = "#FFFFFF"
 
 TITLE = "#111216"       # títulos: mais escuros que o corpo, é o que dá hierarquia
@@ -72,26 +72,12 @@ FOCUS = "#8A8B93"                # foco monocromático: contorno mais escuro
 SELECTION = (0, 0, 0, 0.065)
 HOVER = (0, 0, 0, 0.035)
 
-# Tints por tipo de asset — o fundo do card quando o asset não tem miniatura.
-# Vieram de `asset_grid.TYPE_COLORS`. Com o resto da interface monocromática,
-# ESTE é um dos dois lugares onde a cor carrega informação de verdade — então
-# ela tem de ter contraste suficiente para o tipo ser reconhecido de relance,
-# em vez de recuar. Consumidos pelo delegate da grade (Fatia 27).
-TYPE_TINTS = {
-    "texture": "#5B6472",
-    "hdri": "#3F5F8F",
-    "model": "#4E6270",
-    "material": "#5D5470",
-    "image": "#6B5F6E",
-    "video": "#7A4E63",
-    "lut": "#2F6E66",
-    "ies": "#7A6A2A",
-    "vector": "#3F6B4A",
-    "psd": "#45566E",
-    "audio": "#63527A",
-    "other": "#5A5A63",
-}
-ON_TYPE_TINT = "#FFFFFF"  # texto sobre as pastilhas acima
+# Fundo do card quando o asset não tem miniatura. Decisão do Rafael: nada de
+# cor por tipo — uma pastilha cinza só, igual ao ACCENT dos botões, e o
+# reconhecimento do tipo passa a vir do rótulo de extensão no canto do card
+# (".fbx"/".exr"/...), não mais de cor. Consumido pelo delegate (Fatia 27).
+TYPE_TINT = ACCENT
+ON_TYPE_TINT = "#FFFFFF"  # texto/glifo sobre a pastilha acima
 
 # Variações que o Rafael escolhe na tela (vitrine da Fatia 24).
 # Fundo e painel são os DOIS brancos: o que separa um do outro é uma linha de
@@ -99,8 +85,8 @@ ON_TYPE_TINT = "#FFFFFF"  # texto sobre as pastilhas acima
 # opacidade dessa linha — é o único ajuste de "quanto o painel se destaca".
 SEPARATION = {"sutil": 0.05, "media": 0.075, "forte": 0.11}
 RADII = {  # (painel, card, controle)
-    "discreto": (14, 12, 9),
-    "marcante": (20, 18, 13),
+    "discreto": (10, 8, 6),
+    "marcante": (16, 12, 9),
 }
 FONTS = {
     "inter": "Inter",
