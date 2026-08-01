@@ -7,15 +7,16 @@ tela dele.
 
 | | |
 |---|---|
-| Testes | 214 verdes (`pytest -q`) |
+| Testes | 215 verdes (`pytest -q`) |
 | Schema | migrations 001–005 aplicadas (ver SCHEMA.md) |
 | Biblioteca de trabalho | testlib: 750 arquivos → 391 assets → **127 visíveis** (dependências ocultas) |
 | Add-on do Blender | v0.4.0, Blender 5.2 Flatpak |
 
-**F3 completa** (Fatias 17–23 + fixes da 17b/19b) — aguardando o Rafael
-confirmar na tela `fatia-19b-drag-ghost-fix` e `fatia-23-batch-rename`
-antes do merge de cada uma. Depois disso: F4 (opcional) ou o Rafael decidir
-os próximos passos.
+**F3 completa** (Fatias 17–23 + fixes da 17b/19b). Batch rename já mergeado
+na `main`; falta o Rafael confirmar na tela a branch
+`fatia-19b-drag-ghost-fix` (fix do arrasto + reset da Smart Collection),
+que contém TUDO. Depois disso: F4 é opcional e fica para uma próxima
+conversa (decisão dele).
 
 ## Como ler este arquivo
 Uma fatia por vez, em branch própria. Cada fatia termina com: pytest verde,
@@ -124,23 +125,48 @@ reindexar, religar pelo menu e ver o asset original (com a mesma
 tag/nota de antes) apontando pro caminho novo, sem sobrar um asset
 fantasma duplicado na grid.
 
-### ☐ Fatia 19b — Bug: "fantasma" preso ao arrastar um asset
-Relatado pelo Rafael com print: arrastar um card na grade às vezes deixa
-uma cópia dele "presa" visualmente no lugar onde o mouse soltou, em vez de
-ele voltar pro lugar de origem (o dado no banco não muda, é só visual).
-**Suspeita já investigada, pronta pra quando entrar esta fatia:**
-`AssetGridView.dropEvent` (`ui/asset_grid.py`) cai em
-`super().dropEvent(event)` quando o drop não tem alvo válido dentro da
-própria grade — caminho morto, já que o modelo não usa
-`InternalMove` (não há reordenar por drop). É provável que esse caminho
-deixe a view num estado de repaint inconsistente. O `startDrag` customizado
-da Fatia 17b (mesmo arquivo) também nunca força `self.viewport().update()`
-depois do `drag.exec(...)`. Fix provável: trocar o fallback por
-`event.ignore()` + `self.viewport().update()`, e forçar o mesmo update ao
-final do `startDrag` customizado.
+### ☑ Fatia 19b — Bug: card fica preso onde o mouse soltou
+**Primeiro diagnóstico meu estava ERRADO** (achei que era um "fantasma" de
+repaint). O Rafael corrigiu a descrição: o preview do próprio asset É
+MOVIDO e fica preso, estático, onde soltou. Isso é o Qt movendo o item de
+verdade.
+
+**Causa raiz:** `setViewMode(IconMode)` liga `Movement.Free` por padrão, e
+em `Free` o `QIconModeViewBase` deixa o usuário reposicionar os ícones e
+guarda a posição de cada um. Verificado rodando o Qt do projeto:
+`QListView()` novo = `Static`; após `setViewMode(IconMode)` = **`Free`**.
+Fix: `self.setMovement(QListView.Movement.Static)` — a grade é sempre
+ordenada pela consulta, nunca houve reordenar à mão. Confirmado que o
+layout em grade fica idêntico e `dragEnabled` continua `True` (arrastar
+para tag/coleção/Blender não regride).
+
+Mantido também o fix anterior como defesa em profundidade: `dropEvent` faz
+`event.ignore()` + `viewport().update()` em vez de cair no
+`super().dropEvent()` (caminho morto, sem `InternalMove`), e o `startDrag`
+customizado força repaint após o `drag.exec(...)`.
+
+Teste de regressão em `tests/test_grid_state.py` trava a CONFIGURAÇÃO
+(`movement() == Static`) — provei que ele falha sem o fix. Um teste do
+comportamento (simular drop e comparar `visualRect`) não é possível: o
+`filterDropEvent` do Qt exige um `QDrag` real como `event.source()` e
+derruba o processo se for forjado.
 **Deu certo quando:** arrastar um asset e soltar em espaço vazio da própria
-grade (ou em qualquer lugar sem soltar de fato) faz o card voltar limpo
-pro lugar de origem, sem nenhuma cópia grudada na tela.
+grade faz o card voltar pro lugar dele, sem ficar preso onde soltou.
+
+### ☑ Fix — Smart Collection "(nenhuma aplicada)" não resetava os filtros
+Relatado pelo Rafael: voltar pro item raiz do painel de Smart Collections
+deixava os filtros da coleção anterior (tipo, nota, etc.) parados, em vez
+de mostrar tudo de novo. `_on_smart_collection_selected` só dava `return`
+quando `smart_id` era `None`; agora chama `_restore_filters({})` — reusa a
+mesma função da Fatia 18, que já cai no "mostrar tudo" quando a chave não
+existe no dicionário.
+**Deu certo quando:** aplicar uma Smart Collection e depois clicar em
+"(nenhuma aplicada)" mostra a biblioteca inteira de novo, sem filtro
+nenhum sobrando.
+**Nota de processo:** o Rafael reportou que este fix "não funcionou", mas a
+causa foi minha — deixei o repo na branch `fatia-23-batch-rename`, que saiu
+da `main` ANTES deste commit, então ele testou um código sem o fix. Lição:
+consolidar tudo numa branch só antes de pedir teste.
 
 ### ✕ Decidido — mover asset para outra categoria arrastando
 Avaliado e descartado (2026-08-01): o Rafael confirmou que a Tag/Collection

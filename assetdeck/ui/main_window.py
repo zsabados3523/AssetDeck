@@ -461,6 +461,10 @@ class MainWindow(QMainWindow):
 
     def _on_smart_collection_selected(self, smart_id) -> None:
         if smart_id is None:
+            # "(nenhuma aplicada)" — volta os filtros pro padrão (mostra
+            # tudo), em vez de deixar o que estava marcado antes parado ali
+            self._restore_filters({})
+            self.statusBar().showMessage("Filtros voltaram ao padrão")
             return
         registro = smart_collections_repo.get(self._conn, smart_id)
         if registro is None:
