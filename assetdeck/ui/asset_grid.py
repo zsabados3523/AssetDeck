@@ -294,6 +294,12 @@ class AssetGridView(QListView):
         super().__init__(parent)
         self.setAcceptDrops(True)
         self.setViewMode(QListView.ViewMode.IconMode)
+        # CAUSA REAL do bug do card que ficava preso onde o mouse soltou
+        # (Fatia 19b): setViewMode(IconMode) liga Movement.Free por padrão,
+        # e em Free o Qt deixa o usuário REPOSICIONAR os ícones dentro da
+        # grade, guardando a posição nova de cada um. Aqui a grade é sempre
+        # ordenada pela consulta (não há reordenar à mão), então Static.
+        self.setMovement(QListView.Movement.Static)
         self.setResizeMode(QListView.ResizeMode.Adjust)
         # Layout SÍNCRONO: com uniformItemSizes o custo é O(1) (2000 itens
         # recarregam em ~40ms). Em Batched o scrollbar só descobria o tamanho
