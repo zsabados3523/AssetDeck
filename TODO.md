@@ -239,9 +239,19 @@ sem sobrar nada quebrado na grade.
 Dois itens abaixo já têm direção definida (pedido do Rafael em
 2026-08-01); o resto da lista ainda não foi fatiado.
 
-**Escolhas do Rafael para o redesign (2026-08-01):** tema claro lavanda,
-destaque **azul-petróleo**, fundo **cor lisa**, e a ordem "tema global
-primeiro, cards da grade depois". Fatiado em 24 → 28.
+**Escolhas do Rafael para o redesign (2026-08-01):** destaque
+**azul-petróleo**, fundo **cor lisa**, e a ordem "tema global primeiro, cards
+da grade depois". Fatiado em 24 → 28.
+
+**Correção de rumo (mesmo dia):** a primeira tentativa usou fundo lavanda e o
+Rafael reprovou vendo na tela — ficou pesado. Direção nova, olhando a
+referência do Craft de novo: **fundo SEM cor** (cinza claríssimo), cartões
+**brancos** flutuando com sombra discreta, contorno quase invisível, e cor só
+em detalhe pequeno. Consequências: o "vidro fosco" saiu de cena (não há nada
+atrás para filtrar num esquema branco-sobre-cinza), a seleção virou pastilha
+clara com texto na cor (a barra sólida de petróleo dominava a tela), e as
+cores por tipo de asset viraram pastilhas claras com texto escuro em vez de
+blocos chapados com texto branco.
 
 ### ☑ Fatia 24 — Fundação do tema + vitrine
 `ui/theme.py` (tokens de cor/raio/fonte, paleta, contraste WCAG),
@@ -253,10 +263,10 @@ translucidez, 2 raios, Inter × fonte do sistema) antes de aplicar.
 Regra nova do projeto: **nenhum `setStyleSheet` fora do `theme.py`.**
 
 Decisões forçadas pelo que o Qt realmente faz (medido, não presumido):
-- **Vidro fosco de verdade não existe aqui.** `QGraphicsBlurEffect` borra o
-  conteúdo do PRÓPRIO widget (borraria as miniaturas), e o Mutter não
-  implementa blur atrás da janela. Simulado com `rgba()` + fio de luz na
-  borda + sombra suave — que é o que funciona em X11, Wayland e no `grab()`.
+- **Blur de verdade não existe aqui de qualquer jeito.**
+  `QGraphicsBlurEffect` borra o conteúdo do PRÓPRIO widget (borraria as
+  miniaturas), e o Mutter não implementa blur atrás da janela. O visual não
+  depende disso: cartão branco separado do fundo por sombra.
 - **Subclasse de `QWidget` filha ignora `background` do QSS** sem
   `WA_StyledBackground` (pega o `DetailsPanel` na Fatia 25).
 - **Seleção da árvore é barra de linha inteira, não pílula arredondada:** a
