@@ -25,6 +25,7 @@ class BridgeServer(QObject):
     client_connected = Signal()
     client_disconnected = Signal()
     command_handled = Signal(str)  # nome do comando (para a barra de status)
+    rescan_requested = Signal()    # o Blender salvou algo novo na biblioteca
 
     def __init__(self, conn: sqlite3.Connection, library_root: Path, token: str,
                  thumbs_dir: Path | None = None,
@@ -120,5 +121,8 @@ class BridgeServer(QObject):
 
         resposta = handlers.handle(self._conn, self._library_root, req,
                                    self._thumbs_dir)
-        self.command_handled.emit(str(req.get("cmd")))
+        cmd = str(req.get("cmd"))
+        if cmd == proto.CMD_RESCAN and resposta.get("ok"):
+            self.rescan_requested.emit()
+        self.command_handled.emit(cmd)
         return resposta

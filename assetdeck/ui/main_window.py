@@ -47,6 +47,7 @@ class MainWindow(QMainWindow):
         self._conn = conn  # conexão da thread da UI: SÓ leitura
         self._library_root = Path(library_root)
         self._thumbs_dir = thumbs_dir
+        self._db_path = db_path
         self._scan = ScanController(db_path, self._library_root, parent=self)
         self._pipeline = ThumbnailPipeline(thumbs_dir, parent=self)
 
@@ -517,10 +518,98 @@ class MainWindow(QMainWindow):
         self._bridge.client_disconnected.connect(
             lambda: self.bridge_status.setText(f"Blender: ouvindo :{self._bridge.port}")
         )
+        # O Blender salvou algo novo na biblioteca → reindexar
+        self._bridge.rescan_requested.connect(self.start_scan)
 
         menu = self.menuBar().addMenu("Blender")
         menu.addAction("Instalar / atualizar add-on…", self._install_addon)
+        menu.addSeparator()
+        self.render_action = menu.addAction(
+            "Gerar capas dos modelos (render)…", self._start_render
+        )
+        self.cancel_render_action = menu.addAction(
+            "Parar geração de capas", self._stop_render
+        )
+        self.cancel_render_action.setEnabled(False)
+        menu.addSeparator()
         menu.addAction("Como usar", self._bridge_help)
+
+        from assetdeck import config as _cfg
+        from assetdeck.ui.render_worker import RenderController
+
+        self._render = RenderController(
+            self._db_path, self._library_root, _cfg.previews_dir(), parent=self
+        )
+
+    # ---- render de capas em lote ----
+
+    def _start_render(self) -> None:
+        from PySide6.QtWidgets import QMessageBox
+
+        from assetdeck.blender.render import blender_command, models_without_cover
+        from assetdeck.db.repos import libraries as libraries_repo
+
+        if self._render.running:
+            return
+        if blender_command() is None:
+            QMessageBox.warning(
+                self, "Blender não encontrado",
+                "Não achei o Blender nesta máquina. Instale com:\n\n"
+                "flatpak install flathub org.blender.Blender",
+            )
+            return
+
+        lib_id = libraries_repo.get_or_create(self._conn, self._library_root)
+        pendentes = models_without_cover(self._conn, lib_id, self._library_root)
+        if not pendentes:
+            QMessageBox.information(self, "Nada a fazer",
+                                    "Todos os modelos .blend já têm capa.")
+            return
+
+        resposta = QMessageBox.question(
+            self, "Gerar capas dos modelos",
+            f"{len(pendentes)} modelo(s) sem capa serão renderizados pelo "
+            "Blender, um por vez, em segundo plano.\n\n"
+            "Leva alguns segundos por modelo e você pode continuar usando o "
+            "AssetDeck normalmente. Começar?",
+        )
+        if resposta != QMessageBox.StandardButton.Yes:
+            return
+
+        self.render_action.setEnabled(False)
+        self.cancel_render_action.setEnabled(True)
+        self.progress.setVisible(True)
+        self.progress.setRange(0, len(pendentes))
+        self._render.start(self._on_render_progress, self._on_render_finished,
+                           self._on_render_failed)
+
+    def _stop_render(self) -> None:
+        self._render.shutdown()
+        self.statusBar().showMessage("Geração de capas interrompida.")
+        self._reset_render_ui()
+
+    def _reset_render_ui(self) -> None:
+        self.render_action.setEnabled(True)
+        self.cancel_render_action.setEnabled(False)
+        self.progress.setVisible(False)
+
+    def _on_render_progress(self, feitos: int, total: int, nome: str) -> None:
+        self.progress.setRange(0, total)
+        self.progress.setValue(feitos)
+        self.statusBar().showMessage(f"Renderizando capa {feitos}/{total}: {nome}")
+
+    def _on_render_finished(self, ok: int, falhas: int) -> None:
+        self._reset_render_ui()
+        self._reload_grid()
+        recado = f"Capas geradas: {ok}"
+        if falhas:
+            recado += f" · {falhas} falharam (ver log)"
+        self.statusBar().showMessage(recado)
+        log.info("Render em lote concluído: %d ok, %d falhas.", ok, falhas)
+
+    def _on_render_failed(self, mensagem: str) -> None:
+        self._reset_render_ui()
+        self.statusBar().showMessage(f"ERRO no render: {mensagem} (ver log)")
 
     def _install_addon(self) -> None:
         from PySide6.QtWidgets import QMessageBox
@@ -707,4 +796,6 @@ class MainWindow(QMainWindow):
         self._pipeline.shutdown()
         if getattr(self, "_bridge", None) is not None:
             self._bridge.stop()
+        if getattr(self, "_render", None) is not None:
+            self._render.shutdown()
         super().closeEvent(event)
