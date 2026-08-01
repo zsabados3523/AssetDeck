@@ -54,4 +54,13 @@ def restorable_fields(data: dict) -> dict:
         caminhos = [t.strip() for t in tags if isinstance(t, str) and t.strip()]
         if caminhos:
             out["tags"] = caminhos  # caminhos 'Materiais/Madeira'
+    custom = data.get("custom")
+    if isinstance(custom, dict):
+        # só nome (string não-vazia) → valor de tipo simples (Fatia 22)
+        limpo = {
+            k.strip(): v for k, v in custom.items()
+            if isinstance(k, str) and k.strip() and isinstance(v, (str, int, float, bool))
+        }
+        if limpo:
+            out["custom"] = limpo
     return out

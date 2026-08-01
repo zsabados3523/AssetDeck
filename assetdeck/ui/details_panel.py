@@ -38,6 +38,8 @@ class DetailsPanel(QWidget):
     preview_add_requested = Signal(int)   # asset_id (botão 'Adicionar…')
     preview_cover_requested = Signal(int)  # preview_id
     preview_remove_requested = Signal(int)  # preview_id
+    property_value_changed = Signal(int, int, object)  # asset_id, property_id, valor
+    manage_properties_requested = Signal()  # botão 'Gerenciar propriedades…'
 
     def __init__(self, library_root: Path, parent=None) -> None:
         super().__init__(parent)
@@ -126,6 +128,12 @@ class DetailsPanel(QWidget):
         self.tags_tree.itemChanged.connect(self._on_tag_item_changed)
         self._loading_tags = False
 
+        # Custom properties (EAV tipado) — Fatia 22
+        props_label = QLabel("Propriedades:")
+        self.props_form = QFormLayout()
+        self.manage_props_btn = QPushButton("Gerenciar propriedades…")
+        self.manage_props_btn.clicked.connect(self.manage_properties_requested.emit)
+
         notes_label = QLabel("Notas:")
         self.notes_edit = QPlainTextEdit()
         self.notes_edit.setPlaceholderText("Anotações suas sobre este asset…")
@@ -148,6 +156,9 @@ class DetailsPanel(QWidget):
         layout.addWidget(self.add_preview_btn)
         layout.addWidget(tags_label)
         layout.addWidget(self.tags_tree)
+        layout.addWidget(props_label)
+        layout.addLayout(self.props_form)
+        layout.addWidget(self.manage_props_btn)
         layout.addWidget(notes_label)
         layout.addWidget(self.notes_edit)
         layout.addWidget(self.save_notes_btn)
@@ -300,6 +311,56 @@ class DetailsPanel(QWidget):
             self._current_asset_id, item.data(0, 32),
             item.checkState(0) == Qt.CheckState.Checked,
         )
+
+    # ---- custom properties (EAV tipado, Fatia 22) ----
+
+    def load_properties(self, defs: list, values: dict[int, object]) -> None:
+        """Reconstrói a seção com uma linha por definição ativa. O valor
+        inicial é posto ANTES de conectar o sinal — assim popular a tela
+        nunca dispara `property_value_changed` sozinho."""
+        from PySide6.QtCore import QDate
+        from PySide6.QtWidgets import QCheckBox, QDateEdit, QDoubleSpinBox, QLineEdit
+
+        while self.props_form.rowCount():
+            self.props_form.removeRow(0)
+
+        for d in defs:
+            pid = d["id"]
+            valor = values.get(pid)
+            vtype = d["value_type"]
+            if vtype == "text":
+                w = QLineEdit(str(valor) if valor is not None else "")
+                w.editingFinished.connect(
+                    lambda pid=pid, w=w: self._emit_property(pid, w.text())
+                )
+            elif vtype == "number":
+                w = QDoubleSpinBox()
+                w.setRange(-1_000_000_000, 1_000_000_000)
+                w.setDecimals(4)
+                w.setValue(float(valor) if valor is not None else 0.0)
+                w.editingFinished.connect(
+                    lambda pid=pid, w=w: self._emit_property(pid, w.value())
+                )
+            elif vtype == "bool":
+                w = QCheckBox()
+                w.setChecked(bool(valor))
+                w.toggled.connect(
+                    lambda checked, pid=pid: self._emit_property(pid, int(checked))
+                )
+            else:  # date
+                w = QDateEdit()
+                w.setCalendarPopup(True)
+                w.setDisplayFormat("yyyy-MM-dd")
+                w.setDate(QDate.fromString(valor, "yyyy-MM-dd") if valor
+                          else QDate.currentDate())
+                w.dateChanged.connect(
+                    lambda date, pid=pid: self._emit_property(pid, date.toString("yyyy-MM-dd"))
+                )
+            self.props_form.addRow(f"{d['name']}:", w)
+
+    def _emit_property(self, property_id: int, value) -> None:
+        if self._current_asset_id is not None:
+            self.property_value_changed.emit(self._current_asset_id, property_id, value)
 
     # ---- notas ----
 

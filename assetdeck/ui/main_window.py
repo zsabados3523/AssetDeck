@@ -25,6 +25,7 @@ from assetdeck import __version__
 from assetdeck.db.repos import assets as assets_repo
 from assetdeck.db.repos import collections as collections_repo
 from assetdeck.db.repos import previews as previews_repo
+from assetdeck.db.repos import properties as properties_repo
 from assetdeck.db.repos import smart_collections as smart_collections_repo
 from assetdeck.db.repos import tags as tags_repo
 from assetdeck.indexer import duplicates as duplicates_finder
@@ -38,6 +39,7 @@ from assetdeck.sidecar import writer as sidecar_writer
 from assetdeck.ui.duplicates_dialog import DuplicatesDialog
 from assetdeck.ui.folder_tree import FolderTree
 from assetdeck.ui.preview_popup import PreviewPopup
+from assetdeck.ui.property_defs_dialog import PropertyDefsDialog
 from assetdeck.ui.relocate_dialog import RelocateDialog
 from assetdeck.ui.scan_worker import ScanController
 from assetdeck.ui.smart_collection_panel import SmartCollectionPanel
@@ -201,6 +203,8 @@ class MainWindow(QMainWindow):
         self.details.preview_add_requested.connect(self._on_preview_add)
         self.details.preview_cover_requested.connect(self._on_preview_cover)
         self.details.preview_remove_requested.connect(self._on_preview_remove)
+        self.details.property_value_changed.connect(self._on_property_value_changed)
+        self.details.manage_properties_requested.connect(self._manage_properties)
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.addWidget(left)
@@ -486,6 +490,19 @@ class MainWindow(QMainWindow):
     def _refresh_details_tags(self) -> None:
         self._on_selection(self.grid.currentIndex(), QModelIndex())
 
+    # ---- custom properties (Fatia 22) ----
+
+    def _on_property_value_changed(self, asset_id: int, property_id: int, value) -> None:
+        properties_repo.set_value(self._conn, asset_id, property_id, value)
+        sidecar_writer.write_for_asset(self._conn, self._library_root, asset_id)
+        self.statusBar().showMessage("Propriedade salva")
+
+    def _manage_properties(self) -> None:
+        dlg = PropertyDefsDialog(self._conn, self)
+        dlg.exec()
+        if dlg.changed:
+            self._refresh_details_tags()  # recarrega o painel (inclui propriedades)
+
     # ---- notas / sidecar ----
 
     def _on_notes_saved(self, asset_id: int, texto: str) -> None:
@@ -555,6 +572,10 @@ class MainWindow(QMainWindow):
             )
             self.details.set_multi_count(len(self._selected_asset_ids()))
             self.details.load_gallery(previews_repo.list_for(self._conn, row["id"]))
+            self.details.load_properties(
+                properties_repo.list_defs(self._conn),
+                properties_repo.get_values_for_asset(self._conn, row["id"]),
+            )
 
     def _on_data_changed(self, top_left: QModelIndex, _br, _roles) -> None:
         # Se a thumb que acabou de ficar pronta é a do asset selecionado,
