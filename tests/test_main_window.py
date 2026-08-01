@@ -40,7 +40,7 @@ def janela(qapp, tmp_path, monkeypatch):
 
 def test_janela_abre_com_todos_os_paineis(janela):
     assert janela.model.rowCount() == 2
-    for atributo in ("grid", "details", "folders", "tags", "type_filter",
+    for atributo in ("grid", "details", "folders", "tags", "collections", "type_filter",
                      "search_box", "deps_check", "hidden_check", "group_check"):
         assert getattr(janela, atributo) is not None
 
