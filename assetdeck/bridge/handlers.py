@@ -26,6 +26,8 @@ def handle(conn: sqlite3.Connection, library_root: Path, request: dict,
             return _ping(library_root)
         if cmd == proto.CMD_LIST_ASSETS:
             return _list_assets(conn, library_root, request, thumbs_dir)
+        if cmd == proto.CMD_ASSET_BY_PATH:
+            return _asset_by_path(conn, library_root, request, thumbs_dir)
         return _get_asset(conn, library_root, request, thumbs_dir)
     except Exception as exc:
         log.exception("Falha ao tratar comando %r", cmd)
@@ -66,6 +68,9 @@ def _list_assets(conn: sqlite3.Connection, library_root: Path, req: dict,
     rows = assets_repo.list_for_grid(
         conn, search=req.get("search"), asset_types=tipos,
         min_rating=req.get("min_rating"), starred_only=bool(req.get("starred_only")),
+        # O Blender não deve ver os mapas soltos que compõem um material
+        # convertido em .blend — só o que o Rafael de fato usa.
+        include_dependencies=bool(req.get("include_dependencies", False)),
     )
     total = len(rows)
     itens = [
@@ -80,6 +85,33 @@ def _list_assets(conn: sqlite3.Connection, library_root: Path, req: dict,
         for r in rows[:limit]
     ]
     return proto.ok(assets=itens, total=total, returned=len(itens))
+
+
+def _asset_by_path(conn: sqlite3.Connection, library_root: Path, req: dict,
+                   thumbs_dir: Path | None = None) -> dict:
+    """Arquivo solto no Blender → o asset a que ele pertence (com todos os mapas).
+
+    É o que permite arrastar UM mapa e receber o SET inteiro montado.
+    """
+    caminho = req.get("path")
+    if not isinstance(caminho, str) or not caminho:
+        return proto.error("'path' (str) é obrigatório.", code="bad_request")
+    try:
+        rel = str(Path(caminho).resolve().relative_to(Path(library_root).resolve()))
+    except ValueError:
+        return proto.error(
+            "Esse arquivo não está dentro da biblioteca do AssetDeck.",
+            code="outside_library",
+        )
+
+    row = conn.execute(
+        """SELECT a.id FROM assets a JOIN files f ON f.asset_id = a.id
+           WHERE f.rel_path = ? AND a.deleted_at IS NULL AND f.deleted_at IS NULL""",
+        (rel.replace("\\", "/"),),
+    ).fetchone()
+    if row is None:
+        return proto.error(f"Arquivo não indexado: {rel}", code="not_found")
+    return _get_asset(conn, library_root, {"id": row["id"]}, thumbs_dir)
 
 
 def _get_asset(conn: sqlite3.Connection, library_root: Path, req: dict,

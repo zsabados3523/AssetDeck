@@ -7,6 +7,7 @@
 | 001_initial.sql | Schema v1 completo (Fatia 1) |
 | 002_group_locked.sql | `assets.group_locked` — trava de agrupamento corrigido à mão (Fatia 6) |
 | 003_hidden.sql | `assets.hidden` — imagem usada como preview de modelo pode ser ocultada da grade (Fatia 10b) |
+| 004_dependency.sql | `assets.is_dependency` — texturas que acompanham um .blend/.fbx irmão (detecção automática) (Fatia 13) |
 
 ## Regra de ouro
 Toda mudança aqui = **nova migration** (nunca editar uma antiga) + **avisar o
@@ -66,6 +67,7 @@ coisa, não a um arquivo.
 | notes | TEXT | anotações livres |
 | group_locked | INTEGER NOT NULL DEFAULT 0 | 1 = agrupamento corrigido à mão; o agrupador automático não mexe mais (migration 002) |
 | hidden | INTEGER NOT NULL DEFAULT 0 | 1 = oculto da grade (ex.: imagem que virou preview de um modelo); reversível via "Mostrar ocultos" (migration 003) |
+| is_dependency | INTEGER NOT NULL DEFAULT 0 | 1 = textura que acompanha um .blend/.fbx irmão (mapa de um material convertido, textura de um modelo). Recalculado a cada varredura (migration 004) |
 | created_at / updated_at / deleted_at | TEXT | |
 
 ### `files` — os arquivos físicos

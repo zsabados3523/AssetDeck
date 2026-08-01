@@ -58,6 +58,7 @@ class AssetGridModel(QAbstractListModel):
         self._starred_only: bool = False
         self._min_resolution: int | None = None
         self._include_hidden: bool = False        # Fatia 10b
+        self._include_dependencies: bool = True   # Fatia 13
         QPixmapCache.setCacheLimit(128 * 1024)  # 128MB de thumbs em RAM
 
     # ---- dados ----
@@ -67,7 +68,8 @@ class AssetGridModel(QAbstractListModel):
                     tag_id: int | None = None, min_rating: int | None = None,
                     starred_only: bool = False,
                     min_resolution: int | None = None,
-                    include_hidden: bool = False) -> None:
+                    include_hidden: bool = False,
+                    include_dependencies: bool = True) -> None:
         self._search = search or None
         self._asset_types = asset_types or []
         self._dir_prefix = dir_prefix or None
@@ -77,6 +79,7 @@ class AssetGridModel(QAbstractListModel):
         self._starred_only = starred_only
         self._min_resolution = min_resolution
         self._include_hidden = include_hidden
+        self._include_dependencies = include_dependencies
         self._requery()
 
     def set_expand_sets(self, expand: bool) -> None:
@@ -100,6 +103,7 @@ class AssetGridModel(QAbstractListModel):
             min_rating=self._min_rating, starred_only=self._starred_only,
             min_resolution=self._min_resolution,
             include_hidden=self._include_hidden,
+            include_dependencies=self._include_dependencies,
         )
         self._row_by_asset = {r["id"]: i for i, r in enumerate(self._rows)}
         self.endResetModel()
@@ -148,10 +152,30 @@ class AssetGridModel(QAbstractListModel):
         return [MIME_ASSETS]
 
     def mimeData(self, indexes) -> QMimeData:  # noqa: N802
-        """Arrastar assets → soltar numa tag (forma 1 de taggear)."""
-        ids = sorted({r["id"] for r in (self.row_at(i) for i in indexes) if r})
+        """Dados do arrasto — servem para DENTRO e para FORA do AssetDeck.
+
+        - MIME_ASSETS: uso interno (taggear, definir preview)
+        - text/uri-list: arrastar para o BLENDER ou qualquer outro app.
+          O Blender recebe como arquivo solto e abre o menu nativo dele
+          (Open/Append/Link para .blend; importa .fbx/.obj; etc).
+        """
+        from PySide6.QtCore import QUrl
+
+        linhas = [r for r in (self.row_at(i) for i in indexes) if r]
+        ids = sorted({r["id"] for r in linhas})
         mime = QMimeData()
         mime.setData(MIME_ASSETS, ",".join(str(i) for i in ids).encode())
+
+        urls, vistos = [], set()
+        for r in linhas:
+            if r["missing_since"] is not None:
+                continue  # arquivo sumido: não faz sentido arrastar
+            caminho = self._root / r["rel_path"]
+            if str(caminho) not in vistos:
+                vistos.add(str(caminho))
+                urls.append(QUrl.fromLocalFile(str(caminho)))
+        if urls:
+            mime.setUrls(urls)
         return mime
 
     # ---- thumbnails ----
@@ -233,10 +257,11 @@ class AssetGridView(QListView):
         # 200px por passo, o que fica rápido demais — feedback do Rafael)
         self.setVerticalScrollMode(QListView.ScrollMode.ScrollPerPixel)
         self.verticalScrollBar().setSingleStep(24)  # px por passo da rodinha
-        # Arrastar assets para a árvore de tags (Fatia 8) E receber imagens
-        # externas como preview (Fatia 10)
+        # Arrastar assets: para a árvore de tags (F8), sobre outro asset (F10b)
+        # e para FORA do app — Blender, gerenciador de arquivos… (F13)
         self.setDragEnabled(True)
         self.setDragDropMode(QListView.DragDropMode.DragDrop)
+        self.setDefaultDropAction(Qt.DropAction.CopyAction)
 
     # ---- receber imagem externa como preview ----
 
@@ -244,7 +269,9 @@ class AssetGridView(QListView):
     def _dropped_image(mime) -> str | None:
         from assetdeck.thumbs.raster import RASTER_EXTS
 
-        if not mime.hasUrls():
+        # Arrasto que saiu da própria grid não é "imagem externa" —
+        # senão arrastar um asset para outro viraria drop de arquivo.
+        if mime.hasFormat(MIME_ASSETS) or not mime.hasUrls():
             return None
         for url in mime.urls():
             if url.isLocalFile():
