@@ -87,6 +87,7 @@ def test_menu_biblioteca_tem_relocalizar(janela):
     menus = [m.title() for m in janela.menuBar().findChildren(type(janela.menuBar().addMenu("x")))]
     assert any("Biblioteca" in t for t in menus)
     assert janela.relocate_action.isEnabled()
+    assert janela.duplicates_action.isEnabled()
 
 
 def test_filtros_nao_quebram_a_grid(janela, qapp):
