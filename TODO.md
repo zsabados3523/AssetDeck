@@ -139,22 +139,12 @@ final do `startDrag` customizado.
 grade (ou em qualquer lugar sem soltar de fato) faz o card voltar limpo
 pro lugar de origem, sem nenhuma cópia grudada na tela.
 
-### ☐ Ideia registrada — mover asset para outra categoria arrastando
-Pedido do Rafael, com uma decisão em aberto que ele mesmo apontou não saber
-resolver. Esbarra na regra absoluta do CLAUDE.md: *"O app é somente-leitura
-sobre a biblioteca. Nada move, renomeia ou apaga."* Proposta para ele
-escolher quando quiser:
-- **Caminho A (já existe, zero risco):** arrastar um asset para uma **Tag**
-  ou **Collection** (Fatias 8 e 17) já É reclassificar — reversível, não
-  toca em nada no disco. Se "categoria" = "pedras" vs. "metal", isso já é
-  uma Tag hoje.
-- **Caminho B (mover o ARQUIVO físico de verdade)**, incluindo dependências
-  (ex.: mover um `.blend` junto das texturas que ele usa) — é da MESMA
-  classe de risco que a Fatia 23 (Batch rename), a única exceção prevista
-  ao somente-leitura, com pré-visualização e confirmação explícita antes de
-  tocar em qualquer arquivo. Não cabe dentro de outra fatia; seria sua
-  própria fatia dedicada, com as mesmas salvaguardas.
-**Sem "deu certo" ainda** — depende do Rafael escolher A, B, ou os dois.
+### ✕ Decidido — mover asset para outra categoria arrastando
+Avaliado e descartado (2026-08-01): o Rafael confirmou que a Tag/Collection
+já resolve reclassificar dentro do app, e que mover ARQUIVO físico de
+verdade fica por conta do gerenciador de arquivos do sistema — mantém o
+"somente-leitura" como está, sem exceção nova além da Fatia 23 (Batch
+rename, já prevista). Não vira fatia.
 
 ### ☑ Fatia 20 — Duplicados por perceptual hash
 **Migration 005** (`files.phash`) — dHash de 64 bits, só para arquivos
