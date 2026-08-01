@@ -235,6 +235,52 @@ a prévia, confirmar, e os arquivos mudarem de nome no disco de verdade,
 sem sobrar nada quebrado na grade.
 
 ## F4 — Opcional
+
+Dois itens abaixo já têm direção definida (pedido do Rafael em
+2026-08-01); o resto da lista ainda não foi fatiado.
+
+### ☐ Redesign visual — tema mais estiloso e translúcido
+Hoje o app usa a aparência padrão do Qt (cinza, sem estilo). Objetivo: um
+visual mais agradável sem virar poluído.
+
+**Direção pedida pelo Rafael:**
+- Minimalista e intuitivo — pouca informação na tela de uma vez.
+- Fundo simples, porém estiloso — **sem gradientes**.
+- Efeito **translúcido** nos botões (estilo "vidro fosco").
+- **Cantos arredondados** em cards, botões e painéis.
+- Fontes **simples e fáceis de ler** (legibilidade acima de tudo — não
+  pediu uma fonte específica).
+- Organização limpa: hierarquia visual clara, sem excesso de bordas/linhas.
+
+**Referência visual anexada por ele:** screenshot do Craft (app de notas)
+— fundo em aquarela floral suave (tons lavanda/roxo), painel de estilo à
+direita com efeito translúcido flutuando sobre o fundo, cantos
+arredondados em todo canto, paleta de cor suave e coerente (roxo como cor
+de destaque), tipografia serifada nos títulos, separador decorativo tipo
+"washi tape", sidebar enxuta (só título + índice).
+
+**Abordagem técnica provável (a confirmar quando entrar):** QSS (Qt Style
+Sheets — CSS do Qt) pra cor/bordas/hover; ícones SVG no lugar dos
+placeholders de texto da grade ("LUT", "IES") e dos botões ★/☆.
+Translucidez REAL de janela (`WA_TranslucentBackground`) é mais
+arriscada no Linux — depende do compositor ativo no Zorin — então o mais
+provável é simular o efeito (cor semi-transparente sólida, sem depender do
+compositor) em vez de transparência de verdade. Vou mostrar um protótipo
+visual pequeno antes de aplicar no app inteiro.
+**Sem "deu certo" ainda** — depende do Rafael aprovar o protótipo primeiro.
+
+### ☐ Executável / entrada no menu de aplicativos (Zorin OS)
+Fazer o AssetDeck aparecer no menu de aplicativos do Zorin (GNOME), sem
+precisar abrir terminal pra usar.
+**Abordagem (nível usuário, sem sudo):** arquivo `.desktop` apontando pro
+Python da venv + ícone, em `~/.local/share/applications/` (o GNOME já
+escaneia essa pasta sozinho — nenhuma instalação de sistema). Empacotar
+com PyInstaller/Nuitka (binário único, sem depender do caminho da venv)
+fica pra depois, só se um dia o app precisar rodar em outra máquina.
+**Deu certo quando:** o AssetDeck aparece no menu de aplicativos do Zorin
+com ícone próprio e abre com duplo clique, sem terminal.
+
+### Resto da F4 (ainda sem direção definida)
 Auto-tagging local via Ollama (Qwen2.5-VL 7B) · checagem seamless/tileable ·
 render de previews em lote com cena de estúdio configurável · busca por cor
 dominante · listar texturas faltando de um .blend · múltiplas bibliotecas na UI.
