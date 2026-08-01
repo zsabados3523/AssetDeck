@@ -54,6 +54,7 @@ class AssetGridModel(QAbstractListModel):
         self._include_subdirs: bool = True
         self._expand_sets: bool = False  # toggle 'agrupar' desligado (Fatia 7)
         self._tag_id: int | None = None  # filtro por tag (Fatia 8)
+        self._collection_id: int | None = None  # filtro por coleção (Fatia 17)
         self._min_rating: int | None = None       # Fatia 9
         self._starred_only: bool = False
         self._min_resolution: int | None = None
@@ -69,7 +70,8 @@ class AssetGridModel(QAbstractListModel):
                     starred_only: bool = False,
                     min_resolution: int | None = None,
                     include_hidden: bool = False,
-                    include_dependencies: bool = True) -> None:
+                    include_dependencies: bool = True,
+                    collection_id: int | None = None) -> None:
         self._search = search or None
         self._asset_types = asset_types or []
         self._dir_prefix = dir_prefix or None
@@ -80,6 +82,7 @@ class AssetGridModel(QAbstractListModel):
         self._min_resolution = min_resolution
         self._include_hidden = include_hidden
         self._include_dependencies = include_dependencies
+        self._collection_id = collection_id
         self._requery()
 
     def set_expand_sets(self, expand: bool) -> None:
@@ -104,6 +107,7 @@ class AssetGridModel(QAbstractListModel):
             min_resolution=self._min_resolution,
             include_hidden=self._include_hidden,
             include_dependencies=self._include_dependencies,
+            collection_id=self._collection_id,
         )
         self._row_by_asset = {r["id"]: i for i, r in enumerate(self._rows)}
         self.endResetModel()

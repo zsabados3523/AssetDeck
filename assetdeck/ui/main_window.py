@@ -23,11 +23,13 @@ from PySide6.QtWidgets import (
 
 from assetdeck import __version__
 from assetdeck.db.repos import assets as assets_repo
+from assetdeck.db.repos import collections as collections_repo
 from assetdeck.db.repos import previews as previews_repo
 from assetdeck.db.repos import tags as tags_repo
 from assetdeck.indexer.scanner import ScanStats
 from assetdeck.thumbs.pipeline import ThumbnailPipeline
 from assetdeck.ui.asset_grid import AssetGridModel, AssetGridView
+from assetdeck.ui.collection_tree import CollectionTree
 from assetdeck.ui.details_panel import DetailsPanel
 from assetdeck.sidecar import writer as sidecar_writer
 from assetdeck.ui.folder_tree import FolderTree
@@ -160,10 +162,16 @@ class MainWindow(QMainWindow):
         self.tags.assets_dropped.connect(self._on_assets_dropped)
         self.tags.structure_changed.connect(self._on_tags_structure_changed)
 
+        self.collections = CollectionTree()
+        self.collections.collection_selected.connect(lambda _c: self._apply_filters())
+        self.collections.assets_dropped.connect(self._on_assets_dropped_to_collection)
+        self.collections.structure_changed.connect(self._on_collections_structure_changed)
+
         left = QSplitter(Qt.Orientation.Vertical)
         left.addWidget(self.folders)
         left.addWidget(self.tags)
-        left.setSizes([400, 300])
+        left.addWidget(self.collections)
+        left.setSizes([320, 240, 240])
         left.setMinimumWidth(180)
         left.setMaximumWidth(320)
 
@@ -210,6 +218,7 @@ class MainWindow(QMainWindow):
         """Recarga completa: pastas, tags, checklist de tipos e grid."""
         self.folders.reload(self._conn)
         self.tags.reload(self._conn)
+        self.collections.reload(self._conn)
         self.type_filter.reload(assets_repo.distinct_types(self._conn))
         self.model.reload()
         self._apply_filters()
@@ -228,6 +237,7 @@ class MainWindow(QMainWindow):
             min_resolution=self.res_combo.currentData(),
             include_hidden=self.hidden_check.isChecked(),
             include_dependencies=self.deps_check.isChecked(),
+            collection_id=self.collections.current_collection_id(),
         )
         self.refresh_count()
 
@@ -298,6 +308,27 @@ class MainWindow(QMainWindow):
         assets_repo.rebuild_fts(self._conn)
         self.tags.reload(self._conn)
         self._apply_filters()
+
+    # ---- coleções manuais (Fatia 17) ----
+
+    def _on_assets_dropped_to_collection(self, collection_id: int, asset_ids: list[int]) -> None:
+        n = collections_repo.add_items(self._conn, collection_id, asset_ids)
+        if self.collections.current_collection_id() == collection_id:
+            self._apply_filters()  # a coleção aberta ganhou itens novos
+        self.statusBar().showMessage(f"{n} asset(s) adicionados à coleção (arrastar)")
+
+    def _on_collections_structure_changed(self) -> None:
+        self.collections.reload(self._conn)
+        self._apply_filters()
+
+    def _remove_from_current_collection(self, asset_ids: list[int]) -> None:
+        collection_id = self.collections.current_collection_id()
+        if collection_id is None:
+            return
+        for aid in asset_ids:
+            collections_repo.remove_item(self._conn, collection_id, aid)
+        self._apply_filters()
+        self.statusBar().showMessage(f"{len(asset_ids)} asset(s) removidos da coleção")
 
     def _selected_asset_ids(self) -> list[int]:
         rows = [self.model.row_at(i)
@@ -439,6 +470,13 @@ class MainWindow(QMainWindow):
             menu.addAction(
                 f"Reexibir {len(ocultos)} oculto(s)",
                 lambda: self._unhide([r["id"] for r in ocultos]),
+            )
+
+        # Coleções: tirar da coleção aberta no momento
+        if self.collections.current_collection_id() is not None:
+            menu.addAction(
+                f"Remover da coleção atual ({len(ids)})",
+                lambda: self._remove_from_current_collection(ids),
             )
 
         # Agrupamento: só na visão agrupada

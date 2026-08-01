@@ -26,6 +26,7 @@ def list_for_grid(
     min_resolution: int | None = None,
     include_hidden: bool = False,
     include_dependencies: bool = True,
+    collection_id: int | None = None,
 ) -> list[dict]:
     """Assets para a grid (asset + arquivo principal), com filtros combináveis.
 
@@ -35,6 +36,8 @@ def list_for_grid(
     - include_subdirs: False = só arquivos diretamente na pasta
     - expand_sets: True = toggle 'agrupar' DESLIGADO — cada mapa de um set
       PBR vira um card próprio (só visualização; o banco não muda)
+    - collection_id: só assets dentro dessa coleção, na ORDEM MANUAL em que
+      foram arrastados para dentro (Fatia 17)
     """
     join_files = ("JOIN files f ON f.asset_id = a.id" if expand_sets
                   else "JOIN files f ON f.asset_id = a.id AND f.is_primary = 1")
@@ -76,6 +79,10 @@ def list_for_grid(
         sql += (f" AND a.id IN (SELECT asset_id FROM asset_tags"
                 f" WHERE tag_id IN ({','.join('?' * len(alvo))}))")
         params.extend(alvo)
+    if collection_id is not None:
+        sql += (" AND a.id IN (SELECT asset_id FROM collection_items"
+                " WHERE collection_id = ?)")
+        params.append(collection_id)
     if min_rating:
         sql += " AND a.rating >= ?"
         params.append(min_rating)
@@ -97,7 +104,14 @@ def list_for_grid(
     elif not include_subdirs:
         sql += " AND f.rel_path NOT LIKE '%/%'"  # raiz: só arquivos soltos nela
 
-    sql += " ORDER BY a.name COLLATE NOCASE, f.rel_path COLLATE NOCASE"
+    if collection_id is not None:
+        # Ordem manual: a ordem em que os assets foram arrastados para dentro
+        sql += (" ORDER BY (SELECT sort_order FROM collection_items"
+                " WHERE collection_id = ? AND asset_id = a.id),"
+                " a.name COLLATE NOCASE")
+        params.append(collection_id)
+    else:
+        sql += " ORDER BY a.name COLLATE NOCASE, f.rel_path COLLATE NOCASE"
     rows = [dict(r) for r in conn.execute(sql, params)]
     if expand_sets:
         for r in rows:
