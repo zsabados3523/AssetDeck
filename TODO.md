@@ -7,12 +7,12 @@ tela dele.
 
 | | |
 |---|---|
-| Testes | 180 verdes (`pytest -q`) |
-| Schema | migrations 001–004 aplicadas (ver SCHEMA.md) |
+| Testes | 189 verdes (`pytest -q`) |
+| Schema | migrations 001–005 aplicadas (ver SCHEMA.md) |
 | Biblioteca de trabalho | testlib: 750 arquivos → 391 assets → **127 visíveis** (dependências ocultas) |
 | Add-on do Blender | v0.4.0, Blender 5.2 Flatpak |
 
-**Próximo passo: F3 — Fatia 20 (Duplicados por perceptual hash).**
+**Próximo passo: F3 — Fatia 21 (Busca booleana + substring).**
 
 ## Como ler este arquivo
 Uma fatia por vez, em branch própria. Cada fatia termina com: pytest verde,
@@ -156,9 +156,17 @@ escolher quando quiser:
   própria fatia dedicada, com as mesmas salvaguardas.
 **Sem "deu certo" ainda** — depende do Rafael escolher A, B, ou os dois.
 
-### ☐ Fatia 20 — Duplicados por perceptual hash
-Mesma textura em resoluções diferentes (hash de arquivo não pega). Provável
-migration 005 para guardar o phash.
+### ☑ Fatia 20 — Duplicados por perceptual hash
+**Migration 005** (`files.phash`) — dHash de 64 bits, só para arquivos
+raster, calculado na mesma abertura de imagem que já lê width/height
+(`scanner.image_meta`, sem ler o arquivo duas vezes; sem dependência nova,
+só Pillow). `indexer/duplicates.py` agrupa assets ativos e visíveis com o
+mesmo phash. Menu "Biblioteca → Duplicados por conteúdo visual…" lista os
+grupos e deixa o Rafael escolher o que ocultar — **nunca apaga nada**, usa
+`assets.hidden` (Fatia 10b), reversível em "Mostrar ocultos".
+**Deu certo quando:** duas cópias da mesma textura em resoluções diferentes
+aparecem no mesmo grupo; ocultar uma some da grade padrão sem apagar nada
+do disco nem do banco.
 
 ### ☐ Fatia 21 — Busca booleana + substring
 Operadores E/OU/NÃO. Inclui a limitação encontrada na Fatia 12: hoje
