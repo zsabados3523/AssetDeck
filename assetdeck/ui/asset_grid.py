@@ -249,8 +249,11 @@ class AssetGridView(QListView):
         self.setAcceptDrops(True)
         self.setViewMode(QListView.ViewMode.IconMode)
         self.setResizeMode(QListView.ResizeMode.Adjust)
-        self.setLayoutMode(QListView.LayoutMode.Batched)  # nunca congela ao popular
-        self.setBatchSize(64)
+        # Layout SÍNCRONO: com uniformItemSizes o custo é O(1) (2000 itens
+        # recarregam em ~40ms). Em Batched o scrollbar só descobria o tamanho
+        # real DEPOIS, e o Qt clampava a rolagem — era a causa da lista pular
+        # para cima ao anexar um preview (bug relatado pelo Rafael).
+        self.setLayoutMode(QListView.LayoutMode.SinglePass)
         self.setUniformItemSizes(True)
         self.setGridSize(CELL)
         self.setIconSize(QSize(ICON, ICON))

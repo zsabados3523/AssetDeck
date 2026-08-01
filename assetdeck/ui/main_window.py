@@ -348,6 +348,8 @@ class MainWindow(QMainWindow):
         if asset_id is not None:
             idx = self.model.index_of_asset(asset_id)
             if idx is not None:
+                # setCurrentIndex ROLA a view até o item — por isso a barra
+                # é reposta depois, nunca antes.
                 self.grid.setCurrentIndex(idx)
         barra.setValue(min(posicao, barra.maximum()))
 
