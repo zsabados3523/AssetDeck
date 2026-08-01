@@ -48,6 +48,24 @@ def test_index_of_asset_devolve_none_para_id_ausente(grid):
     assert modelo.index_of_asset(999999) is None
 
 
+def test_grid_nao_deixa_o_usuario_reposicionar_os_cards(grid):
+    """Fatia 19b: setViewMode(IconMode) liga Movement.Free por padrão, e em
+    Free o Qt guarda a posição de cada ícone arrastado — era por isso que o
+    card ficava preso onde o mouse soltava. A grade é sempre ordenada pela
+    consulta, então tem que ser Static.
+
+    (Trava a CONFIGURAÇÃO. Um teste do comportamento — simular o drop e
+    comparar visualRect — não é possível: o filterDropEvent do Qt exige um
+    QDrag real como event.source() e derruba o processo se for forjado.)
+    """
+    from PySide6.QtWidgets import QListView
+
+    view, _modelo, _conn = grid
+    assert view.movement() == QListView.Movement.Static
+    # e o arrasto PARA FORA (tag, coleção, Blender) segue habilitado
+    assert view.dragEnabled()
+
+
 def test_restaurar_selecao_sozinho_jogaria_a_lista_para_o_item(grid, qapp):
     """A CAUSA do incômodo: setCurrentIndex rola a view até o item.
 

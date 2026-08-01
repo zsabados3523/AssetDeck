@@ -125,15 +125,33 @@ reindexar, religar pelo menu e ver o asset original (com a mesma
 tag/nota de antes) apontando pro caminho novo, sem sobrar um asset
 fantasma duplicado na grid.
 
-### ☑ Fatia 19b — Bug: "fantasma" preso ao arrastar um asset
-Causa confirmada em `ui/asset_grid.py`: `AssetGridView.dropEvent` caía em
-`super().dropEvent(event)` quando o drop não tinha alvo válido dentro da
-própria grade (caminho morto, o modelo não usa `InternalMove`) — trocado
-por `event.ignore()` + `self.viewport().update()`. O `startDrag`
-customizado da Fatia 17b também passou a forçar `self.viewport().update()`
-depois do `drag.exec(...)`.
+### ☑ Fatia 19b — Bug: card fica preso onde o mouse soltou
+**Primeiro diagnóstico meu estava ERRADO** (achei que era um "fantasma" de
+repaint). O Rafael corrigiu a descrição: o preview do próprio asset É
+MOVIDO e fica preso, estático, onde soltou. Isso é o Qt movendo o item de
+verdade.
+
+**Causa raiz:** `setViewMode(IconMode)` liga `Movement.Free` por padrão, e
+em `Free` o `QIconModeViewBase` deixa o usuário reposicionar os ícones e
+guarda a posição de cada um. Verificado rodando o Qt do projeto:
+`QListView()` novo = `Static`; após `setViewMode(IconMode)` = **`Free`**.
+Fix: `self.setMovement(QListView.Movement.Static)` — a grade é sempre
+ordenada pela consulta, nunca houve reordenar à mão. Confirmado que o
+layout em grade fica idêntico e `dragEnabled` continua `True` (arrastar
+para tag/coleção/Blender não regride).
+
+Mantido também o fix anterior como defesa em profundidade: `dropEvent` faz
+`event.ignore()` + `viewport().update()` em vez de cair no
+`super().dropEvent()` (caminho morto, sem `InternalMove`), e o `startDrag`
+customizado força repaint após o `drag.exec(...)`.
+
+Teste de regressão em `tests/test_grid_state.py` trava a CONFIGURAÇÃO
+(`movement() == Static`) — provei que ele falha sem o fix. Um teste do
+comportamento (simular drop e comparar `visualRect`) não é possível: o
+`filterDropEvent` do Qt exige um `QDrag` real como `event.source()` e
+derruba o processo se for forjado.
 **Deu certo quando:** arrastar um asset e soltar em espaço vazio da própria
-grade faz o card voltar limpo pro lugar de origem, sem cópia grudada.
+grade faz o card voltar pro lugar dele, sem ficar preso onde soltou.
 
 ### ☑ Fix — Smart Collection "(nenhuma aplicada)" não resetava os filtros
 Relatado pelo Rafael: voltar pro item raiz do painel de Smart Collections
@@ -145,6 +163,10 @@ existe no dicionário.
 **Deu certo quando:** aplicar uma Smart Collection e depois clicar em
 "(nenhuma aplicada)" mostra a biblioteca inteira de novo, sem filtro
 nenhum sobrando.
+**Nota de processo:** o Rafael reportou que este fix "não funcionou", mas a
+causa foi minha — deixei o repo na branch `fatia-23-batch-rename`, que saiu
+da `main` ANTES deste commit, então ele testou um código sem o fix. Lição:
+consolidar tudo numa branch só antes de pedir teste.
 
 ### ✕ Decidido — mover asset para outra categoria arrastando
 Avaliado e descartado (2026-08-01): o Rafael confirmou que a Tag/Collection
