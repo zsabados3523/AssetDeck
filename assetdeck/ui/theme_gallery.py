@@ -43,7 +43,7 @@ log = logging.getLogger(__name__)
 # (rótulo na tela, valor do Variant) para cada eixo de escolha
 OPCOES = {
     "background": [("Liso", "liso"), ("Com grão de papel", "grao")],
-    "translucency": [("Suave", "sutil"), ("Médio", "media"), ("Branco sólido", "forte")],
+    "separation": [("Quase nenhuma", "sutil"), ("Média", "media"), ("Marcada", "forte")],
     "radius": [("Discretos (12px)", "discreto"), ("Marcantes (18px)", "marcante")],
     "font": [("Inter", "inter"), ("Padrão do sistema", "sistema")],
 }
@@ -92,7 +92,7 @@ class ThemeGallery(QWidget):
         linha.setContentsMargins(0, 0, 0, 0)
         linha.setSpacing(10)
 
-        for campo, rotulo in (("background", "Fundo"), ("translucency", "Painéis"),
+        for campo, rotulo in (("background", "Fundo"), ("separation", "Separação"),
                               ("radius", "Cantos"), ("font", "Fonte")):
             etiqueta = QLabel(rotulo)
             etiqueta.setObjectName("sectionTitle")
@@ -283,6 +283,6 @@ class ThemeGallery(QWidget):
         self.rodape.setText(
             f"Painel sobre o fundo = {superficie}  ·  contraste do texto "
             f"{contraste:.1f}:1  ·  do texto secundário {contraste_muted:.1f}:1  ·  "
-            f"Variant({self.variant.background}, {self.variant.translucency}, "
+            f"Variant({self.variant.background}, {self.variant.separation}, "
             f"{self.variant.radius}, {self.variant.font})"
         )

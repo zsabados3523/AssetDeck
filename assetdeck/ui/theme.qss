@@ -37,8 +37,8 @@ QWidget#appSurface {
 
 /* --------------------------------------------------------------- cards -- */
 
-/* O cartão branco sobre o fundo cinza-claro, no estilo do Craft: o que separa
- * do fundo é a sombra e a diferença de tom, não uma borda desenhada.
+/* Fundo e painel são os DOIS brancos: o que separa é uma linha de contorno
+ * quase invisível mais uma sombra de opacidade baixa (estilo Craft).
  * Toda view (árvore, lista, grade) mora DENTRO de um destes, porque o
  * viewport de uma view pinta retângulo no canto e vaza por cima de qualquer
  * border-radius aplicado nela diretamente. */
@@ -67,7 +67,7 @@ QLabel#sectionTitle {
 }
 
 QLabel#title {
-    color: $text;
+    color: $title;
     font-size: $font_size_title;
     font-weight: 600;
 }
@@ -103,7 +103,7 @@ QLineEdit, QPlainTextEdit, QTextEdit, QSpinBox, QDoubleSpinBox, QDateEdit {
 
 QLineEdit:focus, QPlainTextEdit:focus, QTextEdit:focus,
 QSpinBox:focus, QDoubleSpinBox:focus, QDateEdit:focus {
-    border: 1px solid $accent;
+    border: 1px solid $focus;
 }
 
 QLineEdit:disabled, QPlainTextEdit:disabled, QTextEdit:disabled {
@@ -113,7 +113,7 @@ QLineEdit:disabled, QPlainTextEdit:disabled, QTextEdit:disabled {
 /* -------------------------------------------------------------- botões -- */
 
 QPushButton, QToolButton {
-    background-color: $surface_strong;
+    background-color: $surface;
     border: 1px solid $border;
     border-radius: $radius_control;
     padding: $pad_m $pad_l;
@@ -125,13 +125,13 @@ QPushButton:hover, QToolButton:hover {
     border: 1px solid $hairline;
 }
 
-/* Ativo/pressionado é pastilha clara com o texto na cor — sem contorno
- * colorido, que é o que deixa a barra do Craft leve. */
+/* Ativo/pressionado é pastilha de cinza claro com o texto normal. Tudo
+ * monocromático: cor só onde ela carrega informação (tag, tipo de asset). */
 QPushButton:pressed, QToolButton:pressed,
 QPushButton:checked, QToolButton:checked {
-    background-color: $accent_soft;
+    background-color: $selection;
     border: 1px solid transparent;
-    color: $accent;
+    color: $text;
     font-weight: 600;
 }
 
@@ -183,7 +183,7 @@ QCheckBox:disabled, QRadioButton:disabled {
 /* Exceção consciente à regra "não estilizar subcontrole sem repor a image:".
  * Com a paleta clara, o indicador que o Fusion desenha usa a cor de botão —
  * quase branco sobre quase branco — e a caixa DESMARCADA fica invisível na
- * tela. Aqui o estado é legível pelo preenchimento: cheio de petróleo =
+ * tela. Aqui o estado é legível pelo preenchimento: cheio de cinza escuro =
  * marcado, vazio com borda = desmarcado. O "✓" branco por dentro entra na
  * Fatia 26, junto com o check.svg. */
 QCheckBox::indicator, QRadioButton::indicator {
@@ -202,7 +202,7 @@ QRadioButton::indicator {
 }
 
 QCheckBox::indicator:hover, QRadioButton::indicator:hover {
-    border: 1px solid $accent;
+    border: 1px solid $focus;
 }
 
 QCheckBox::indicator:checked, QRadioButton::indicator:checked {
@@ -216,7 +216,7 @@ QCheckBox::indicator:disabled, QRadioButton::indicator:disabled {
 }
 
 QComboBox {
-    background-color: $surface_strong;
+    background-color: $surface;
     border: 1px solid $border;
     border-radius: $radius_control;
     padding: $pad_m $pad_l;
@@ -228,7 +228,7 @@ QComboBox:hover {
 }
 
 QComboBox:focus {
-    border: 1px solid $accent;
+    border: 1px solid $focus;
 }
 
 /* O popup do combo é uma JANELA separada: não herda o fundo do card e
@@ -239,8 +239,8 @@ QComboBox QAbstractItemView {
     border-radius: $radius_control;
     padding: $pad_s;
     color: $text;
-    selection-background-color: $accent_soft;
-    selection-color: $accent;
+    selection-background-color: $selection;
+    selection-color: $text;
     outline: none;
 }
 
@@ -253,8 +253,8 @@ QTreeView, QTreeWidget, QListView, QListWidget, QTableView, QTableWidget {
     border: none;
     color: $text;
     outline: none;
-    selection-background-color: $accent_soft;
-    selection-color: $accent;
+    selection-background-color: $selection;
+    selection-color: $text;
 }
 
 QTreeView::item, QListWidget::item, QTableView::item {
@@ -269,8 +269,8 @@ QTreeView::item:hover, QListWidget::item:hover, QTableView::item:hover {
  * painel direito do Craft. A barra sólida de petróleo que estava aqui antes
  * dominava a tela inteira — foi o que o Rafael reprovou. */
 QTreeView::item:selected, QListWidget::item:selected, QTableView::item:selected {
-    background-color: $accent_soft;
-    color: $accent;
+    background-color: $selection;
+    color: $text;
 }
 
 /* Seleção arredondada só onde NÃO há coluna de indicador (as listas).
@@ -322,8 +322,8 @@ QMenu::item {
 }
 
 QMenu::item:selected {
-    background-color: $accent_soft;
-    color: $accent;
+    background-color: $selection;
+    color: $text;
 }
 
 QMenu::item:disabled {
@@ -366,7 +366,7 @@ QScrollBar::handle:vertical, QScrollBar::handle:horizontal {
 }
 
 QScrollBar::handle:vertical:hover, QScrollBar::handle:horizontal:hover {
-    background-color: $accent_soft;
+    background-color: $selection;
 }
 
 QScrollBar::add-line, QScrollBar::sub-line {
@@ -402,7 +402,7 @@ QSplitter::handle {
 }
 
 QSplitter::handle:hover {
-    background-color: $accent_soft;
+    background-color: $selection;
 }
 
 QStatusBar {

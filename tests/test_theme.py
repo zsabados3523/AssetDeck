@@ -15,8 +15,8 @@ from assetdeck.ui import theme
 # ---------------------------------------------------------------- tokens --
 
 def test_variant_recusa_valor_invalido():
-    with pytest.raises(ValueError, match="translucency"):
-        theme.Variant(translucency="altissima")
+    with pytest.raises(ValueError, match="separation"):
+        theme.Variant(separation="altissima")
 
 
 def _sem_comentarios(qss: str) -> str:
@@ -27,8 +27,8 @@ def _sem_comentarios(qss: str) -> str:
 
 @pytest.mark.parametrize("variant", [
     theme.Variant(),
-    theme.Variant(translucency="sutil", radius="marcante"),
-    theme.Variant(translucency="forte", font="sistema"),
+    theme.Variant(separation="sutil", radius="marcante"),
+    theme.Variant(separation="forte", font="sistema"),
 ])
 def test_qss_nao_deixa_token_sem_substituir(variant):
     regras = _sem_comentarios(theme.build_qss(variant))
@@ -86,14 +86,14 @@ def test_hex_invalido_da_erro():
         theme.hex_to_rgb("#ABC")
 
 
-@pytest.mark.parametrize("translucency", list(theme.SURFACE_ALPHA))
-def test_contraste_do_texto_sobre_o_painel(translucency):
+@pytest.mark.parametrize("separation", list(theme.SEPARATION))
+def test_contraste_do_texto_sobre_o_painel(separation):
     """Legibilidade foi pedido explícito do Rafael — isto não é enfeite.
 
     Mede contra a cor OPACA equivalente ao painel translúcido sobre o fundo,
     que é o que a tela realmente mostra.
     """
-    superficie = theme.surface_solid(theme.Variant(translucency=translucency))
+    superficie = theme.surface_solid(theme.Variant(separation=separation))
     assert theme.contrast_ratio(theme.TEXT, superficie) >= 4.5
     assert theme.contrast_ratio(theme.TEXT_MUTED, superficie) >= 3.0
     assert theme.contrast_ratio(theme.WARNING, superficie) >= 4.5
@@ -101,17 +101,17 @@ def test_contraste_do_texto_sobre_o_painel(translucency):
     assert theme.contrast_ratio(theme.ACCENT, superficie) >= 4.5
 
 
-@pytest.mark.parametrize("translucency", list(theme.SURFACE_ALPHA))
-def test_contraste_do_texto_selecionado(translucency):
-    """A seleção é pastilha clara com o texto na cor do destaque.
+@pytest.mark.parametrize("separation", list(theme.SEPARATION))
+def test_contraste_do_texto_selecionado(separation):
+    """A seleção é monocromática: pastilha de cinza claro, texto normal.
 
-    É o padrão que substituiu a barra sólida de petróleo, então o contraste do
-    texto sobre a pastilha precisa ser tão garantido quanto o do texto normal.
+    Sem cor para sinalizar o estado, a legibilidade do texto sobre a pastilha
+    é a única coisa que sobra — então ela é travada aqui.
     """
-    variant = theme.Variant(translucency=translucency)
-    pastilha = theme.blend((*theme.hex_to_rgb(theme.ACCENT), 0.14),
-                           theme.surface_solid(variant))
-    assert theme.contrast_ratio(theme.ACCENT, pastilha) >= 4.5
+    variant = theme.Variant(separation=separation)
+    pastilha = theme.blend(theme.SELECTION, theme.surface_solid(variant))
+    assert theme.contrast_ratio(theme.TEXT, pastilha) >= 4.5
+    assert theme.contrast_ratio(theme.TEXT_MUTED, pastilha) >= 3.0
 
 
 def test_contraste_do_texto_sobre_o_destaque_e_sobre_o_popup():
@@ -180,40 +180,48 @@ def _pixel(imagem, x, y) -> str:
     return QColor(imagem.pixelColor(x, y)).name(QColor.NameFormat.HexRgb).upper()
 
 
-def test_o_qss_realmente_pinta_o_fundo_e_o_card(sonda):
-    """Se o Qt descartar a folha por erro de sintaxe, estas cores não batem."""
+def _borda_do_card(sonda) -> str:
+    """Pixel do meio da aresta esquerda do card (x=50, y=150 na sonda)."""
+    return _pixel(sonda.grab().toImage(), 50, 150)
+
+
+def test_o_qss_realmente_pinta_o_card(sonda):
+    """Fundo e painel são os dois brancos: o que prova que a folha pegou é a
+    LINHA de contorno. Se o Qt descartar o QSS por erro de sintaxe, a aresta
+    fica branca igual ao resto."""
     sonda.setStyleSheet(theme.build_qss())
     img = sonda.grab().toImage()
 
-    assert _pixel(img, 10, 10) == theme.BG.upper()
-    assert _pixel(img, 200, 150) == theme.surface_solid().upper()
+    assert _pixel(img, 10, 10) == theme.BG.upper()          # fundo
+    assert _pixel(img, 200, 150) == theme.surface_solid().upper()  # miolo do card
+    assert _borda_do_card(sonda) != theme.BG.upper(), "a linha do card não pintou"
 
 
-def test_o_canto_do_card_mostra_o_fundo(sonda):
+def test_o_canto_do_card_e_arredondado(sonda):
     """Regressão do cantos-arredondados-que-vazam.
 
-    O canto do card tem de deixar o fundo aparecer. Um retângulo opaco por
-    baixo (é o que acontece quando se arredonda uma view direto, sem embrulhar
-    num QFrame) faria este teste falhar.
+    Prova a curvatura comparando dois pontos da MESMA aresta: na quina o
+    contorno ainda não começou (fundo puro), no meio da aresta ele existe.
+    Uma view arredondada sem o QFrame em volta pinta retângulo e falha aqui.
     """
     sonda.setStyleSheet(theme.build_qss())
     img = sonda.grab().toImage()
 
-    # (50, 50) é o canto superior esquerdo do card; com raio de 12px o pixel
-    # de dentro dessa quina ainda pertence ao fundo.
-    assert _pixel(img, 52, 52) == theme.BG.upper()
+    assert _pixel(img, 50, 50) == theme.BG.upper(), "a quina do card não é curva"
+    assert _pixel(img, 50, 150) != theme.BG.upper()
 
 
-def test_translucidez_muda_a_cor_do_painel_na_tela(sonda):
+def test_separacao_controla_o_quanto_a_linha_aparece(sonda):
+    """Os três níveis do seletor "Separação" têm de diferir na tela."""
     lidos = []
     for nivel in ("sutil", "media", "forte"):
-        sonda.setStyleSheet(theme.build_qss(theme.Variant(translucency=nivel)))
-        lidos.append(_pixel(sonda.grab().toImage(), 200, 150))
+        sonda.setStyleSheet(theme.build_qss(theme.Variant(separation=nivel)))
+        lidos.append(_borda_do_card(sonda))
 
-    assert len(set(lidos)) == 3, f"os três níveis deveriam diferir na tela: {lidos}"
-    # Mais translúcido = mais perto do fundo; mais opaco = mais perto do branco.
+    assert len(set(lidos)) == 3, f"os três níveis deveriam diferir: {lidos}"
+    # Mais separação = linha mais escura.
     claridades = [theme.relative_luminance(c) for c in lidos]
-    assert claridades == sorted(claridades)
+    assert claridades == sorted(claridades, reverse=True)
 
 
 @pytest.fixture
@@ -256,7 +264,7 @@ def test_apply_theme_configura_o_app(tema_isolado):
 def test_todas_as_variantes_aplicam_sem_erro(tema_isolado, tmp_path, monkeypatch):
     monkeypatch.setenv("ASSETDECK_CACHE_DIR", str(tmp_path))
     for fundo in theme.BACKGROUNDS:
-        for nivel in theme.SURFACE_ALPHA:
+        for nivel in theme.SEPARATION:
             for raio in theme.RADII:
                 for fonte in theme.FONTS:
                     theme.apply_theme(tema_isolado, theme.Variant(fundo, nivel, raio, fonte))
@@ -271,10 +279,10 @@ def test_vitrine_abre_com_as_amostras(tema_isolado):
     janela.show()
     tema_isolado.processEvents()
 
-    assert set(janela._combos) == {"background", "translucency", "radius", "font"}
+    assert set(janela._combos) == {"background", "separation", "radius", "font"}
     assert "contraste" in janela.rodape.text()
 
-    janela._combos["translucency"].setCurrentIndex(2)  # dispara o reaplicar
+    janela._combos["separation"].setCurrentIndex(2)  # dispara o reaplicar
     tema_isolado.processEvents()
-    assert janela.variant.translucency == "forte"
+    assert janela.variant.separation == "forte"
     janela.close()
