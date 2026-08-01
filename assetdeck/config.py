@@ -24,7 +24,22 @@ DEFAULTS = {
     # Ao usar uma imagem da biblioteca como preview de um modelo:
     # "ask" pergunta se oculta a imagem; "always"/"never" lembram a escolha
     "hide_preview_source": "ask",
+    # Ponte com o Blender (F2): porta local e token gerado na 1ª execução
+    "bridge_enabled": True,
+    "bridge_port": 45017,
+    "bridge_token": "",
 }
+
+
+def ensure_bridge_token(cfg: dict) -> str:
+    """Garante um token da ponte no config (gera na primeira vez)."""
+    import secrets
+
+    if not cfg.get("bridge_token"):
+        cfg["bridge_token"] = secrets.token_urlsafe(24)
+        save_config(cfg)
+        log.info("Token da ponte com o Blender gerado.")
+    return cfg["bridge_token"]
 
 
 def _dir_from_env(env_var: str, xdg_var: str, fallback: str) -> Path:
