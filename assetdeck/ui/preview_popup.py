@@ -13,9 +13,18 @@ from pathlib import Path
 
 from PySide6.QtCore import QObject, QRunnable, Qt, QThreadPool, Signal
 from PySide6.QtGui import QGuiApplication, QImage, QPixmap
-from PySide6.QtWidgets import QDialog, QLabel, QVBoxLayout
+from PySide6.QtWidgets import (
+    QButtonGroup,
+    QDialog,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
+)
 
-from assetdeck.thumbs.raster import can_thumbnail, open_image
+from assetdeck.indexer.grouper import PRIMARY_ORDER
+from assetdeck.thumbs.preview import can_preview, load_full_image
 
 log = logging.getLogger(__name__)
 
@@ -33,14 +42,11 @@ class _LoadJob(QRunnable):
 
     def run(self) -> None:
         try:
-            with open_image(self._path) as img:
-                w, h = img.width, img.height
-                if img.mode in ("I;16", "I;16L", "I;16B", "I;16N", "I", "F"):
-                    img = img.point(lambda v: v / 256).convert("L") \
-                        if img.mode.startswith("I") else img.convert("L")
-                img = img.convert("RGBA")
-                qimg = QImage(img.tobytes("raw", "RGBA"), img.width, img.height,
-                              QImage.Format.Format_RGBA8888).copy()
+            img = load_full_image(self._path)  # HDR/EXR já vem tonemapado
+            w, h = img.width, img.height
+            img = img.convert("RGBA")
+            qimg = QImage(img.tobytes("raw", "RGBA"), img.width, img.height,
+                          QImage.Format.Format_RGBA8888).copy()
             self._sig.loaded.emit(qimg, w, h)
         except Exception as exc:
             log.exception("Preview ampliado falhou para %s", self._path)
@@ -56,37 +62,79 @@ class PreviewPopup(QDialog):
         self.info_label = QLabel()
         self.info_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.info_label.setStyleSheet("color: gray;")
+
+        # Barra do "PBR Material Viewer": um botão por mapa do set
+        self.maps_bar = QWidget()
+        self._maps_layout = QHBoxLayout(self.maps_bar)
+        self._maps_layout.setContentsMargins(0, 0, 0, 0)
+        self._maps_group = QButtonGroup(self)
+        self._maps_group.setExclusive(True)
+        self.maps_bar.setVisible(False)
+
         layout = QVBoxLayout(self)
         layout.addWidget(self.image_label, stretch=1)
+        layout.addWidget(self.maps_bar)
         layout.addWidget(self.info_label)
 
         self._sig = _Signaller()
         self._sig.loaded.connect(self._on_loaded)
         self._sig.failed.connect(self._on_failed)
         self._loading_for: Path | None = None
+        self._library_root: Path | None = None
 
     def show_for(self, row: sqlite3.Row, library_root: Path,
-                 thumb: QPixmap | None) -> None:
-        path = library_root / row["rel_path"]
+                 thumb: QPixmap | None, maps: list | None = None) -> None:
+        self._library_root = library_root
         self.setWindowTitle(row["name"])
-        self._loading_for = path
 
         if thumb and not thumb.isNull():
             self.image_label.setPixmap(self._fit(thumb))
         else:
             self.image_label.setText("(sem preview)")
 
-        if can_thumbnail(path) and path.exists():
+        self._build_maps_bar(maps)
+        self._load(library_root / row["rel_path"])
+        self.show()
+        self.raise_()
+        self.activateWindow()
+
+    # ---- PBR Material Viewer (sets agrupados) ----
+
+    def _build_maps_bar(self, maps: list | None) -> None:
+        for btn in self._maps_group.buttons():
+            self._maps_group.removeButton(btn)
+            btn.deleteLater()
+        if not maps or len(maps) < 2:
+            self.maps_bar.setVisible(False)
+            return
+        ordenados = sorted(
+            maps, key=lambda m: PRIMARY_ORDER.index(m["map_role"])
+            if m["map_role"] in PRIMARY_ORDER else 99,
+        )
+        for m in ordenados:
+            btn = QPushButton(m["map_role"] if m["map_role"] != "none" else "arquivo")
+            btn.setCheckable(True)
+            rel = m["rel_path"]
+            btn.clicked.connect(lambda _c=False, r=rel: self._on_map_clicked(r))
+            self._maps_group.addButton(btn)
+            self._maps_layout.addWidget(btn)
+        self._maps_group.buttons()[0].setChecked(True)
+        self.maps_bar.setVisible(True)
+
+    def _on_map_clicked(self, rel_path: str) -> None:
+        if self._library_root is not None:
+            self._load(self._library_root / rel_path)
+
+    def _load(self, path: Path) -> None:
+        self._loading_for = path
+        if can_preview(path) and path.exists():
             self.info_label.setText("Carregando resolução completa…")
             QThreadPool.globalInstance().start(_LoadJob(self._sig, path))
         else:
             self.info_label.setText(
                 "Preview em resolução completa disponível só para imagens "
-                "comuns por enquanto (HDRI/EXR chegam na Fatia 7) — Esc fecha"
+                "e HDR/EXR por enquanto — Esc fecha"
             )
-        self.show()
-        self.raise_()
-        self.activateWindow()
 
     # ---- resultado do carregamento ----
 

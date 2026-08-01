@@ -140,6 +140,39 @@ def test_agrupar_a_mao_funde_e_trava(env):
     assert n_files == 2
 
 
+def test_toggle_expandido_mostra_cada_mapa_sem_mudar_o_banco(env):
+    """Toggle do Rafael: expand_sets=True lista cada mapa como card próprio."""
+    conn, lib_id, _ = env
+    apply_grouping(conn, lib_id)
+    agrupado = assets_repo.list_for_grid(conn)
+    expandido = assets_repo.list_for_grid(conn, expand_sets=True)
+
+    assert len(agrupado) == 6    # set(1) + foto + 2 gemeos + 2 duvidas
+    assert len(expandido) == 9   # os 4 mapas do set aparecem separados
+
+    nomes_mapas = {r["name"] for r in expandido if r["files_count"] > 1}
+    assert nomes_mapas == {
+        "Bricks074_2K_Color", "Bricks074_2K_NormalGL",
+        "Bricks074_2K_Roughness", "Bricks074_2K_Displacement",
+    }
+    # E o banco continua agrupado (era só visualização):
+    assert assets_repo.count_active(conn) == 6
+
+
+def test_list_files_do_set_para_o_material_viewer(env):
+    conn, lib_id, _ = env
+    apply_grouping(conn, lib_id)
+    set_id = conn.execute(
+        "SELECT id FROM assets WHERE asset_type = 'pbr_set' AND deleted_at IS NULL"
+    ).fetchone()["id"]
+
+    files = assets_repo.list_files(conn, set_id)
+
+    assert len(files) == 4
+    assert files[0]["is_primary"] == 1  # capa primeiro
+    assert files[0]["map_role"] == "basecolor"
+
+
 def test_rescan_apos_agrupamento_nao_desfaz_nada(env):
     conn, lib_id, root = env
     apply_grouping(conn, lib_id)

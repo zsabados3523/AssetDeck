@@ -74,28 +74,49 @@ def _sanitize_png(data: bytes) -> bytes:
     return b"".join(out)
 
 
+def normalize_mode(img: Image.Image) -> Image.Image:
+    """Modos exóticos → algo que resize/PNG entendem (16-bit vira 8-bit)."""
+    if img.mode in ("I;16", "I;16L", "I;16B", "I;16N", "I", "F"):
+        # Mapas 16-bit/float (displacement, roughness…): o resize do
+        # Pillow não opera nesses modos — reduz para 8-bit ANTES.
+        return img.point(lambda v: v / 256).convert("L") \
+            if img.mode.startswith("I") else img.convert("L")
+    return img
+
+
+def compose_checkerboard(img: Image.Image, square: int = 12) -> Image.Image:
+    """Compõe imagem com alpha sobre xadrez (cutouts — requisito do brief)."""
+    import numpy as np
+
+    ys, xs = np.indices((img.height, img.width))
+    padrao = ((xs // square + ys // square) % 2).astype(np.uint8)
+    fundo = np.where(padrao[..., None] == 1, 204, 255).astype(np.uint8)
+    checker = Image.fromarray(np.repeat(fundo, 3, axis=2), "RGB")
+    return Image.alpha_composite(checker.convert("RGBA"), img.convert("RGBA")).convert("RGB")
+
+
+def save_png_atomic(img: Image.Image, dest: Path) -> None:
+    """Escrita atômica com .tmp ÚNICO por chamada: assets duplicados (mesmo
+    hash em packs diferentes) geram a mesma thumb em paralelo sem se atropelar."""
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dest.parent / f"{dest.stem}.{uuid4().hex}.tmp"
+    try:
+        img.save(tmp, format="PNG")
+        tmp.replace(dest)  # atômico; se dois jobs competirem, o último vence
+    finally:
+        tmp.unlink(missing_ok=True)
+
+
 def make_thumbnail(src: Path, dest: Path, size: int = 256) -> None:
     """Gera a thumbnail PNG de `src` em `dest` (máx. `size` px, proporção mantida).
 
-    Escrita atômica: grava em .tmp e renomeia, para nunca deixar PNG pela
-    metade no cache. Erros sobem para o chamador logar com contexto.
+    Erros sobem para o chamador logar com contexto.
     """
     with open_image(src) as img:
-        if img.mode in ("I;16", "I;16L", "I;16B", "I;16N", "I", "F"):
-            # Mapas 16-bit/float (displacement, roughness…): o resize do
-            # Pillow não opera nesses modos — reduz para 8-bit ANTES.
-            img = img.point(lambda v: v / 256).convert("L") \
-                if img.mode.startswith("I") else img.convert("L")
+        img = normalize_mode(img)
         img.thumbnail((size, size))  # in-place, mantém proporção
-        if img.mode not in ("RGB", "RGBA", "L"):
-            # Paleta, CMYK etc. viram algo que o PNG do cache entende
-            img = img.convert("RGBA" if "A" in img.getbands() else "RGB")
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        # Nome de .tmp ÚNICO por chamada: assets duplicados (mesmo hash em
-        # packs diferentes) geram a mesma thumb em paralelo sem se atropelar.
-        tmp = dest.parent / f"{dest.stem}.{uuid4().hex}.tmp"
-        try:
-            img.save(tmp, format="PNG")
-            tmp.replace(dest)  # atômico; se dois jobs competirem, o último vence
-        finally:
-            tmp.unlink(missing_ok=True)
+        if "A" in img.getbands():
+            img = compose_checkerboard(img)  # cutouts sobre xadrez
+        elif img.mode not in ("RGB", "L"):
+            img = img.convert("RGB")  # paleta, CMYK etc.
+        save_png_atomic(img, dest)

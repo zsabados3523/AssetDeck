@@ -19,20 +19,25 @@ def list_for_grid(
     asset_types: list[str] | None = None,
     dir_prefix: str | None = None,
     include_subdirs: bool = True,
-) -> list[sqlite3.Row]:
+    expand_sets: bool = False,
+) -> list[dict]:
     """Assets para a grid (asset + arquivo principal), com filtros combináveis.
 
     - search: busca por nome via FTS5 (prefixo, sem diferenciar acentos)
     - asset_types: lista de tipos marcados no checklist ([] ou None = todos)
     - dir_prefix: pasta selecionada na árvore ('' ou None = raiz/tudo)
     - include_subdirs: False = só arquivos diretamente na pasta
+    - expand_sets: True = toggle 'agrupar' DESLIGADO — cada mapa de um set
+      PBR vira um card próprio (só visualização; o banco não muda)
     """
-    sql = """SELECT a.id, a.uuid, a.name, a.asset_type, a.notes,
+    join_files = ("JOIN files f ON f.asset_id = a.id" if expand_sets
+                  else "JOIN files f ON f.asset_id = a.id AND f.is_primary = 1")
+    sql = f"""SELECT a.id, a.uuid, a.name, a.asset_type, a.notes,
                     f.rel_path, f.size_bytes, f.content_hash, f.missing_since,
                     (SELECT COUNT(*) FROM files f2
                      WHERE f2.asset_id = a.id AND f2.deleted_at IS NULL) AS files_count
              FROM assets a
-             JOIN files f ON f.asset_id = a.id AND f.is_primary = 1
+             {join_files}
              WHERE a.deleted_at IS NULL AND f.deleted_at IS NULL"""
     params: list = []
 
@@ -55,8 +60,24 @@ def list_for_grid(
     elif not include_subdirs:
         sql += " AND f.rel_path NOT LIKE '%/%'"  # raiz: só arquivos soltos nela
 
-    sql += " ORDER BY a.name COLLATE NOCASE"
-    return conn.execute(sql, params).fetchall()
+    sql += " ORDER BY a.name COLLATE NOCASE, f.rel_path COLLATE NOCASE"
+    rows = [dict(r) for r in conn.execute(sql, params)]
+    if expand_sets:
+        # No modo expandido, cada mapa mostra o próprio nome de arquivo
+        for r in rows:
+            if r["files_count"] > 1:
+                r["name"] = r["rel_path"].rsplit("/", 1)[-1].rsplit(".", 1)[0]
+    return rows
+
+
+def list_files(conn: sqlite3.Connection, asset_id: int) -> list[sqlite3.Row]:
+    """Arquivos de um asset (para o visualizador de mapas do popup)."""
+    return conn.execute(
+        """SELECT rel_path, map_role, is_primary, content_hash
+           FROM files WHERE asset_id = ? AND deleted_at IS NULL
+           ORDER BY is_primary DESC, map_role""",
+        (asset_id,),
+    ).fetchall()
 
 
 def distinct_types(conn: sqlite3.Connection) -> list[str]:

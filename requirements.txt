@@ -2,3 +2,8 @@
 PySide6==6.11.1
 Pillow==12.3.0
 pytest==9.1.1
+# HDR/EXR (Fatia 7): OpenCV lê .hdr; OpenEXR oficial lê .exr.
+# (imageio foi descartado: seu leitor HDR baixa binário em runtime — viola o 100% offline)
+opencv-python-headless==5.0.0.93
+numpy==2.5.1
+OpenEXR==3.4.13
