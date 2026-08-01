@@ -7,12 +7,12 @@ tela dele.
 
 | | |
 |---|---|
-| Testes | 176 verdes (`pytest -q`) |
+| Testes | 180 verdes (`pytest -q`) |
 | Schema | migrations 001–004 aplicadas (ver SCHEMA.md) |
 | Biblioteca de trabalho | testlib: 750 arquivos → 391 assets → **127 visíveis** (dependências ocultas) |
 | Add-on do Blender | v0.4.0, Blender 5.2 Flatpak |
 
-**Próximo passo: F3 — Fatia 19 (Relocalizar assets perdidos).**
+**Próximo passo: F3 — Fatia 20 (Duplicados por perceptual hash).**
 
 ## Como ler este arquivo
 Uma fatia por vez, em branch própria. Cada fatia termina com: pytest verde,
@@ -108,10 +108,18 @@ reindexação) mantém a visão sempre recalculada, sem código extra.
 **Deu certo quando:** salvar "HDRIs com nota ≥ 4" e ela se atualizar sozinha
 ao dar 5 estrelas a um HDRI novo.
 
-### ☐ Fatia 19 — Relocalizar assets perdidos
-`missing_since` e `content_hash` já são gravados pelo scanner; falta a UI e a
-religação em lote. É o `indexer/relocator.py` previsto no PROJECT.md e ainda
-não escrito. Importante antes de apontar para os 650GB do SSD.
+### ☑ Fatia 19 — Relocalizar assets perdidos
+`indexer/relocator.py` escrito: casa arquivos `missing_since` com arquivos
+ativos de mesmo `content_hash` em outro caminho (assets de 1 arquivo só,
+dos dois lados). Menu "Biblioteca → Relocalizar assets perdidos…" mostra os
+pares para o Rafael revisar antes de aplicar — nunca fusão automática
+silenciosa. Aplicar funde o duplicado que a varredura criou de volta no
+asset original (mesmo padrão de `indexer/grouper.py`): uuid, tags, nota e
+favorito sobrevivem; o duplicado leva soft delete.
+**Deu certo quando:** mover um arquivo indexado para outra subpasta,
+reindexar, religar pelo menu e ver o asset original (com a mesma
+tag/nota de antes) apontando pro caminho novo, sem sobrar um asset
+fantasma duplicado na grid.
 
 ### ☐ Fatia 20 — Duplicados por perceptual hash
 Mesma textura em resoluções diferentes (hash de arquivo não pega). Provável
