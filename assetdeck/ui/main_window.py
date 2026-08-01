@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
 
 from assetdeck import __version__
 from assetdeck.db.repos import assets as assets_repo
+from assetdeck.db.repos import tags as tags_repo
 from assetdeck.indexer.scanner import ScanStats
 from assetdeck.thumbs.pipeline import ThumbnailPipeline
 from assetdeck.ui.asset_grid import AssetGridModel, AssetGridView
@@ -31,6 +32,8 @@ from assetdeck.sidecar import writer as sidecar_writer
 from assetdeck.ui.folder_tree import FolderTree
 from assetdeck.ui.preview_popup import PreviewPopup
 from assetdeck.ui.scan_worker import ScanController
+from assetdeck.ui.tag_dialogs import QuickTagDialog
+from assetdeck.ui.tag_tree import TagTree
 from assetdeck.ui.type_filter import TypeFilter
 
 log = logging.getLogger(__name__)
@@ -106,17 +109,28 @@ class MainWindow(QMainWindow):
         self.grid.customContextMenuRequested.connect(self._grid_menu)
 
         self.folders = FolderTree()
-        self.folders.setMinimumWidth(180)
-        self.folders.setMaximumWidth(320)
         self.folders.dir_selected.connect(lambda _d: self._apply_filters())
+
+        self.tags = TagTree()
+        self.tags.tag_selected.connect(lambda _t: self._apply_filters())
+        self.tags.assets_dropped.connect(self._on_assets_dropped)
+        self.tags.structure_changed.connect(self._on_tags_structure_changed)
+
+        left = QSplitter(Qt.Orientation.Vertical)
+        left.addWidget(self.folders)
+        left.addWidget(self.tags)
+        left.setSizes([400, 300])
+        left.setMinimumWidth(180)
+        left.setMaximumWidth(320)
 
         self.details = DetailsPanel(self._library_root)
         self.details.setMinimumWidth(300)
         self.details.setMaximumWidth(380)
         self.details.notes_saved.connect(self._on_notes_saved)
+        self.details.tag_toggled.connect(self._on_tag_toggled)
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
-        splitter.addWidget(self.folders)
+        splitter.addWidget(left)
         splitter.addWidget(self.grid)
         splitter.addWidget(self.details)
         splitter.setStretchFactor(0, 0)
@@ -130,14 +144,21 @@ class MainWindow(QMainWindow):
         layout.addWidget(splitter)
         self.setCentralWidget(central)
 
+        # Ctrl+T = diálogo rápido de tags (forma 3 do brief)
+        from PySide6.QtGui import QKeySequence, QShortcut
+
+        QShortcut(QKeySequence("Ctrl+T"), self, activated=self._quick_tag_dialog)
+        self._tag_clipboard: list[int] | None = None
+
         self.statusBar().showMessage(f"v{__version__} · banco: {db_path}")
         self._reload_all()
 
     # ---- filtros e contagem ----
 
     def _reload_all(self) -> None:
-        """Recarga completa: árvore de pastas, checklist de tipos e grid."""
+        """Recarga completa: pastas, tags, checklist de tipos e grid."""
         self.folders.reload(self._conn)
+        self.tags.reload(self._conn)
         self.type_filter.reload(assets_repo.distinct_types(self._conn))
         self.model.reload()
         self._apply_filters()
@@ -150,8 +171,66 @@ class MainWindow(QMainWindow):
             asset_types=self.type_filter.selected(),
             dir_prefix=dir_prefix,
             include_subdirs=self.subdirs_check.isChecked(),
+            tag_id=self.tags.current_tag_id(),
         )
         self.refresh_count()
+
+    # ---- tags ----
+
+    def _after_tags_changed(self, asset_ids: list[int], mensagem: str) -> None:
+        """Rotina comum pós-mudança de tags: FTS, sidecars e refresh."""
+        assets_repo.rebuild_fts(self._conn)
+        for aid in asset_ids:
+            sidecar_writer.write_for_asset(self._conn, self._library_root, aid)
+        if self.tags.current_tag_id() is not None or self.search_box.text().strip():
+            self._apply_filters()  # o filtro ativo pode ter mudado de resultado
+        self.statusBar().showMessage(mensagem)
+
+    def _on_assets_dropped(self, tag_id: int, asset_ids: list[int]) -> None:
+        for aid in asset_ids:
+            tags_repo.assign(self._conn, aid, tag_id)
+        nome = tags_repo.tag_path(self._conn, tag_id)
+        self._after_tags_changed(
+            asset_ids, f"{len(asset_ids)} asset(s) taggeados com '{nome}' (arrastar)"
+        )
+
+    def _on_tag_toggled(self, asset_id: int, tag_id: int, checked: bool) -> None:
+        if checked:
+            tags_repo.assign(self._conn, asset_id, tag_id)
+        else:
+            tags_repo.unassign(self._conn, asset_id, tag_id)
+        nome = tags_repo.tag_path(self._conn, tag_id)
+        self._after_tags_changed(
+            [asset_id],
+            f"Tag '{nome}' {'adicionada' if checked else 'removida'}",
+        )
+
+    def _on_tags_structure_changed(self) -> None:
+        assets_repo.rebuild_fts(self._conn)
+        self.tags.reload(self._conn)
+        self._apply_filters()
+
+    def _selected_asset_ids(self) -> list[int]:
+        rows = [self.model.row_at(i)
+                for i in self.grid.selectionModel().selectedIndexes()]
+        return sorted({r["id"] for r in rows if r is not None})
+
+    def _quick_tag_dialog(self) -> None:
+        ids = self._selected_asset_ids()
+        if not ids:
+            self.statusBar().showMessage("Selecione asset(s) antes do Ctrl+T.")
+            return
+        dlg = QuickTagDialog(self._conn, ids, self)
+        if dlg.exec():
+            mudancas = dlg.apply()
+            if mudancas:
+                self._after_tags_changed(
+                    ids, f"Tags atualizadas em {len(ids)} asset(s)"
+                )
+                self._refresh_details_tags()
+
+    def _refresh_details_tags(self) -> None:
+        self._on_selection(self.grid.currentIndex(), QModelIndex())
 
     # ---- notas / sidecar ----
 
@@ -194,6 +273,10 @@ class MainWindow(QMainWindow):
         row = self.model.row_at(current)
         if row is not None:
             self.details.show_asset(row, self._thumb_from_disk(row))
+            self.details.load_tags(
+                tags_repo.list_tree(self._conn),
+                {t["id"] for t in tags_repo.tags_of(self._conn, row["id"])},
+            )
 
     def _on_data_changed(self, top_left: QModelIndex, _br, _roles) -> None:
         # Se a thumb que acabou de ficar pronta é a do asset selecionado,
@@ -217,25 +300,50 @@ class MainWindow(QMainWindow):
     def _grid_menu(self, pos) -> None:
         from PySide6.QtWidgets import QMenu
 
-        if not self.group_check.isChecked():
-            return  # agrupar/desagrupar só faz sentido na visão agrupada
-
         selecionados = [
             self.model.row_at(i) for i in self.grid.selectionModel().selectedIndexes()
         ]
         selecionados = [r for r in selecionados if r is not None]
         if not selecionados:
             return
+        ids = sorted({r["id"] for r in selecionados})
         menu = QMenu(self)
-        if len(selecionados) >= 2:
-            act = menu.addAction(f"Agrupar {len(selecionados)} assets como um set")
-            act.triggered.connect(lambda: self._group_selected(selecionados))
-        atual = selecionados[0]
-        if len(selecionados) == 1 and atual["files_count"] > 1:
-            act = menu.addAction(f"Desagrupar ({atual['files_count']} arquivos)")
-            act.triggered.connect(lambda: self._ungroup(atual))
-        if menu.actions():
-            menu.exec(self.grid.mapToGlobal(pos))
+
+        # Tags: copiar/colar/substituir (funciona em qualquer visão)
+        menu.addAction("Editar tags…  (Ctrl+T)", self._quick_tag_dialog)
+        if len(ids) == 1:
+            menu.addAction("Copiar tags", lambda: self._copy_tags(ids[0]))
+        if self._tag_clipboard is not None:
+            n = len(self._tag_clipboard)
+            menu.addAction(f"Colar tags (adicionar {n})",
+                           lambda: self._paste_tags(ids, replace=False))
+            menu.addAction(f"Substituir tags (colar {n} por cima)",
+                           lambda: self._paste_tags(ids, replace=True))
+
+        # Agrupamento: só na visão agrupada
+        if self.group_check.isChecked():
+            menu.addSeparator()
+            if len(selecionados) >= 2:
+                act = menu.addAction(f"Agrupar {len(selecionados)} assets como um set")
+                act.triggered.connect(lambda: self._group_selected(selecionados))
+            atual = selecionados[0]
+            if len(selecionados) == 1 and atual["files_count"] > 1:
+                act = menu.addAction(f"Desagrupar ({atual['files_count']} arquivos)")
+                act.triggered.connect(lambda: self._ungroup(atual))
+        menu.exec(self.grid.mapToGlobal(pos))
+
+    def _copy_tags(self, asset_id: int) -> None:
+        self._tag_clipboard = [t["id"] for t in tags_repo.tags_of(self._conn, asset_id)]
+        self.statusBar().showMessage(f"{len(self._tag_clipboard)} tag(s) copiadas")
+
+    def _paste_tags(self, asset_ids: list[int], replace: bool) -> None:
+        if not self._tag_clipboard:
+            return
+        for aid in asset_ids:
+            tags_repo.set_tags(self._conn, aid, self._tag_clipboard, replace=replace)
+        verbo = "substituídas" if replace else "coladas"
+        self._after_tags_changed(asset_ids, f"Tags {verbo} em {len(asset_ids)} asset(s)")
+        self._refresh_details_tags()
 
     def _group_selected(self, rows) -> None:
         keeper = assets_repo.group_manual(self._conn, [r["id"] for r in rows])

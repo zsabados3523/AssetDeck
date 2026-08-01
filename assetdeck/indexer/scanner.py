@@ -249,6 +249,18 @@ def _process_file(conn, library_id, root, path, known, seen, stats) -> None:
             (campos["uuid"], library_id, campos["name"], asset_type,
              campos["rating"], campos["starred"], campos["notes"]),
         )
+        if side:
+            # Tags do sidecar voltam como caminhos ('Materiais/Madeira')
+            from assetdeck.db.repos import tags as tags_repo
+
+            for caminho in restorable_fields(side).get("tags", []):
+                tid = tags_repo.get_or_create_path(conn, caminho)
+                if tid is not None:
+                    conn.execute(
+                        "INSERT OR IGNORE INTO asset_tags (asset_id, tag_id, source) "
+                        "VALUES (?, ?, 'manual')",
+                        (cur.lastrowid, tid),
+                    )
         conn.execute(
             """INSERT INTO files (asset_id, rel_path, size_bytes, mtime_ns,
                                   content_hash, is_primary)

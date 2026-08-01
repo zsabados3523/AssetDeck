@@ -84,17 +84,6 @@ def normalize_mode(img: Image.Image) -> Image.Image:
     return img
 
 
-def compose_checkerboard(img: Image.Image, square: int = 12) -> Image.Image:
-    """Compõe imagem com alpha sobre xadrez (cutouts — requisito do brief)."""
-    import numpy as np
-
-    ys, xs = np.indices((img.height, img.width))
-    padrao = ((xs // square + ys // square) % 2).astype(np.uint8)
-    fundo = np.where(padrao[..., None] == 1, 204, 255).astype(np.uint8)
-    checker = Image.fromarray(np.repeat(fundo, 3, axis=2), "RGB")
-    return Image.alpha_composite(checker.convert("RGBA"), img.convert("RGBA")).convert("RGB")
-
-
 def save_png_atomic(img: Image.Image, dest: Path) -> None:
     """Escrita atômica com .tmp ÚNICO por chamada: assets duplicados (mesmo
     hash em packs diferentes) geram a mesma thumb em paralelo sem se atropelar."""
@@ -116,7 +105,9 @@ def make_thumbnail(src: Path, dest: Path, size: int = 256) -> None:
         img = normalize_mode(img)
         img.thumbnail((size, size))  # in-place, mantém proporção
         if "A" in img.getbands():
-            img = compose_checkerboard(img)  # cutouts sobre xadrez
+            # Cutouts: transparência REAL — o fundo do app aparece por trás
+            # (feedback do Rafael; o xadrez da v2 foi descartado)
+            img = img.convert("RGBA")
         elif img.mode not in ("RGB", "L"):
             img = img.convert("RGB")  # paleta, CMYK etc.
         save_png_atomic(img, dest)

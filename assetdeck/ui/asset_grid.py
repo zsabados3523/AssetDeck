@@ -10,9 +10,11 @@ import logging
 import sqlite3
 from pathlib import Path
 
-from PySide6.QtCore import QAbstractListModel, QModelIndex, QSize, Qt
+from PySide6.QtCore import QAbstractListModel, QMimeData, QModelIndex, QSize, Qt
 from PySide6.QtGui import QColor, QPainter, QPixmap, QPixmapCache
 from PySide6.QtWidgets import QListView
+
+MIME_ASSETS = "application/x-assetdeck-asset-ids"
 
 from assetdeck.db.repos import assets as assets_repo
 from assetdeck.thumbs.pipeline import ThumbnailPipeline
@@ -49,16 +51,19 @@ class AssetGridModel(QAbstractListModel):
         self._dir_prefix: str | None = None
         self._include_subdirs: bool = True
         self._expand_sets: bool = False  # toggle 'agrupar' desligado (Fatia 7)
+        self._tag_id: int | None = None  # filtro por tag (Fatia 8)
         QPixmapCache.setCacheLimit(128 * 1024)  # 128MB de thumbs em RAM
 
     # ---- dados ----
 
     def set_filters(self, search: str | None = None, asset_types: list[str] | None = None,
-                    dir_prefix: str | None = None, include_subdirs: bool = True) -> None:
+                    dir_prefix: str | None = None, include_subdirs: bool = True,
+                    tag_id: int | None = None) -> None:
         self._search = search or None
         self._asset_types = asset_types or []
         self._dir_prefix = dir_prefix or None
         self._include_subdirs = include_subdirs
+        self._tag_id = tag_id
         self._requery()
 
     def set_expand_sets(self, expand: bool) -> None:
@@ -78,7 +83,7 @@ class AssetGridModel(QAbstractListModel):
         self._rows = assets_repo.list_for_grid(
             self._conn, search=self._search, asset_types=self._asset_types,
             dir_prefix=self._dir_prefix, include_subdirs=self._include_subdirs,
-            expand_sets=self._expand_sets,
+            expand_sets=self._expand_sets, tag_id=self._tag_id,
         )
         self._row_by_asset = {r["id"]: i for i, r in enumerate(self._rows)}
         self.endResetModel()
@@ -117,6 +122,20 @@ class AssetGridModel(QAbstractListModel):
         if role == Qt.ItemDataRole.ToolTipRole:
             return row["rel_path"]
         return None
+
+    def flags(self, index: QModelIndex):
+        base = super().flags(index)
+        return base | Qt.ItemFlag.ItemIsDragEnabled if index.isValid() else base
+
+    def mimeTypes(self) -> list[str]:  # noqa: N802
+        return [MIME_ASSETS]
+
+    def mimeData(self, indexes) -> QMimeData:  # noqa: N802
+        """Arrastar assets → soltar numa tag (forma 1 de taggear)."""
+        ids = sorted({r["id"] for r in (self.row_at(i) for i in indexes) if r})
+        mime = QMimeData()
+        mime.setData(MIME_ASSETS, ",".join(str(i) for i in ids).encode())
+        return mime
 
     # ---- thumbnails ----
 
@@ -183,3 +202,6 @@ class AssetGridView(QListView):
         # 200px por passo, o que fica rápido demais — feedback do Rafael)
         self.setVerticalScrollMode(QListView.ScrollMode.ScrollPerPixel)
         self.verticalScrollBar().setSingleStep(24)  # px por passo da rodinha
+        # Arrastar assets para a árvore de tags (Fatia 8)
+        self.setDragEnabled(True)
+        self.setDragDropMode(QListView.DragDropMode.DragOnly)

@@ -31,7 +31,8 @@ def human_size(n: int) -> str:
 
 
 class DetailsPanel(QWidget):
-    notes_saved = Signal(int, str)  # asset_id, texto da nota
+    notes_saved = Signal(int, str)        # asset_id, texto da nota
+    tag_toggled = Signal(int, int, bool)  # asset_id, tag_id, marcado?
 
     def __init__(self, library_root: Path, parent=None) -> None:
         super().__init__(parent)
@@ -71,6 +72,16 @@ class DetailsPanel(QWidget):
         self.open_file_btn.clicked.connect(self._open_file)
         self._set_buttons(False)
 
+        # Tags com checkbox (forma 2 de taggear): marcar/desmarcar aplica na hora
+        from PySide6.QtWidgets import QTreeWidget
+
+        tags_label = QLabel("Tags:")
+        self.tags_tree = QTreeWidget()
+        self.tags_tree.setHeaderHidden(True)
+        self.tags_tree.setMaximumHeight(150)
+        self.tags_tree.itemChanged.connect(self._on_tag_item_changed)
+        self._loading_tags = False
+
         notes_label = QLabel("Notas:")
         self.notes_edit = QPlainTextEdit()
         self.notes_edit.setPlaceholderText("Anotações suas sobre este asset…")
@@ -86,6 +97,8 @@ class DetailsPanel(QWidget):
         layout.addLayout(form)
         layout.addWidget(self.open_folder_btn)
         layout.addWidget(self.open_file_btn)
+        layout.addWidget(tags_label)
+        layout.addWidget(self.tags_tree)
         layout.addWidget(notes_label)
         layout.addWidget(self.notes_edit)
         layout.addWidget(self.save_notes_btn)
@@ -139,6 +152,39 @@ class DetailsPanel(QWidget):
         except Exception:
             log.exception("Não consegui ler dimensões de %s", path)
             return "—"
+
+    # ---- tags (checkbox interativo) ----
+
+    def load_tags(self, tag_rows: list, checked_ids: set[int]) -> None:
+        """Recebe a árvore de tags e quais estão marcadas para o asset atual."""
+        from PySide6.QtWidgets import QTreeWidgetItem
+
+        self._loading_tags = True
+        self.tags_tree.clear()
+        itens: dict[int, "QTreeWidgetItem"] = {}
+        for r in tag_rows:
+            item = QTreeWidgetItem([r["name"]])
+            item.setData(0, 32, r["id"])
+            item.setCheckState(
+                0, Qt.CheckState.Checked if r["id"] in checked_ids
+                else Qt.CheckState.Unchecked
+            )
+            pai = itens.get(r["parent_id"])
+            if pai is not None:
+                pai.addChild(item)
+            else:
+                self.tags_tree.addTopLevelItem(item)
+            itens[r["id"]] = item
+        self.tags_tree.expandAll()
+        self._loading_tags = False
+
+    def _on_tag_item_changed(self, item, _col) -> None:
+        if self._loading_tags or self._current_asset_id is None:
+            return
+        self.tag_toggled.emit(
+            self._current_asset_id, item.data(0, 32),
+            item.checkState(0) == Qt.CheckState.Checked,
+        )
 
     # ---- notas ----
 
