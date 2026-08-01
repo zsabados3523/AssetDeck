@@ -86,6 +86,17 @@ e `db/repos/tags.py` (hierarquia, soft delete, `descendants`).
 **Deu certo quando:** criar "Projeto Casa X", arrastar 5 assets, clicar nela
 e ver só esses 5; fechar e reabrir mantém tudo.
 
+### ☑ Fatia 17b — Preview agrupado ao arrastar múltiplos assets
+Feedback do Rafael depois de usar a Fatia 17: arrastando vários assets
+espalhados pela grade para uma coleção, o Qt desenhava cada miniatura na
+posição relativa original, ficando com espaçamento esquisito. Trocado por
+um preview compacto tipo "baralho de cartas" (miniaturas empilhadas + selo
+com o total) que acompanha o cursor pelo centro. Só entra em 2+ itens
+selecionados; 1 item continua com o comportamento padrão do Qt.
+**Deu certo quando:** selecionar 3+ assets distantes na grade e arrastar
+até uma coleção mostra um bloco compacto seguindo o mouse, e soltar ainda
+adiciona todos à coleção.
+
 ### ☐ Fatia 18 — Smart Collections
 Tabela `smart_collections` (`query_json`). Salvar o conjunto de filtros
 ativos como coleção dinâmica, recalculada ao abrir. Serializar o mesmo

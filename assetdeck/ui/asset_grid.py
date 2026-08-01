@@ -12,8 +12,8 @@ from pathlib import Path
 
 from PySide6.QtCore import Signal
 
-from PySide6.QtCore import QAbstractListModel, QMimeData, QModelIndex, QSize, Qt
-from PySide6.QtGui import QColor, QPainter, QPixmap, QPixmapCache
+from PySide6.QtCore import QAbstractListModel, QMimeData, QModelIndex, QRect, QSize, Qt
+from PySide6.QtGui import QColor, QDrag, QPainter, QPixmap, QPixmapCache
 from PySide6.QtWidgets import QListView
 
 MIME_ASSETS = "application/x-assetdeck-asset-ids"
@@ -54,6 +54,7 @@ class AssetGridModel(QAbstractListModel):
         self._include_subdirs: bool = True
         self._expand_sets: bool = False  # toggle 'agrupar' desligado (Fatia 7)
         self._tag_id: int | None = None  # filtro por tag (Fatia 8)
+        self._collection_id: int | None = None  # filtro por coleção (Fatia 17)
         self._min_rating: int | None = None       # Fatia 9
         self._starred_only: bool = False
         self._min_resolution: int | None = None
@@ -69,7 +70,8 @@ class AssetGridModel(QAbstractListModel):
                     starred_only: bool = False,
                     min_resolution: int | None = None,
                     include_hidden: bool = False,
-                    include_dependencies: bool = True) -> None:
+                    include_dependencies: bool = True,
+                    collection_id: int | None = None) -> None:
         self._search = search or None
         self._asset_types = asset_types or []
         self._dir_prefix = dir_prefix or None
@@ -80,6 +82,7 @@ class AssetGridModel(QAbstractListModel):
         self._min_resolution = min_resolution
         self._include_hidden = include_hidden
         self._include_dependencies = include_dependencies
+        self._collection_id = collection_id
         self._requery()
 
     def set_expand_sets(self, expand: bool) -> None:
@@ -104,6 +107,7 @@ class AssetGridModel(QAbstractListModel):
             min_resolution=self._min_resolution,
             include_hidden=self._include_hidden,
             include_dependencies=self._include_dependencies,
+            collection_id=self._collection_id,
         )
         self._row_by_asset = {r["id"]: i for i, r in enumerate(self._rows)}
         self.endResetModel()
@@ -238,6 +242,48 @@ class AssetGridModel(QAbstractListModel):
         return pix
 
 
+def _stacked_preview(model: AssetGridModel, rows: list) -> QPixmap:
+    """Preview 'baralho de cartas' para arrastar vários assets: até 3
+    miniaturas empilhadas (a primeira selecionada por cima) + um selo com
+    o total, sempre do mesmo tamanho — não importa a distância entre os
+    itens na grade original."""
+    thumb = 56
+    canvas = QSize(88, 88)
+    pix = QPixmap(canvas)
+    pix.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(pix)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+    visiveis = rows[:3]
+    for i in reversed(range(len(visiveis))):
+        offset = i * 10
+        rect = QRect(offset, offset, thumb, thumb)
+        painter.setBrush(QColor("white"))
+        painter.setPen(QColor("#888888"))
+        painter.drawRoundedRect(rect, 6, 6)
+        thumb_pix = model._pixmap_for(visiveis[i]).scaled(
+            thumb - 6, thumb - 6, Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+        painter.drawPixmap(rect.x() + 3, rect.y() + 3, thumb_pix)
+
+    total = len(rows)
+    if total > len(visiveis):
+        badge = QRect(canvas.width() - 30, canvas.height() - 20, 30, 20)
+        painter.setBrush(QColor("#2b6cb0"))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawRoundedRect(badge, 9, 9)
+        painter.setPen(QColor("white"))
+        font = painter.font()
+        font.setPointSize(9)
+        font.setBold(True)
+        painter.setFont(font)
+        painter.drawText(badge, Qt.AlignmentFlag.AlignCenter, f"+{total}")
+
+    painter.end()
+    return pix
+
+
 class AssetGridView(QListView):
     # Imagem externa solta sobre um card → vira preview do asset (Fatia 10)
     image_dropped = Signal(int, str)  # asset_id, caminho local da imagem
@@ -270,6 +316,34 @@ class AssetGridView(QListView):
         self.setDragEnabled(True)
         self.setDragDropMode(QListView.DragDropMode.DragDrop)
         self.setDefaultDropAction(Qt.DropAction.CopyAction)
+
+    # ---- arrasto para fora (Tag, Collection, Blender, gerenciador de arquivos) ----
+
+    def startDrag(self, supportedActions) -> None:  # noqa: N802
+        """Padrão do Qt: cada item mantém a posição relativa que tinha na
+        grade, o que fica esquisito quando os itens selecionados estão
+        longe uns dos outros. Com 2+ itens, desenha um preview compacto
+        ('baralho' + contador) que acompanha o cursor pelo centro —
+        pedido do Rafael depois de usar as coleções (Fatia 17b). Com 1
+        item só, o padrão do Qt já fica bom — não mexe.
+        """
+        indexes = self.selectedIndexes()
+        if len(indexes) < 2:
+            super().startDrag(supportedActions)
+            return
+
+        model = self.model()
+        mime = model.mimeData(indexes)
+        if mime is None:
+            return
+
+        rows = [r for r in (model.row_at(i) for i in indexes) if r is not None]
+        drag = QDrag(self)
+        drag.setMimeData(mime)
+        pixmap = _stacked_preview(model, rows)
+        drag.setPixmap(pixmap)
+        drag.setHotSpot(pixmap.rect().center())
+        drag.exec(supportedActions, Qt.DropAction.CopyAction)
 
     # ---- receber imagem externa como preview ----
 
