@@ -46,6 +46,13 @@ def test_janela_abre_com_todos_os_paineis(janela):
         assert getattr(janela, atributo) is not None
 
 
+def test_painel_de_detalhes_tem_sinais_de_propriedades(janela):
+    assert hasattr(janela.details, "property_value_changed")
+    assert hasattr(janela.details, "manage_properties_requested")
+    assert hasattr(janela, "_on_property_value_changed")
+    assert hasattr(janela, "_manage_properties")
+
+
 def test_smart_collection_salva_e_aplica_filtros(janela):
     """Ciclo completo pela janela real: marcar filtros, salvar, mudar os
     filtros para outra coisa e aplicar a coleção inteligente salva."""

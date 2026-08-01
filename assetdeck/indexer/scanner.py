@@ -286,6 +286,19 @@ def _process_file(conn, library_id, root, path, known, seen, stats) -> None:
                         "VALUES (?, ?, 'manual')",
                         (cur.lastrowid, tid),
                     )
+            # Custom properties do sidecar (Fatia 22) — tipo inferido do
+            # valor JSON; datas voltam como texto (simplificação aceitável).
+            from assetdeck.db.repos import properties as properties_repo
+
+            for nome, valor in restorable_fields(side).get("custom", {}).items():
+                if isinstance(valor, bool):
+                    tipo = "bool"
+                elif isinstance(valor, (int, float)):
+                    tipo = "number"
+                else:
+                    tipo = "text"
+                pid = properties_repo.create_def(conn, nome, tipo)
+                properties_repo.set_value(conn, cur.lastrowid, pid, valor)
         w, h, alpha, depth, phash = image_meta(path)
         conn.execute(
             """INSERT INTO files (asset_id, rel_path, size_bytes, mtime_ns,
