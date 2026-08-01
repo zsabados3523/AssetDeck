@@ -19,8 +19,9 @@ DEFAULT_PORT = 45017
 CMD_PING = "ping"
 CMD_LIST_ASSETS = "list_assets"
 CMD_GET_ASSET = "get_asset"
+CMD_ASSET_BY_PATH = "asset_by_path"  # arquivo solto no Blender → asset dele
 
-KNOWN_COMMANDS = {CMD_PING, CMD_LIST_ASSETS, CMD_GET_ASSET}
+KNOWN_COMMANDS = {CMD_PING, CMD_LIST_ASSETS, CMD_GET_ASSET, CMD_ASSET_BY_PATH}
 
 MAX_MESSAGE_BYTES = 256 * 1024  # trava contra mensagem malformada infinita
 

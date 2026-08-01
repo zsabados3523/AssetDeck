@@ -43,12 +43,13 @@ def test_todas_as_tabelas_do_schema_v1_existem(conn):
     assert not faltando, f"Tabelas ausentes do schema v1: {faltando}"
 
 
-def test_versao_final_e_3(conn):
-    assert current_version(conn) == 3  # 001 inicial + 002 group_locked + 003 hidden
+def test_versao_final_e_4(conn):
+    # 001 inicial + 002 group_locked + 003 hidden + 004 is_dependency
+    assert current_version(conn) == 4
 
 
 def test_reaplicar_migrations_e_noop(conn):
-    assert apply_migrations(conn) == 3  # não explode nem duplica
+    assert apply_migrations(conn) == 4  # não explode nem duplica
 
 
 def test_migration_002_group_locked_default_zero(conn):

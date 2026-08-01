@@ -54,11 +54,20 @@ class ScanWorker(QObject):
                     should_stop=self._stop.is_set,
                 )
                 if not stats.aborted:
-                    # Agrupamento PBR roda depois da varredura, na mesma thread
+                    # Pós-processamento, tudo nesta thread (a UI não trava):
+                    # agrupar sets PBR → marcar dependências → capas de pack
+                    from assetdeck import config
+                    from assetdeck.indexer.dependencies import (
+                        attach_pack_previews,
+                        detect,
+                    )
                     from assetdeck.indexer.grouper import apply_grouping
 
                     gstats = apply_grouping(conn, library_id)
                     stats.grouped_sets = gstats.sets_created
+                    detect(conn, library_id)
+                    attach_pack_previews(conn, library_id, self._library_root,
+                                         config.previews_dir())
                 self.finished.emit(stats)
             finally:
                 conn.close()

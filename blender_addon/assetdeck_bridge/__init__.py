@@ -25,7 +25,7 @@ from bpy.props import (  # noqa: E402
 )
 from bpy.types import Operator, Panel, PropertyGroup  # noqa: E402
 
-from . import client, materials, thumbs  # noqa: E402
+from . import client, drops, materials, thumbs  # noqa: E402
 
 
 # ---- dados na cena ----
@@ -261,9 +261,11 @@ def register():
     for cls in CLASSES:
         bpy.utils.register_class(cls)
     bpy.types.Scene.assetdeck = bpy.props.PointerProperty(type=AssetDeckState)
+    drops.register()  # arrastar do AssetDeck para a viewport
 
 
 def unregister():
+    drops.unregister()
     del bpy.types.Scene.assetdeck
     for cls in reversed(CLASSES):
         bpy.utils.unregister_class(cls)

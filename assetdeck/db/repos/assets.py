@@ -25,6 +25,7 @@ def list_for_grid(
     starred_only: bool = False,
     min_resolution: int | None = None,
     include_hidden: bool = False,
+    include_dependencies: bool = True,
 ) -> list[dict]:
     """Assets para a grid (asset + arquivo principal), com filtros combináveis.
 
@@ -44,7 +45,7 @@ def list_for_grid(
                     " AND p.is_cover = 1 AND p.deleted_at IS NULL LIMIT 1)"
                     " AS cover_path")
     sql = f"""SELECT a.id, a.uuid, a.name, a.asset_type, a.notes,
-                    a.rating, a.starred, a.hidden,
+                    a.rating, a.starred, a.hidden, a.is_dependency,
                     f.rel_path, f.size_bytes, f.content_hash, f.missing_since,
                     f.width, f.height,
                     {cover_select},
@@ -57,6 +58,8 @@ def list_for_grid(
 
     if not include_hidden:
         sql += " AND a.hidden = 0"
+    if not include_dependencies:
+        sql += " AND a.is_dependency = 0"
 
     match = _fts_query(search)
     if match:

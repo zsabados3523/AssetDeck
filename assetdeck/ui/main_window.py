@@ -99,6 +99,16 @@ class MainWindow(QMainWindow):
             self.res_combo.addItem(label, px)
         self.res_combo.currentIndexChanged.connect(lambda _i: self._apply_filters())
 
+        # Sugestão do Rafael: texturas que acompanham um .blend/.fbx são
+        # dependências dele — poluem a grade e o Blender. Ocultas por padrão.
+        self.deps_check = QCheckBox("Mostrar dependências")
+        self.deps_check.setToolTip(
+            "Texturas que acompanham um .blend/.fbx irmão (mapas de um material\n"
+            "convertido, texturas de um modelo). Desmarcado, você vê só o .blend."
+        )
+        self.deps_check.setChecked(False)
+        self.deps_check.toggled.connect(lambda _c: self._apply_filters())
+
         self.hidden_check = QCheckBox("Mostrar ocultos")
         self.hidden_check.setToolTip(
             "Inclui imagens ocultadas por terem virado preview de um modelo"
@@ -120,6 +130,7 @@ class MainWindow(QMainWindow):
         top.addWidget(self.res_combo)
         top.addWidget(self.subdirs_check)
         top.addWidget(self.group_check)
+        top.addWidget(self.deps_check)
         top.addWidget(self.hidden_check)
         top.addWidget(self.count_label)
         top.addWidget(self.progress)
@@ -215,6 +226,7 @@ class MainWindow(QMainWindow):
             starred_only=self.fav_check.isChecked(),
             min_resolution=self.res_combo.currentData(),
             include_hidden=self.hidden_check.isChecked(),
+            include_dependencies=self.deps_check.isChecked(),
         )
         self.refresh_count()
 
