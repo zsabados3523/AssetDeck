@@ -20,8 +20,10 @@ CMD_PING = "ping"
 CMD_LIST_ASSETS = "list_assets"
 CMD_GET_ASSET = "get_asset"
 CMD_ASSET_BY_PATH = "asset_by_path"  # arquivo solto no Blender → asset dele
+CMD_RESCAN = "rescan"                # reindexar (após salvar algo novo)
 
-KNOWN_COMMANDS = {CMD_PING, CMD_LIST_ASSETS, CMD_GET_ASSET, CMD_ASSET_BY_PATH}
+KNOWN_COMMANDS = {CMD_PING, CMD_LIST_ASSETS, CMD_GET_ASSET, CMD_ASSET_BY_PATH,
+                  CMD_RESCAN}
 
 MAX_MESSAGE_BYTES = 256 * 1024  # trava contra mensagem malformada infinita
 

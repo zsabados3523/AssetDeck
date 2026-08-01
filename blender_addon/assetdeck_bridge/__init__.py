@@ -7,7 +7,7 @@ Não acessa a internet: só 127.0.0.1, com token.
 bl_info = {
     "name": "AssetDeck Bridge",
     "author": "AssetDeck",
-    "version": (0, 3, 0),
+    "version": (0, 4, 0),
     "blender": (4, 2, 0),
     "location": "View3D > Sidebar (N) > AssetDeck",
     "description": "Navegue a biblioteca do AssetDeck e aplique materiais PBR.",
@@ -25,7 +25,7 @@ from bpy.props import (  # noqa: E402
 )
 from bpy.types import Operator, Panel, PropertyGroup  # noqa: E402
 
-from . import client, drops, importer, materials, thumbs  # noqa: E402
+from . import client, drops, exporter, importer, materials, thumbs  # noqa: E402
 
 
 # ---- dados na cena ----
@@ -245,6 +245,9 @@ class ASSETDECK_PT_panel(Panel):
         layout.operator("assetdeck.apply_material", icon="MATERIAL")
 
         layout.separator()
+        layout.operator("assetdeck.save_to_library", icon="EXPORT")
+
+        layout.separator()
         layout.label(text=estado.status, icon="INFO")
         layout.operator("assetdeck.ping", icon="PLUGIN")
 
@@ -263,9 +266,11 @@ def register():
     bpy.types.Scene.assetdeck = bpy.props.PointerProperty(type=AssetDeckState)
     drops.register()     # HDRI / textura soltos na viewport
     importer.register()  # .blend solto → menu Append/Link (& Place)
+    exporter.register()  # salvar seleção de volta na biblioteca
 
 
 def unregister():
+    exporter.unregister()
     importer.unregister()
     drops.unregister()
     del bpy.types.Scene.assetdeck

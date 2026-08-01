@@ -28,6 +28,8 @@ def handle(conn: sqlite3.Connection, library_root: Path, request: dict,
             return _list_assets(conn, library_root, request, thumbs_dir)
         if cmd == proto.CMD_ASSET_BY_PATH:
             return _asset_by_path(conn, library_root, request, thumbs_dir)
+        if cmd == proto.CMD_RESCAN:
+            return proto.ok(scheduled=True)  # o servidor dispara a varredura
         return _get_asset(conn, library_root, request, thumbs_dir)
     except Exception as exc:
         log.exception("Falha ao tratar comando %r", cmd)
