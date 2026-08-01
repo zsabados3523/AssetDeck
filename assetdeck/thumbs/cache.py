@@ -14,7 +14,8 @@ THUMB_SIZE = 256
 # Versão do FORMATO da thumbnail. Subir este número invalida o cache inteiro
 # de uma vez (as antigas ficam órfãs e as novas são geradas em background).
 # v2: cutouts sobre xadrez + HDR/EXR tonemapados (Fatia 7).
-THUMB_VERSION = 2
+# v3: cutouts com transparência REAL, sem xadrez (feedback do Rafael, Fatia 8).
+THUMB_VERSION = 3
 
 
 def thumb_path(thumbs_dir: Path, content_hash: str, size: int = THUMB_SIZE) -> Path:

@@ -1,10 +1,10 @@
 # TODO.md — Roadmap e estado atual
 
 ## Estado atual (2026-07-31)
-- **F0 (MVP) completo**: Fatias 1–4 concluídas e validadas pelo Rafael.
-  750 assets, grid com thumbs, busca FTS, árvore de pastas, 49 testes.
-- **Em andamento: Fatia 5 — sidecars JSON + notas** (inclui filtro de tipos
-  em checklist multi-seleção, sugestão do Rafael).
+- Fatias 1–7 concluídas e validadas pelo Rafael. 391 assets (127 sets PBR),
+  thumbs com tonemap HDR, toggle de agrupamento, material viewer, 80 testes.
+- **Em andamento: Fatia 8 — tags** (inclui trocar o xadrez dos cutouts por
+  transparência real, feedback do Rafael).
 
 ## Como ler este arquivo
 Uma fatia por vez, em branch própria. Cada fatia termina com: pytest verde,
@@ -41,7 +41,7 @@ Busca por nome via FTS5, toggle "mostrar subpastas", filtro por tipo.
 
 ## F1 — Vira útil
 
-### ☐ Fatia 5 — Sidecars JSON + notas
+### ☑ Fatia 5 — Sidecars JSON + notas (concluída 2026-07-31)
 Writer/reader do `.assetdeck.json` + primeiro metadado editável (notas),
 validando o ciclo db → json → (rescan) → db. Inclui filtro de tipos em
 **checklist multi-seleção** (sugestão do Rafael: "só modelos", "modelos +
@@ -49,14 +49,14 @@ texturas" etc.).
 **Deu certo quando:** editar a nota cria o .json ao lado do asset; apagar o
 .db e reindexar recupera a nota do sidecar; dá para marcar 2+ tipos no filtro.
 
-### ☐ Fatia 6 — Agrupamento PBR
+### ☑ Fatia 6 — Agrupamento PBR (concluída 2026-07-31; + preview ampliado por duplo clique e migration 002 group_locked)
 Heurística por sufixo (_basecolor/_albedo/_diff, _rough/_gloss, _nrm/_normal,
 _disp/_height, _ao, _metal, _spec), resolução no nome, padrões ambientCG/
 Poliigon/Textures.com. Capa = basecolor. **Correção manual obrigatória**
 (juntar/separar arquivos de um asset na mão).
 **Deu certo quando:** um set de 6 mapas da testlib aparece como 1 card.
 
-### ☐ Fatia 7 — Thumbs especiais
+### ☑ Fatia 7 — Thumbs especiais (concluída 2026-07-31; + fit da grid, toggle de agrupamento e PBR material viewer)
 EXR/HDR via imageio+numpy com tonemap (gamma 2.2/Reinhard); PNG com alpha
 sobre fundo xadrez.
 **Deu certo quando:** HDRIs da testlib deixam de ser quadrados pretos;

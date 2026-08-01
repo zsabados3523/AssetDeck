@@ -43,18 +43,18 @@ def test_imagem_menor_que_a_thumb_nao_e_ampliada(tmp_path):
         assert (t.width, t.height) == (100, 80)
 
 
-def test_png_com_alpha_ganha_fundo_xadrez(tmp_path):
-    """Cutout: alpha composto sobre xadrez (Fatia 7 — requisito do brief)."""
+def test_png_com_alpha_mantem_transparencia_real(tmp_path):
+    """Cutout: transparência REAL na thumb — o fundo do app aparece por trás
+    (Fatia 8, feedback do Rafael; o xadrez da v2 foi descartado)."""
     src = tmp_path / "cutout.png"
-    Image.new("RGBA", (400, 400), (0, 128, 0, 0)).save(src)  # 100% transparente
+    Image.new("RGBA", (400, 400), (0, 128, 0, 100)).save(src)
     dest = tmp_path / "thumb.png"
 
     make_thumbnail(src, dest)
 
     with Image.open(dest) as t:
-        assert t.mode == "RGB"  # achatado sobre o fundo
-        cores = {t.getpixel((3, 3)), t.getpixel((15, 3))}
-        assert cores == {(255, 255, 255), (204, 204, 204)}  # os 2 tons do xadrez
+        assert t.mode == "RGBA"
+        assert t.getpixel((5, 5))[3] == 100  # canal alpha intacto
 
 
 def test_modo_exotico_e_convertido(tmp_path):

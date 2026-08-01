@@ -49,4 +49,9 @@ def restorable_fields(data: dict) -> dict:
     notes = data.get("notes")
     if isinstance(notes, str) and notes:
         out["notes"] = notes
+    tags = data.get("tags")
+    if isinstance(tags, list):
+        caminhos = [t.strip() for t in tags if isinstance(t, str) and t.strip()]
+        if caminhos:
+            out["tags"] = caminhos  # caminhos 'Materiais/Madeira'
     return out

@@ -20,6 +20,7 @@ def list_for_grid(
     dir_prefix: str | None = None,
     include_subdirs: bool = True,
     expand_sets: bool = False,
+    tag_id: int | None = None,
 ) -> list[dict]:
     """Assets para a grid (asset + arquivo principal), com filtros combináveis.
 
@@ -48,6 +49,14 @@ def list_for_grid(
     if asset_types:
         sql += f" AND a.asset_type IN ({','.join('?' * len(asset_types))})"
         params.extend(asset_types)
+    if tag_id is not None:
+        # Filtrar por 'Madeira' inclui assets taggeados nas subtags
+        from assetdeck.db.repos import tags as tags_repo
+
+        alvo = tags_repo.descendants(conn, tag_id)
+        sql += (f" AND a.id IN (SELECT asset_id FROM asset_tags"
+                f" WHERE tag_id IN ({','.join('?' * len(alvo))}))")
+        params.extend(alvo)
 
     if dir_prefix:
         if include_subdirs:
@@ -117,13 +126,11 @@ def get_bundle(conn: sqlite3.Connection, asset_id: int) -> dict | None:
     ).fetchall()
     if not files:
         return None
+    from assetdeck.db.repos import tags as tags_repo
+
     tags = [
-        r["name"]
-        for r in conn.execute(
-            """SELECT t.name FROM asset_tags at JOIN tags t ON t.id = at.tag_id
-               WHERE at.asset_id = ? AND t.deleted_at IS NULL""",
-            (asset_id,),
-        )
+        tags_repo.tag_path(conn, r["id"])  # caminho completo: sobrevive ao desastre
+        for r in tags_repo.tags_of(conn, asset_id)
     ]
     return {
         "uuid": a["uuid"], "name": a["name"], "asset_type": a["asset_type"],
@@ -234,14 +241,43 @@ def uuid_exists(conn: sqlite3.Connection, uuid: str) -> bool:
 def rebuild_fts(conn: sqlite3.Connection) -> None:
     """Reconstrói o índice de busca a partir dos assets ativos.
 
-    É só índice (reconstruível a qualquer momento, como diz o SCHEMA.md);
-    com centenas/milhares de linhas isso custa milissegundos.
+    A coluna `tags` recebe, por asset: nomes das tags dele + ALIASES dessas
+    tags + nomes/aliases dos ANCESTRAIS ("madeira" acha o pack taggeado
+    "Wood/Oak" via alias PT no pai). É só índice — reconstruível sempre.
     """
+    info = {r["id"]: (r["name"], r["parent_id"]) for r in conn.execute(
+        "SELECT id, name, parent_id FROM tags WHERE deleted_at IS NULL"
+    )}
+    apelidos: dict[int, list[str]] = {}
+    for r in conn.execute("SELECT tag_id, alias FROM tag_aliases"):
+        apelidos.setdefault(r["tag_id"], []).append(r["alias"])
+
+    memo: dict[int, str] = {}
+
+    def texto_da_tag(tid: int) -> str:
+        if tid in memo:
+            return memo[tid]
+        partes: list[str] = []
+        atual: int | None = tid
+        while atual is not None and atual in info:
+            nome, pai = info[atual]
+            partes.append(nome)
+            partes.extend(apelidos.get(atual, []))
+            atual = pai
+        memo[tid] = " ".join(partes)
+        return memo[tid]
+
+    por_asset: dict[int, list[str]] = {}
+    for r in conn.execute("SELECT asset_id, tag_id FROM asset_tags"):
+        if r["tag_id"] in info:
+            por_asset.setdefault(r["asset_id"], []).append(texto_da_tag(r["tag_id"]))
+
     conn.execute("INSERT INTO assets_fts(assets_fts) VALUES('delete-all')")
-    conn.execute(
-        "INSERT INTO assets_fts(rowid, name, tags) "
-        "SELECT id, name, '' FROM assets WHERE deleted_at IS NULL"
-    )
+    for row in conn.execute("SELECT id, name FROM assets WHERE deleted_at IS NULL"):
+        conn.execute(
+            "INSERT INTO assets_fts(rowid, name, tags) VALUES (?, ?, ?)",
+            (row["id"], row["name"], " ".join(por_asset.get(row["id"], []))),
+        )
     conn.commit()
 
 
