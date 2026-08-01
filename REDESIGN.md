@@ -1,26 +1,36 @@
 # REDESIGN.md — plano do redesign visual (F4)
 
 Estado em 2026-08-01. A **Fatia 24 está pronta e commitada** (tema, vitrine,
-38 testes). Este arquivo é o plano das fatias 25 a 30, escrito para ser
+27 testes). Este arquivo é o plano das fatias 25 a 30, escrito para ser
 executado numa sessão futura sem precisar redescobrir nada.
 
 ## Direção definida pelo Rafael (final)
 
-Depois de duas rodadas de correção vendo na tela:
+Depois de três rodadas de correção vendo na tela:
 
 - **Fundo branco puro.** Painel e fundo são o mesmo branco; o que separa é uma
   linha de contorno quase invisível mais uma sombra de opacidade baixa.
-- **Monocromático.** Botões, seleção, foco e estados: só cinza. Cor sobrou em
-  dois lugares onde ela CARREGA informação — a cor da tag e o tipo do asset.
+- **Monocromático de verdade.** Botões, seleção, foco, estados **e o card sem
+  miniatura**: tudo em cinza (`theme.ACCENT`, `#4A4A52` — mais claro que a
+  primeira tentativa, `#2E2E33`, achada escura demais). Cor não sobrou em
+  lugar nenhum da UI de sistema; a cor da tag (dado do usuário) segue como
+  está hoje, sem mudança.
 - **Uma fonte só** (Inter), com variação apenas de peso (400/600) e de
   tamanho. Títulos mais escuros que o corpo — a hierarquia vem daí, não de cor.
-- **Tints por tipo com contraste alto** (fundo médio-escuro, texto branco).
+- **Cantos menos arredondados**: 8px no card/controle (`RADII["discreto"]` foi
+  de `(14, 12, 9)` para `(10, 8, 6)`; `"marcante"` de `(20, 18, 13)` para
+  `(16, 12, 9)`).
+- **Reconhecimento do tipo de asset por TEXTO, não por cor** — um chip
+  pequeno no canto do card com a extensão (`.fbx`, `.exr`, `.blend`, `.png`),
+  estilo Connecter. Ver Fatia 27.
 - **Organização inspirada no Connecter Suite** (só o arranjo, não o estilo).
 
 O que morreu no caminho, e por quê: fundo lavanda (pesado), "vidro fosco"
 (não há o que filtrar entre dois brancos — e o blur do Qt borra o conteúdo do
 próprio widget, não o fundo), seleção em barra sólida colorida (dominava a
-tela), tints pastel de baixo contraste (o tipo sumia).
+tela), tints pastel de baixo contraste (o tipo sumia), tints saturados por
+tipo (o Rafael pediu para tirar a cor também daqui — ver abaixo), e **ícone
+por tag** (Fatia 29 antiga — descartado, a tag continua só por cor).
 
 ## Estado da base (Fatia 24, já no repositório)
 
@@ -103,9 +113,19 @@ Contrato que **não** muda: `sizeHint()` devolve exatamente `CELL` (176×200);
 Muda: `DisplayRole` passa a devolver só o nome — o `"★ "` e o `"[oculto] "`
 (`asset_grid.py:147-149`) viram papéis novos desenhados como badge (bônus: a
 busca-por-digitação do `QListView` volta a funcionar). O delegate pinta card
-arredondado, miniatura, nome elidido em 2 linhas e badges; seleção em cinza,
-sem retângulo pontilhado de foco. Card sem miniatura usa `theme.TYPE_TINTS` +
-o glifo do tipo (Fatia 26). Tudo pré-computado no `__init__`.
+arredondado (8px, `theme.RADII["discreto"][1]`), miniatura, nome elidido em 2
+linhas e badges; seleção em cinza, sem retângulo pontilhado de foco. Card sem
+miniatura usa a pastilha única `theme.TYPE_TINT` (não há mais cor por tipo).
+
+**Chip de extensão (pedido do Rafael, estilo Connecter):** todo card — com ou
+sem miniatura — ganha um selo pequeno num canto (`theme.TYPE_TINT` a 55% de
+opacidade, texto branco, ~9px) com a extensão real do arquivo em maiúsculas:
+`.FBX`, `.EXR`, `.BLEND`, `.PNG`. É o reconhecimento do tipo por TEXTO,
+substituindo o que a cor fazia antes. Fonte do texto: `Path(row["path"]).suffix`
+— já existe no repo, não precisa de coluna nova. Protótipo do chip está em
+`theme_gallery.py::_build_palette_sample` (amostra "CARD SEM MINIATURA + CHIP
+DE EXTENSÃO"), copiar o padrão de posicionamento de lá para o delegate. Tudo
+pré-computado no `__init__` do delegate.
 
 Bug a corrigir junto: a chave do `QPixmapCache` em `_pixmap_for` é
 `f"thumb:{key_hash}"` **sem o tamanho** — mudar o tamanho do ícone serve
@@ -146,24 +166,11 @@ status) e 28b (detalhes para a faixa inferior). O 28b é o que mais mexe em
 
 ---
 
-## Fatia 29 — Tags com ícone ⚠️ MEXE NO BANCO
+## ~~Fatia 29 — Tags com ícone~~ — descartada
 
-**Precisa da autorização do Rafael antes de começar** (regra do `CLAUDE.md`).
-
-**Migration 006:** `ALTER TABLE tags ADD COLUMN icon TEXT` (nulo = usa a cor,
-como hoje — nada quebra e nada precisa ser migrado). Atualizar `SCHEMA.md`.
-
-`ui/tag_dialogs.py` ganha um seletor de ícone ao lado do seletor de cor;
-`ui/tag_tree.py` desenha o ícone quando existir, senão o quadradinho de cor de
-hoje (`tag_tree.py:61-62`). O sidecar já espelha tags — conferir se o campo
-novo acompanha, senão o ícone se perde ao apagar o banco.
-
-Para o seletor valer a pena são precisos ~24 ícones genéricos (madeira, tijolo,
-metal, tecido, planta, pedra, vidro, água, luz…). É aqui que vendorizar um
-conjunto pronto compensa mais do que desenhar à mão.
-
-**Se ficar caro, não faça:** o Rafael disse explicitamente "somente se possível
-e se não for muito trabalho à toa, senão deixa cor mesmo".
+Decisão do Rafael: a tag continua identificada só por cor, como hoje
+(`ui/tag_tree.py:61-62`). Sem ícone, sem seletor novo, sem migration — a única
+fatia deste plano que não vai acontecer.
 
 ---
 
