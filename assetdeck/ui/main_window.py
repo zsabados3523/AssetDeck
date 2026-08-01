@@ -27,6 +27,7 @@ from assetdeck.db.repos import collections as collections_repo
 from assetdeck.db.repos import previews as previews_repo
 from assetdeck.db.repos import smart_collections as smart_collections_repo
 from assetdeck.db.repos import tags as tags_repo
+from assetdeck.indexer import duplicates as duplicates_finder
 from assetdeck.indexer import relocator
 from assetdeck.indexer.scanner import ScanStats
 from assetdeck.thumbs.pipeline import ThumbnailPipeline
@@ -34,6 +35,7 @@ from assetdeck.ui.asset_grid import AssetGridModel, AssetGridView
 from assetdeck.ui.collection_tree import CollectionTree
 from assetdeck.ui.details_panel import DetailsPanel
 from assetdeck.sidecar import writer as sidecar_writer
+from assetdeck.ui.duplicates_dialog import DuplicatesDialog
 from assetdeck.ui.folder_tree import FolderTree
 from assetdeck.ui.preview_popup import PreviewPopup
 from assetdeck.ui.relocate_dialog import RelocateDialog
@@ -357,6 +359,9 @@ class MainWindow(QMainWindow):
         self.relocate_action = menu.addAction(
             "Relocalizar assets perdidos…", self._relocate_lost_assets
         )
+        self.duplicates_action = menu.addAction(
+            "Duplicados por conteúdo visual…", self._find_duplicates
+        )
 
     def _relocate_lost_assets(self) -> None:
         from PySide6.QtWidgets import QMessageBox
@@ -387,6 +392,37 @@ class MainWindow(QMainWindow):
 
         self._reload_all()
         self.statusBar().showMessage(f"{religados} asset(s) religados ao novo caminho")
+
+    # ---- duplicados por conteúdo visual (Fatia 20) ----
+
+    def _find_duplicates(self) -> None:
+        from PySide6.QtWidgets import QMessageBox
+
+        from assetdeck.db.repos import libraries as libraries_repo
+
+        lib_id = libraries_repo.get_or_create(self._conn, self._library_root)
+        grupos = duplicates_finder.find_duplicate_groups(self._conn, lib_id)
+        if not grupos:
+            QMessageBox.information(
+                self, "Nada encontrado",
+                "Nenhum grupo de assets com o mesmo conteúdo visual (phash) "
+                "foi encontrado.",
+            )
+            return
+
+        dlg = DuplicatesDialog(grupos, self)
+        if not dlg.exec():
+            return
+
+        ids = dlg.selected_asset_ids()
+        for aid in ids:
+            assets_repo.set_hidden(self._conn, aid, True)
+
+        self._reload_grid()
+        self.statusBar().showMessage(
+            f"{len(ids)} asset(s) duplicado(s) ocultado(s) da grade "
+            "('Mostrar ocultos' traz de volta)"
+        )
 
     # ---- coleções inteligentes / buscas salvas (Fatia 18) ----
 
