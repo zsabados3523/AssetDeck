@@ -101,10 +101,29 @@ def test_contraste_do_texto_sobre_o_painel(translucency):
     assert theme.contrast_ratio(theme.ACCENT, superficie) >= 4.5
 
 
+@pytest.mark.parametrize("translucency", list(theme.SURFACE_ALPHA))
+def test_contraste_do_texto_selecionado(translucency):
+    """A seleção é pastilha clara com o texto na cor do destaque.
+
+    É o padrão que substituiu a barra sólida de petróleo, então o contraste do
+    texto sobre a pastilha precisa ser tão garantido quanto o do texto normal.
+    """
+    variant = theme.Variant(translucency=translucency)
+    pastilha = theme.blend((*theme.hex_to_rgb(theme.ACCENT), 0.14),
+                           theme.surface_solid(variant))
+    assert theme.contrast_ratio(theme.ACCENT, pastilha) >= 4.5
+
+
 def test_contraste_do_texto_sobre_o_destaque_e_sobre_o_popup():
     assert theme.contrast_ratio(theme.ON_ACCENT, theme.ACCENT) >= 4.5
     assert theme.contrast_ratio(theme.TEXT, theme.POPOVER) >= 4.5
     assert theme.contrast_ratio(theme.TEXT, theme.BG) >= 4.5
+
+
+@pytest.mark.parametrize("tipo,tint", sorted(theme.TYPE_TINTS.items()))
+def test_contraste_do_rotulo_sobre_a_pastilha_do_tipo(tipo, tint):
+    """O nome do tipo escrito no card sem miniatura (LUT, IES...)."""
+    assert theme.contrast_ratio(theme.ON_TYPE_TINT, tint) >= 4.5
 
 
 # ---------------------------------------------------------- fundo (grão) --

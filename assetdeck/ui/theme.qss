@@ -37,7 +37,8 @@ QWidget#appSurface {
 
 /* --------------------------------------------------------------- cards -- */
 
-/* O "vidro fosco": preenchimento translúcido + fio de luz na borda.
+/* O cartão branco sobre o fundo cinza-claro, no estilo do Craft: o que separa
+ * do fundo é a sombra e a diferença de tom, não uma borda desenhada.
  * Toda view (árvore, lista, grade) mora DENTRO de um destes, porque o
  * viewport de uma view pinta retângulo no canto e vaza por cima de qualquer
  * border-radius aplicado nela diretamente. */
@@ -124,10 +125,14 @@ QPushButton:hover, QToolButton:hover {
     border: 1px solid $hairline;
 }
 
+/* Ativo/pressionado é pastilha clara com o texto na cor — sem contorno
+ * colorido, que é o que deixa a barra do Craft leve. */
 QPushButton:pressed, QToolButton:pressed,
 QPushButton:checked, QToolButton:checked {
     background-color: $accent_soft;
-    border: 1px solid $accent;
+    border: 1px solid transparent;
+    color: $accent;
+    font-weight: 600;
 }
 
 QPushButton:disabled, QToolButton:disabled {
@@ -234,8 +239,8 @@ QComboBox QAbstractItemView {
     border-radius: $radius_control;
     padding: $pad_s;
     color: $text;
-    selection-background-color: $accent;
-    selection-color: $on_accent;
+    selection-background-color: $accent_soft;
+    selection-color: $accent;
     outline: none;
 }
 
@@ -248,8 +253,8 @@ QTreeView, QTreeWidget, QListView, QListWidget, QTableView, QTableWidget {
     border: none;
     color: $text;
     outline: none;
-    selection-background-color: $accent;
-    selection-color: $on_accent;
+    selection-background-color: $accent_soft;
+    selection-color: $accent;
 }
 
 QTreeView::item, QListWidget::item, QTableView::item {
@@ -260,9 +265,12 @@ QTreeView::item:hover, QListWidget::item:hover, QTableView::item:hover {
     background-color: $surface_hover;
 }
 
+/* Seleção em pastilha CLARA com o texto na cor, como os botões ativos do
+ * painel direito do Craft. A barra sólida de petróleo que estava aqui antes
+ * dominava a tela inteira — foi o que o Rafael reprovou. */
 QTreeView::item:selected, QListWidget::item:selected, QTableView::item:selected {
-    background-color: $accent;
-    color: $on_accent;
+    background-color: $accent_soft;
+    color: $accent;
 }
 
 /* Seleção arredondada só onde NÃO há coluna de indicador (as listas).
@@ -314,8 +322,8 @@ QMenu::item {
 }
 
 QMenu::item:selected {
-    background-color: $accent;
-    color: $on_accent;
+    background-color: $accent_soft;
+    color: $accent;
 }
 
 QMenu::item:disabled {

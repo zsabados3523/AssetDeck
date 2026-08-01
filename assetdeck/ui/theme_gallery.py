@@ -43,7 +43,7 @@ log = logging.getLogger(__name__)
 # (rótulo na tela, valor do Variant) para cada eixo de escolha
 OPCOES = {
     "background": [("Liso", "liso"), ("Com grão de papel", "grao")],
-    "translucency": [("Sutil", "sutil"), ("Média", "media"), ("Forte", "forte")],
+    "translucency": [("Suave", "sutil"), ("Médio", "media"), ("Branco sólido", "forte")],
     "radius": [("Discretos (12px)", "discreto"), ("Marcantes (18px)", "marcante")],
     "font": [("Inter", "inter"), ("Padrão do sistema", "sistema")],
 }
@@ -92,7 +92,7 @@ class ThemeGallery(QWidget):
         linha.setContentsMargins(0, 0, 0, 0)
         linha.setSpacing(10)
 
-        for campo, rotulo in (("background", "Fundo"), ("translucency", "Translucidez"),
+        for campo, rotulo in (("background", "Fundo"), ("translucency", "Painéis"),
                               ("radius", "Cantos"), ("font", "Fonte")):
             etiqueta = QLabel(rotulo)
             etiqueta.setObjectName("sectionTitle")
@@ -257,7 +257,7 @@ class ThemeGallery(QWidget):
             # theme.py": aqui a cor É o conteúdo sendo demonstrado, e ela vem
             # do próprio theme.TYPE_TINTS.
             amostra.setStyleSheet(
-                f"background-color: {cor}; color: white;"
+                f"background-color: {cor}; color: {theme.ON_TYPE_TINT};"
                 f" border-radius: 8px; font-size: 11px;"
             )
             grade.addWidget(amostra, i // 3, i % 3)

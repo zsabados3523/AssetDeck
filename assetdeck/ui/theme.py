@@ -11,10 +11,11 @@ Fatos do Qt que moldaram este módulo (verificados na máquina, não presumidos)
 * A `QPalette` padrão vem do tema do Zorin quando o app roda no X11, mas do
   Fusion quando roda headless. Sem `app.setPalette(build_palette())` o app fica
   diferente em cada máquina e o teste headless não vale para a tela real.
-* `background-color: rgba(...)` compõe de verdade sobre o pai já pintado — é
-  assim que o efeito "vidro fosco" é simulado. Blur real não existe aqui:
-  `QGraphicsBlurEffect` borra o conteúdo do próprio widget (as miniaturas!), e
-  o Mutter (compositor do Zorin) não implementa blur atrás da janela.
+* `background-color: rgba(...)` compõe de verdade sobre o pai já pintado. Blur
+  real não existe aqui de qualquer jeito: `QGraphicsBlurEffect` borra o
+  conteúdo do próprio widget (as miniaturas!), e o Mutter (compositor do Zorin)
+  não implementa blur atrás da janela. O visual não depende disso — segue a
+  referência do Craft: cartão branco sobre cinza claro, separado por sombra.
 * `url()` no QSS exige caminho ABSOLUTO. Caminho com espaço funciona — o que
   importa, porque o projeto mora em "/00 - PROJETOS/".
 """
@@ -37,49 +38,58 @@ QSS_FILE = Path(__file__).parent / "theme.qss"
 # Paleta base
 # --------------------------------------------------------------------------
 # Escolhas do Rafael (F4): tema claro lavanda, destaque azul-petróleo, fundo
-# liso. O lavanda entra DESSATURADO (quase um cinza-lavanda) de propósito: os
-# dois são cores frias, e um lavanda saturado apagaria o petróleo.
+# liso. A primeira tentativa usou fundo lavanda e ele reprovou na tela: ficou
+# pesado. Direção corrigida, olhando a referência do Craft de novo — o fundo lá
+# NÃO tem cor: é cinza bem claro, e o que dá a sensação de acabamento é o
+# cartão BRANCO flutuando sobre ele, com sombra suave e nenhum contorno duro.
+# A cor aparece só em detalhe pequeno (seleção, foco, um botão principal).
 
-BG = "#EDEBF3"          # fundo da janela
-BG_TINT = "#E4E1EE"     # variação do fundo (trilho de barra de rolagem, sulcos)
+BG = "#F2F2F4"          # fundo da janela: cinza claríssimo, sem cor
+BG_TINT = "#E7E7EB"     # variação do fundo (trilho de barra de rolagem, cabeçalho)
 
-ACCENT = "#1B6B78"      # azul-petróleo: seleção, foco, botão principal
+ACCENT = "#1B6B78"      # azul-petróleo, usado com parcimônia
 ACCENT_HOVER = "#217F8E"
 ACCENT_PRESS = "#145560"
 ON_ACCENT = "#FFFFFF"
 
-TEXT = "#23252E"
-TEXT_MUTED = "#5D5F73"
-TEXT_DISABLED = "#9A9BAC"
+TEXT = "#1F2024"
+TEXT_MUTED = "#6B6C74"
+TEXT_DISABLED = "#A9AAB2"
 
-WARNING = "#8F5C12"     # substitui o "#b07d2b" que estava inline no details_panel
+WARNING = "#8A5A12"     # substitui o "#b07d2b" que estava inline no details_panel
 DANGER = "#A32D2D"
 
-POPOVER = "#F7F6FB"     # menus e popups são JANELAS separadas: nada de translúcido
-BORDER = (45, 40, 80, 0.14)      # borda discreta, na cor do fundo
-BORDER_STRONG = (45, 40, 80, 0.42)  # contorno de controle (caixa de checkbox)
-HAIRLINE = (255, 255, 255, 0.72)  # "fio de luz": é isto que o olho lê como vidro
+POPOVER = "#FFFFFF"     # menus e popups são JANELAS separadas: sempre opacos
+BORDER = (0, 0, 0, 0.09)         # contorno quase invisível; a sombra é que separa
+BORDER_STRONG = (0, 0, 0, 0.28)  # contorno de controle (caixa de checkbox)
+HAIRLINE = (0, 0, 0, 0.06)       # fio do cartão — cinza levíssimo, não branco
 
-# Tints por tipo de asset. Vieram de `asset_grid.TYPE_COLORS`, que era saturado
-# demais para esta paleta; aqui ficam suaves o bastante para não brigar com as
-# miniaturas reais ao lado. Consumidos pelo delegate da grade (Fatia 27).
+# Tints por tipo de asset — o fundo do card quando o asset não tem miniatura.
+# Vieram de `asset_grid.TYPE_COLORS`, que eram cores chapadas e saturadas com
+# texto branco por cima. Aqui são pastilhas claras com texto escuro: numa grade
+# de centenas de cards, o que não tem miniatura precisa recuar, não competir com
+# as texturas reais ao lado. Consumidos pelo delegate da grade (Fatia 27).
 TYPE_TINTS = {
-    "texture": "#8F93A8",
-    "hdri": "#6E85AD",
-    "model": "#7E8DA0",
-    "material": "#8A87A6",
-    "image": "#94909F",
-    "video": "#9A8399",
-    "lut": "#6F9C97",
-    "ies": "#A2986A",
-    "vector": "#7F9B84",
-    "psd": "#8894A6",
-    "audio": "#97909E",
-    "other": "#94949E",
+    "texture": "#D8DCE6",
+    "hdri": "#CFDCEF",
+    "model": "#D6DDE4",
+    "material": "#DCD9E7",
+    "image": "#E0DCE2",
+    "video": "#E7D8E2",
+    "lut": "#CFE4DF",
+    "ies": "#E8E0C6",
+    "vector": "#D5E4D6",
+    "psd": "#D6DEE9",
+    "audio": "#E2DAE6",
+    "other": "#DEDEE3",
 }
+ON_TYPE_TINT = "#3A3A42"  # texto sobre as pastilhas acima
 
-# Variações que o Rafael escolhe na tela (vitrine da Fatia 24)
-SURFACE_ALPHA = {"sutil": 0.45, "media": 0.62, "forte": 0.80}
+# Variações que o Rafael escolhe na tela (vitrine da Fatia 24).
+# Com fundo cinza-claro e cartão branco não há "vidro fosco" nenhum a simular —
+# não existe nada atrás para filtrar. O que este número regula agora é o quanto
+# o painel é branco puro contra o fundo.
+SURFACE_ALPHA = {"sutil": 0.55, "media": 0.85, "forte": 1.0}
 RADII = {  # (painel, card, controle)
     "discreto": (14, 12, 9),
     "marcante": (20, 18, 13),
@@ -362,15 +372,15 @@ def apply_card_shadow(widget) -> None:
     from PySide6.QtWidgets import QGraphicsDropShadowEffect
 
     efeito = QGraphicsDropShadowEffect(widget)
-    efeito.setBlurRadius(26)
+    efeito.setBlurRadius(18)
     efeito.setXOffset(0)
-    efeito.setYOffset(5)
-    efeito.setColor(QColor(38, 32, 70, 46))
+    efeito.setYOffset(2)
+    efeito.setColor(QColor(0, 0, 0, 28))  # cinza neutro e discreto, sem cor
     widget.setGraphicsEffect(efeito)
 
 
 def make_card(inner, *, titulo: str | None = None, sombra: bool = True):
-    """Envolve um widget num card translúcido de cantos arredondados.
+    """Envolve um widget num cartão branco de cantos arredondados.
 
     Este embrulho não é enfeite, é obrigatório para views: o viewport de um
     `QTreeWidget`/`QListView` pinta um retângulo no canto e vaza por cima de
