@@ -187,6 +187,8 @@ class MainWindow(QMainWindow):
         QShortcut(QKeySequence("Ctrl+T"), self, activated=self._quick_tag_dialog)
         self._tag_clipboard: list[int] | None = None
 
+        self._setup_bridge()  # ponte com o Blender (F2)
+
         self.statusBar().showMessage(f"v{__version__} · banco: {db_path}")
         self._reload_all()
 
@@ -453,6 +455,79 @@ class MainWindow(QMainWindow):
                 f"Set desfeito em {n} assets (travados: o agrupador não refaz)"
             )
 
+    # ---- ponte com o Blender (F2) ----
+
+    def _setup_bridge(self) -> None:
+        from assetdeck import config
+        from assetdeck.bridge.server import BridgeServer
+
+        self.bridge_status = QLabel()
+        self.statusBar().addPermanentWidget(self.bridge_status)
+
+        cfg = config.load_config()
+        self._bridge = None
+        if not cfg.get("bridge_enabled", True):
+            self.bridge_status.setText("Blender: ponte desligada")
+            return
+
+        token = config.ensure_bridge_token(cfg)
+        porta = int(cfg.get("bridge_port", 45017))
+        self._bridge = BridgeServer(self._conn, self._library_root, token, parent=self)
+        if self._bridge.start(porta):
+            self.bridge_status.setText(f"Blender: ouvindo :{self._bridge.port}")
+        else:
+            self.bridge_status.setText("Blender: porta ocupada (ver log)")
+        self._bridge.client_connected.connect(
+            lambda: self.bridge_status.setText("Blender: conectado ✓")
+        )
+        self._bridge.client_disconnected.connect(
+            lambda: self.bridge_status.setText(f"Blender: ouvindo :{self._bridge.port}")
+        )
+
+        menu = self.menuBar().addMenu("Blender")
+        menu.addAction("Instalar / atualizar add-on…", self._install_addon)
+        menu.addAction("Como usar", self._bridge_help)
+
+    def _install_addon(self) -> None:
+        from PySide6.QtWidgets import QMessageBox
+
+        from assetdeck import config
+        from assetdeck.bridge import installer
+
+        cfg = config.load_config()
+        try:
+            destinos = installer.install(
+                config.ensure_bridge_token(cfg), int(cfg.get("bridge_port", 45017))
+            )
+        except (RuntimeError, OSError) as exc:
+            log.exception("Instalação do add-on falhou")
+            QMessageBox.warning(self, "Não consegui instalar o add-on", str(exc))
+            return
+
+        onde = "\n".join(str(d) for d in destinos)
+        QMessageBox.information(
+            self, "Add-on instalado",
+            "Add-on copiado para:\n\n" + onde +
+            "\n\nAgora, no Blender:\n"
+            "1. Edit → Preferences → Add-ons\n"
+            "2. Busque por 'AssetDeck' e marque a caixinha\n"
+            "3. Na viewport 3D, aperte N e escolha a aba 'AssetDeck'\n\n"
+            "Se o Blender já estava aberto, reinicie-o.",
+        )
+
+    def _bridge_help(self) -> None:
+        from PySide6.QtWidgets import QMessageBox
+
+        porta = self._bridge.port if self._bridge and self._bridge.listening else "—"
+        QMessageBox.information(
+            self, "Ponte com o Blender",
+            f"O AssetDeck escuta em 127.0.0.1:{porta} (apenas nesta máquina, "
+            "com token — nada sai do seu computador).\n\n"
+            "No Blender: aperte N na viewport 3D → aba 'AssetDeck' → "
+            "'Conectar / Atualizar'.\n\n"
+            "O AssetDeck precisa estar ABERTO para o add-on funcionar.",
+        )
+
     # ---- previews customizados (Fatia 10) ----
 
     def _on_image_dropped(self, asset_id: int, path: str) -> None:
@@ -596,4 +671,6 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event) -> None:  # noqa: N802 (nome vem do Qt)
         self._scan.shutdown()
         self._pipeline.shutdown()
+        if getattr(self, "_bridge", None) is not None:
+            self._bridge.stop()
         super().closeEvent(event)
