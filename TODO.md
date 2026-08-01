@@ -7,12 +7,12 @@ tela dele.
 
 | | |
 |---|---|
-| Testes | 195 verdes (`pytest -q`) |
+| Testes | 204 verdes (`pytest -q`) |
 | Schema | migrations 001–005 aplicadas (ver SCHEMA.md) |
 | Biblioteca de trabalho | testlib: 750 arquivos → 391 assets → **127 visíveis** (dependências ocultas) |
 | Add-on do Blender | v0.4.0, Blender 5.2 Flatpak |
 
-**Próximo passo: F3 — Fatia 22 (Custom properties na UI).**
+**Próximo passo: F3 — Fatia 19b (bug do "fantasma" no arrasto) ou Fatia 23 (Batch rename).**
 
 ## Como ler este arquivo
 Uma fatia por vez, em branch própria. Cada fatia termina com: pytest verde,
@@ -173,9 +173,21 @@ mas descartei: quebra a insensibilidade a acento e termos curtos como
 espaço no nome; "concreto E rustico" / "OU" / "NÃO" filtram como esperado;
 buscas antigas (prefixo, "4k", sem acento) continuam iguais.
 
-### ☐ Fatia 22 — Custom properties na UI
-EAV tipado (`property_defs` / `property_values`) existe desde o v1, sem UI.
-Campos que o Rafael inventa depois (Fornecedor, Licença…).
+### ☑ Fatia 22 — Custom properties na UI
+Sem migration — `property_defs`/`property_values` já existem desde o v1.
+Painel de detalhes ganhou a seção "Propriedades:" (`db/repos/properties.py`
++ `ui/property_defs_dialog.py` pra criar/renomear/excluir a definição, tipo
+text/number/bool/date). Fechei também um buraco que já estava documentado:
+`assets_repo.get_bundle` tinha `"custom": {}` sempre vazio com o comentário
+"EAV na UI chega no F3" — agora popula de verdade, e
+`sidecar/reader.py`/`indexer/scanner.py` restauram `custom` do sidecar
+(mesmo padrão que já existia pra tags), então propriedades sobrevivem a
+apagar o banco. Cuidado com o schema: `property_defs.name` tem `UNIQUE`
+incondicional (não só entre ativas) — `create_def` revive uma definição
+soft-deleted em vez de tentar inserir de novo.
+**Deu certo quando:** criar "Fornecedor" (texto), preencher num asset,
+trocar de asset e voltar (valor ficou só naquele), apagar o banco e
+reindexar (propriedade e valor voltam via sidecar).
 
 ### ☐ Fatia 23 — Batch rename
 **Por último de propósito:** é a única exceção ao somente-leitura. Exige

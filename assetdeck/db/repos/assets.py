@@ -229,11 +229,13 @@ def get_bundle(conn: sqlite3.Connection, asset_id: int) -> dict | None:
         tags_repo.tag_path(conn, r["id"])  # caminho completo: sobrevive ao desastre
         for r in tags_repo.tags_of(conn, asset_id)
     ]
+    from assetdeck.db.repos import properties as properties_repo
+
     return {
         "uuid": a["uuid"], "name": a["name"], "asset_type": a["asset_type"],
         "rating": a["rating"], "starred": a["starred"], "notes": a["notes"],
         "tags": tags,
-        "custom": {},  # EAV na UI chega no F3; a estrutura já viaja no sidecar
+        "custom": properties_repo.values_by_name(conn, asset_id),  # Fatia 22
         "files": [f["rel_path"].rsplit("/", 1)[-1] for f in files],
         "primary_rel_path": files[0]["rel_path"],
     }
