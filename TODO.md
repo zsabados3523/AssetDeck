@@ -1,99 +1,129 @@
 # TODO.md — Roadmap e estado atual
 
-## Estado atual (2026-07-31)
-- Fatias 1–9 concluídas e validadas pelo Rafael. Ratings, favoritos,
-  filtros combinados, edição em massa, 96 testes.
-- **Em andamento: Fatia 10 — previews customizados** (fecha o F1).
+## Estado atual (2026-08-01)
+
+**F0, F1 e F2 completos.** 16 fatias entregues e validadas pelo Rafael na
+tela dele.
+
+| | |
+|---|---|
+| Testes | 163 verdes (`pytest -q`) |
+| Schema | migrations 001–004 aplicadas (ver SCHEMA.md) |
+| Biblioteca de trabalho | testlib: 750 arquivos → 391 assets → **127 visíveis** (dependências ocultas) |
+| Add-on do Blender | v0.4.0, Blender 5.2 Flatpak |
+
+**Próximo passo: F3 — Fatia 17 (Collections manuais).**
 
 ## Como ler este arquivo
 Uma fatia por vez, em branch própria. Cada fatia termina com: pytest verde,
-critério de "deu certo" verificado pelo Rafael na tela, e commit.
+critério de "deu certo" verificado pelo Rafael na tela, e commit. O merge na
+`main` só acontece depois que ele confirma que rodou.
 
 ---
 
-## F0 — MVP
+## F0 — MVP ✅
 
-### ☑ Fatia 1 — Esqueleto vivo (concluída 2026-07-31)
-Pacote `assetdeck`, config XDG, logging, **schema v1 COMPLETO como
-migration 001**, backup rotativo do .db, janela abrindo, `--screenshot`,
-testes de migração.
-**Deu certo quando:** `python -m assetdeck` abre uma janela "AssetDeck —
-0 assets"; `pytest -q` verde; existe um backup do .db em
-`~/.local/share/assetdeck/backups/`.
+- **☑ Fatia 1 — Esqueleto vivo.** Pacote, config XDG, logging, schema v1
+  completo como migration 001, backup rotativo do .db, janela, `--screenshot`.
+- **☑ Fatia 2 — Indexação em background.** Scanner em thread, idempotente;
+  arquivo sumido ganha `missing_since` (nunca é apagado).
+- **☑ Fatia 3 — Grid de thumbnails.** Cache em disco por content_hash,
+  painel de detalhes, abrir pasta / app padrão. Resgate de PNGs com chunk
+  iCCP corrompido e suporte a mapas 16-bit.
+- **☑ Fatia 4 — Busca e filtros.** FTS5 (prefixo, sem acentos), árvore de
+  pastas, toggle de subpastas, filtro por tipo, **rolagem suave**.
 
-### ☑ Fatia 2 — Indexação em background (concluída 2026-07-31)
-Scanner em thread varre a testlib e grava `files`/`assets` (1 arquivo =
-1 asset por enquanto; agrupamento PBR vem na Fatia 6). Barra de progresso.
-**Deu certo quando:** a janela mostra a contagem subindo até ~753 sem
-congelar; fechar e reabrir mantém os dados.
+## F1 — Vira útil ✅
 
-### ☑ Fatia 3 — Grid de thumbnails (concluída 2026-07-31)
-Thumbs de jpg/png/tif em grid virtualizada, cache em disco, painel de
-detalhes (resolução, tamanho, formato, caminho), abrir pasta / abrir com app
-padrão.
-**Deu certo quando:** rolar a grid é fluido; segunda abertura é instantânea
-(cache); clicar num asset mostra os detalhes; "abrir pasta" funciona.
+- **☑ Fatia 5 — Sidecars JSON + notas.** Espelho `.assetdeck.json` ao lado do
+  asset; apagar o banco e reindexar recupera os metadados. Filtro de tipos em
+  checklist multi-seleção.
+- **☑ Fatia 6 — Agrupamento PBR.** 127 sets criados na testlib; correção
+  manual (agrupar/desagrupar) travada contra o agrupador — **migration 002**
+  (`group_locked`). Preview ampliado por duplo clique.
+- **☑ Fatia 7 — Thumbs especiais.** HDR/EXR tonemapados (Reinhard + gamma),
+  fit correto da grid, toggle "Agrupar sets PBR", PBR Material Viewer.
+- **☑ Fatia 8 — Tags.** Hierarquia N níveis, cor, aliases PT/EN ("madeira"
+  acha "wood"), 3 formas de taggear, copiar/colar/substituir. Cutouts com
+  transparência real.
+- **☑ Fatia 9 — Ratings, favoritos, filtros combinados.** Edição em massa:
+  tag/nota/favorito valem para todos os assets selecionados.
+- **☑ Fatia 10 — Previews customizados.** Arrastar imagem externa define a
+  capa; galeria 1:N com capa e soft delete.
+- **☑ Fatia 10b — Preview interno.** Arrastar um asset de imagem sobre um
+  modelo vira a capa dele, com diálogo "ocultar a origem?" e memória da
+  escolha — **migration 003** (`hidden`), reversível via "Mostrar ocultos".
 
-### ☑ Fatia 4 — Busca e filtros básicos (concluída 2026-07-31; rolagem suave incluída) *(fechou o F0)*
-Busca por nome via FTS5, toggle "mostrar subpastas", filtro por tipo.
-**Deu certo quando:** digitar filtra em tempo real com milhares de itens.
+## F2 — Blender ✅
 
-## F1 — Vira útil
+- **☑ Fatia 11 — Ponte + add-on.** Socket só em 127.0.0.1 com token,
+  QTcpServer assíncrono, add-on instalado pelo próprio AssetDeck.
+- **☑ Fatia 12 — Material PBR + previews no add-on.** Node group fechado com
+  colorspaces corretos, AO no mix, displacement; miniaturas dentro do Blender.
+- **☑ Fatia 13 — AssetDeck vira a origem do arrasto.** Arrastar da grid para
+  o Blender aciona o menu nativo dele. Detecção de **dependências**
+  (texturas que acompanham um .blend irmão) — **migration 004**
+  (`is_dependency`) — e capas automáticas de `*_Preview1.png` dos packs.
+- **☑ Fatia 14 — Import estilo Connecter.** Append/Link por tipo com
+  "& Place". Correções: rolagem da grade e capa no modo expandido.
+- **☑ Fatia 15 — Submenus + rolagem (de vez).** Causa real: layout em lotes
+  descobria o tamanho da lista tarde demais → trocado para SinglePass.
+- **☑ Fatia 16 — Capas por render + salvar na biblioteca.** Render headless
+  com enquadramento automático e **relocalização de texturas** (packs
+  Maxtree vêm com caminhos quebrados); salvar seleção da cena de volta, com
+  rescan automático.
 
-### ☑ Fatia 5 — Sidecars JSON + notas (concluída 2026-07-31)
-Writer/reader do `.assetdeck.json` + primeiro metadado editável (notas),
-validando o ciclo db → json → (rescan) → db. Inclui filtro de tipos em
-**checklist multi-seleção** (sugestão do Rafael: "só modelos", "modelos +
-texturas" etc.).
-**Deu certo quando:** editar a nota cria o .json ao lado do asset; apagar o
-.db e reindexar recupera a nota do sidecar; dá para marcar 2+ tipos no filtro.
+---
 
-### ☑ Fatia 6 — Agrupamento PBR (concluída 2026-07-31; + preview ampliado por duplo clique e migration 002 group_locked)
-Heurística por sufixo (_basecolor/_albedo/_diff, _rough/_gloss, _nrm/_normal,
-_disp/_height, _ao, _metal, _spec), resolução no nome, padrões ambientCG/
-Poliigon/Textures.com. Capa = basecolor. **Correção manual obrigatória**
-(juntar/separar arquivos de um asset na mão).
-**Deu certo quando:** um set de 6 mapas da testlib aparece como 1 card.
+## F3 — Power user (a fazer)
 
-### ☑ Fatia 7 — Thumbs especiais (concluída 2026-07-31; + fit da grid, toggle de agrupamento e PBR material viewer)
-EXR/HDR via imageio+numpy com tonemap (gamma 2.2/Reinhard); PNG com alpha
-sobre fundo xadrez.
-**Deu certo quando:** HDRIs da testlib deixam de ser quadrados pretos;
-cutouts mostram o xadrez.
+### ☐ Fatia 17 — Collections manuais  ← **COMEÇAR AQUI**
+As tabelas `collections` e `collection_items` existem desde o schema v1 e
+nunca ganharam UI. Painel lateral (junto de pastas e tags), criar / renomear /
+excluir, arrastar assets para dentro, subpastas de coleção, ordem manual.
+**Reusar:** `ui/tag_tree.py` (o drag-and-drop com `MIME_ASSETS` já funciona)
+e `db/repos/tags.py` (hierarquia, soft delete, `descendants`).
+**Deu certo quando:** criar "Projeto Casa X", arrastar 5 assets, clicar nela
+e ver só esses 5; fechar e reabrir mantém tudo.
 
-### ☑ Fatia 8 — Tags (concluída 2026-07-31; + transparência real nos cutouts)
-Hierarquia N níveis, cor/ícone/ordem, aliases PT/EN, as 3 formas de taggear
-(arrastar, checkbox interativo, diálogo Ctrl+T), copiar/colar/substituir tags.
-**Deu certo quando:** buscar "madeira" acha asset taggeado "wood".
+### ☐ Fatia 18 — Smart Collections
+Tabela `smart_collections` (`query_json`). Salvar o conjunto de filtros
+ativos como coleção dinâmica, recalculada ao abrir. Serializar o mesmo
+dicionário que `assets_repo.list_for_grid` já aceita.
+**Deu certo quando:** salvar "HDRIs com nota ≥ 4" e ela se atualizar sozinha
+ao dar 5 estrelas a um HDRI novo.
 
-### ☑ Fatia 9 — Ratings, favoritos e filtros combinados (concluída 2026-07-31; + edição em massa nos selecionados)
+### ☐ Fatia 19 — Relocalizar assets perdidos
+`missing_since` e `content_hash` já são gravados pelo scanner; falta a UI e a
+religação em lote. É o `indexer/relocator.py` previsto no PROJECT.md e ainda
+não escrito. Importante antes de apontar para os 650GB do SSD.
 
-### ☐ Fatia 10 — Previews customizados *(fecha o F1)*
-Drag-and-drop de imagem sobre o card define preview; galeria 1:N com capa.
+### ☐ Fatia 20 — Duplicados por perceptual hash
+Mesma textura em resoluções diferentes (hash de arquivo não pega). Provável
+migration 005 para guardar o phash.
 
-## F2 — Blender (fatias 11–15)
-Socket localhost + add-on para **Blender 5.2 Flatpak** · arrastar set PBR →
-node group montado · arrastar HDRI → World · import .fbx/.obj/.blend
-(link e append) · salvar seleção da cena de volta → biblioteca · thumbs de
-modelo via render headless (`flatpak run org.blender.Blender -b -P`).
-**Risco a verificar antes:** permissões do sandbox Flatpak
-(`flatpak info --show-permissions org.blender.Blender`).
+### ☐ Fatia 21 — Busca booleana + substring
+Operadores E/OU/NÃO. Inclui a limitação encontrada na Fatia 12: hoje
+"quartzite" NÃO acha "StoneQuartziteTile", porque o FTS5 casa por início de
+palavra.
 
-## F3 — Power user
-Galeria múltipla por asset · auto-assign de previews por padrão de nome em
-lote · Smart Collections · custom properties na UI · duplicados por
-perceptual hash · batch rename (com confirmação explícita — única exceção ao
-somente-leitura) · relocalizar assets perdidos · busca booleana · tag aliases
-na UI.
+### ☐ Fatia 22 — Custom properties na UI
+EAV tipado (`property_defs` / `property_values`) existe desde o v1, sem UI.
+Campos que o Rafael inventa depois (Fornecedor, Licença…).
+
+### ☐ Fatia 23 — Batch rename
+**Por último de propósito:** é a única exceção ao somente-leitura. Exige
+pré-visualização e confirmação explícita antes de tocar em qualquer arquivo.
 
 ## F4 — Opcional
 Auto-tagging local via Ollama (Qwen2.5-VL 7B) · checagem seamless/tileable ·
 render de previews em lote com cena de estúdio configurável · busca por cor
-dominante · texturas faltando de um .blend · múltiplas bibliotecas na UI.
+dominante · listar texturas faltando de um .blend · múltiplas bibliotecas na UI.
 
 ---
 
 ## Pendências fora do código
-- ☐ Rafael rodar: `sudo apt remove -y blender` (remove o 4.0.2 redundante).
+- ☐ Rafael rodar: `sudo apt remove -y blender` (remove o 4.0.2 redundante;
+  o projeto usa o 5.2 do Flatpak).
 - ☐ Quando o app estiver maduro: cadastrar a biblioteca real do SSD como
-  segunda library.
+  segunda library (o caminho é configuração, nunca hardcoded).
