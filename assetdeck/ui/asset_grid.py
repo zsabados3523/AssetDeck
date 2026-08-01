@@ -52,18 +52,26 @@ class AssetGridModel(QAbstractListModel):
         self._include_subdirs: bool = True
         self._expand_sets: bool = False  # toggle 'agrupar' desligado (Fatia 7)
         self._tag_id: int | None = None  # filtro por tag (Fatia 8)
+        self._min_rating: int | None = None       # Fatia 9
+        self._starred_only: bool = False
+        self._min_resolution: int | None = None
         QPixmapCache.setCacheLimit(128 * 1024)  # 128MB de thumbs em RAM
 
     # ---- dados ----
 
     def set_filters(self, search: str | None = None, asset_types: list[str] | None = None,
                     dir_prefix: str | None = None, include_subdirs: bool = True,
-                    tag_id: int | None = None) -> None:
+                    tag_id: int | None = None, min_rating: int | None = None,
+                    starred_only: bool = False,
+                    min_resolution: int | None = None) -> None:
         self._search = search or None
         self._asset_types = asset_types or []
         self._dir_prefix = dir_prefix or None
         self._include_subdirs = include_subdirs
         self._tag_id = tag_id
+        self._min_rating = min_rating
+        self._starred_only = starred_only
+        self._min_resolution = min_resolution
         self._requery()
 
     def set_expand_sets(self, expand: bool) -> None:
@@ -84,6 +92,8 @@ class AssetGridModel(QAbstractListModel):
             self._conn, search=self._search, asset_types=self._asset_types,
             dir_prefix=self._dir_prefix, include_subdirs=self._include_subdirs,
             expand_sets=self._expand_sets, tag_id=self._tag_id,
+            min_rating=self._min_rating, starred_only=self._starred_only,
+            min_resolution=self._min_resolution,
         )
         self._row_by_asset = {r["id"]: i for i, r in enumerate(self._rows)}
         self.endResetModel()
@@ -116,7 +126,7 @@ class AssetGridModel(QAbstractListModel):
         if row is None:
             return None
         if role == Qt.ItemDataRole.DisplayRole:
-            return row["name"]
+            return f"★ {row['name']}" if row["starred"] else row["name"]
         if role == Qt.ItemDataRole.DecorationRole:
             return self._pixmap_for(row)
         if role == Qt.ItemDataRole.ToolTipRole:

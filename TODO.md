@@ -1,10 +1,10 @@
 # TODO.md — Roadmap e estado atual
 
 ## Estado atual (2026-07-31)
-- Fatias 1–7 concluídas e validadas pelo Rafael. 391 assets (127 sets PBR),
-  thumbs com tonemap HDR, toggle de agrupamento, material viewer, 80 testes.
-- **Em andamento: Fatia 8 — tags** (inclui trocar o xadrez dos cutouts por
-  transparência real, feedback do Rafael).
+- Fatias 1–8 concluídas e validadas pelo Rafael. Tags hierárquicas com
+  aliases PT/EN, 3 formas de taggear, transparência real, 88 testes.
+- **Em andamento: Fatia 9 — ratings/favoritos/filtros** (inclui aplicar
+  checkbox de tag a TODOS os assets selecionados, sugestão do Rafael).
 
 ## Como ler este arquivo
 Uma fatia por vez, em branch própria. Cada fatia termina com: pytest verde,
@@ -62,7 +62,7 @@ sobre fundo xadrez.
 **Deu certo quando:** HDRIs da testlib deixam de ser quadrados pretos;
 cutouts mostram o xadrez.
 
-### ☐ Fatia 8 — Tags
+### ☑ Fatia 8 — Tags (concluída 2026-07-31; + transparência real nos cutouts)
 Hierarquia N níveis, cor/ícone/ordem, aliases PT/EN, as 3 formas de taggear
 (arrastar, checkbox interativo, diálogo Ctrl+T), copiar/colar/substituir tags.
 **Deu certo quando:** buscar "madeira" acha asset taggeado "wood".

@@ -79,6 +79,25 @@ class MainWindow(QMainWindow):
             lambda c: (self.model.set_expand_sets(not c), self.refresh_count())
         )
 
+        # Filtros da Fatia 9: nota mínima, favoritos, resolução mínima
+        from PySide6.QtWidgets import QComboBox
+
+        self.rating_combo = QComboBox()
+        self.rating_combo.addItem("Nota: todas", None)
+        for n in range(1, 6):
+            self.rating_combo.addItem("★" * n + f" ≥ {n}", n)
+        self.rating_combo.currentIndexChanged.connect(lambda _i: self._apply_filters())
+
+        self.fav_check = QCheckBox("Só ★")
+        self.fav_check.setToolTip("Mostrar só favoritos")
+        self.fav_check.toggled.connect(lambda _c: self._apply_filters())
+
+        self.res_combo = QComboBox()
+        self.res_combo.addItem("Resolução: todas", None)
+        for label, px in (("≥ 1K", 1024), ("≥ 2K", 2048), ("≥ 4K", 4096), ("≥ 8K", 8192)):
+            self.res_combo.addItem(label, px)
+        self.res_combo.currentIndexChanged.connect(lambda _i: self._apply_filters())
+
         self.count_label = QLabel()
         self.progress = QProgressBar()
         self.progress.setVisible(False)
@@ -89,6 +108,9 @@ class MainWindow(QMainWindow):
         top = QHBoxLayout()
         top.addWidget(self.search_box, stretch=1)
         top.addWidget(self.type_filter)
+        top.addWidget(self.rating_combo)
+        top.addWidget(self.fav_check)
+        top.addWidget(self.res_combo)
         top.addWidget(self.subdirs_check)
         top.addWidget(self.group_check)
         top.addWidget(self.count_label)
@@ -128,6 +150,8 @@ class MainWindow(QMainWindow):
         self.details.setMaximumWidth(380)
         self.details.notes_saved.connect(self._on_notes_saved)
         self.details.tag_toggled.connect(self._on_tag_toggled)
+        self.details.rating_changed.connect(self._on_rating_changed)
+        self.details.starred_changed.connect(self._on_starred_changed)
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.addWidget(left)
@@ -172,6 +196,9 @@ class MainWindow(QMainWindow):
             dir_prefix=dir_prefix,
             include_subdirs=self.subdirs_check.isChecked(),
             tag_id=self.tags.current_tag_id(),
+            min_rating=self.rating_combo.currentData(),
+            starred_only=self.fav_check.isChecked(),
+            min_resolution=self.res_combo.currentData(),
         )
         self.refresh_count()
 
@@ -195,15 +222,48 @@ class MainWindow(QMainWindow):
         )
 
     def _on_tag_toggled(self, asset_id: int, tag_id: int, checked: bool) -> None:
-        if checked:
-            tags_repo.assign(self._conn, asset_id, tag_id)
-        else:
-            tags_repo.unassign(self._conn, asset_id, tag_id)
+        # Sugestão do Rafael: com N assets selecionados, o checkbox aplica a TODOS
+        alvos = self._selected_asset_ids() or [asset_id]
+        for aid in alvos:
+            if checked:
+                tags_repo.assign(self._conn, aid, tag_id)
+            else:
+                tags_repo.unassign(self._conn, aid, tag_id)
         nome = tags_repo.tag_path(self._conn, tag_id)
+        sufixo = f" em {len(alvos)} assets" if len(alvos) > 1 else ""
         self._after_tags_changed(
-            [asset_id],
-            f"Tag '{nome}' {'adicionada' if checked else 'removida'}",
+            alvos,
+            f"Tag '{nome}' {'adicionada' if checked else 'removida'}{sufixo}",
         )
+
+    def _on_rating_changed(self, rating) -> None:
+        alvos = self._selected_asset_ids()
+        if not alvos:
+            return
+        for aid in alvos:
+            assets_repo.set_rating(self._conn, aid, rating)
+            sidecar_writer.write_for_asset(self._conn, self._library_root, aid)
+        self.model.reload()  # a estrela/nota aparece na grid
+        texto = f"{'★' * rating}" if rating else "nota removida"
+        sufixo = f" em {len(alvos)} assets" if len(alvos) > 1 else ""
+        self.statusBar().showMessage(f"Nota: {texto}{sufixo}")
+        if self.rating_combo.currentData():
+            self._apply_filters()
+
+    def _on_starred_changed(self, starred: bool) -> None:
+        alvos = self._selected_asset_ids()
+        if not alvos:
+            return
+        for aid in alvos:
+            assets_repo.set_starred(self._conn, aid, starred)
+            sidecar_writer.write_for_asset(self._conn, self._library_root, aid)
+        self.model.reload()
+        sufixo = f" em {len(alvos)} assets" if len(alvos) > 1 else ""
+        self.statusBar().showMessage(
+            ("★ Favoritado" if starred else "Favorito removido") + sufixo
+        )
+        if self.fav_check.isChecked():
+            self._apply_filters()
 
     def _on_tags_structure_changed(self) -> None:
         assets_repo.rebuild_fts(self._conn)
@@ -273,10 +333,12 @@ class MainWindow(QMainWindow):
         row = self.model.row_at(current)
         if row is not None:
             self.details.show_asset(row, self._thumb_from_disk(row))
+            self.details.load_rating(row["rating"], bool(row["starred"]))
             self.details.load_tags(
                 tags_repo.list_tree(self._conn),
                 {t["id"] for t in tags_repo.tags_of(self._conn, row["id"])},
             )
+            self.details.set_multi_count(len(self._selected_asset_ids()))
 
     def _on_data_changed(self, top_left: QModelIndex, _br, _roles) -> None:
         # Se a thumb que acabou de ficar pronta é a do asset selecionado,

@@ -33,6 +33,8 @@ def human_size(n: int) -> str:
 class DetailsPanel(QWidget):
     notes_saved = Signal(int, str)        # asset_id, texto da nota
     tag_toggled = Signal(int, int, bool)  # asset_id, tag_id, marcado?
+    rating_changed = Signal(object)       # int 1–5 ou None (limpar)
+    starred_changed = Signal(bool)
 
     def __init__(self, library_root: Path, parent=None) -> None:
         super().__init__(parent)
@@ -72,6 +74,31 @@ class DetailsPanel(QWidget):
         self.open_file_btn.clicked.connect(self._open_file)
         self._set_buttons(False)
 
+        # Rating (5 estrelas clicáveis) + favorito — Fatia 9
+        from PySide6.QtWidgets import QHBoxLayout as _QHBox
+
+        self._rating: int | None = None
+        stars_row = _QHBox()
+        self.star_btns: list[QPushButton] = []
+        for i in range(1, 6):
+            b = QPushButton("☆")
+            b.setFlat(True)
+            b.setMaximumWidth(28)
+            b.clicked.connect(lambda _c=False, n=i: self._on_star_clicked(n))
+            self.star_btns.append(b)
+            stars_row.addWidget(b)
+        self.fav_btn = QPushButton("☆ Favorito")
+        self.fav_btn.setCheckable(True)
+        self.fav_btn.toggled.connect(self._on_fav_toggled)
+        stars_row.addWidget(self.fav_btn)
+        stars_row.addStretch()
+
+        # Aviso de edição em massa (sugestão do Rafael): com N selecionados,
+        # tag/nota de estrela/favorito valem para todos
+        self.multi_label = QLabel()
+        self.multi_label.setStyleSheet("color: #b07d2b; font-weight: bold;")
+        self.multi_label.setVisible(False)
+
         # Tags com checkbox (forma 2 de taggear): marcar/desmarcar aplica na hora
         from PySide6.QtWidgets import QTreeWidget
 
@@ -97,6 +124,8 @@ class DetailsPanel(QWidget):
         layout.addLayout(form)
         layout.addWidget(self.open_folder_btn)
         layout.addWidget(self.open_file_btn)
+        layout.addLayout(stars_row)
+        layout.addWidget(self.multi_label)
         layout.addWidget(tags_label)
         layout.addWidget(self.tags_tree)
         layout.addWidget(notes_label)
@@ -152,6 +181,35 @@ class DetailsPanel(QWidget):
         except Exception:
             log.exception("Não consegui ler dimensões de %s", path)
             return "—"
+
+    # ---- rating / favorito ----
+
+    def set_multi_count(self, n: int) -> None:
+        """n>1: avisa que as edições valem para todos os selecionados."""
+        self.multi_label.setText(f"⚠ Editando {n} assets selecionados de uma vez")
+        self.multi_label.setVisible(n > 1)
+
+    def _paint_stars(self) -> None:
+        for i, b in enumerate(self.star_btns, start=1):
+            b.setText("★" if self._rating and i <= self._rating else "☆")
+
+    def load_rating(self, rating: int | None, starred: bool) -> None:
+        self._rating = rating
+        self._paint_stars()
+        self.fav_btn.blockSignals(True)
+        self.fav_btn.setChecked(starred)
+        self.fav_btn.setText("★ Favorito" if starred else "☆ Favorito")
+        self.fav_btn.blockSignals(False)
+
+    def _on_star_clicked(self, n: int) -> None:
+        # Clicar na estrela da nota atual limpa a nota
+        self._rating = None if self._rating == n else n
+        self._paint_stars()
+        self.rating_changed.emit(self._rating)
+
+    def _on_fav_toggled(self, checked: bool) -> None:
+        self.fav_btn.setText("★ Favorito" if checked else "☆ Favorito")
+        self.starred_changed.emit(checked)
 
     # ---- tags (checkbox interativo) ----
 

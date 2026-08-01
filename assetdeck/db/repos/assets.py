@@ -21,6 +21,9 @@ def list_for_grid(
     include_subdirs: bool = True,
     expand_sets: bool = False,
     tag_id: int | None = None,
+    min_rating: int | None = None,
+    starred_only: bool = False,
+    min_resolution: int | None = None,
 ) -> list[dict]:
     """Assets para a grid (asset + arquivo principal), com filtros combináveis.
 
@@ -34,7 +37,9 @@ def list_for_grid(
     join_files = ("JOIN files f ON f.asset_id = a.id" if expand_sets
                   else "JOIN files f ON f.asset_id = a.id AND f.is_primary = 1")
     sql = f"""SELECT a.id, a.uuid, a.name, a.asset_type, a.notes,
+                    a.rating, a.starred,
                     f.rel_path, f.size_bytes, f.content_hash, f.missing_since,
+                    f.width, f.height,
                     (SELECT COUNT(*) FROM files f2
                      WHERE f2.asset_id = a.id AND f2.deleted_at IS NULL) AS files_count
              FROM assets a
@@ -57,6 +62,15 @@ def list_for_grid(
         sql += (f" AND a.id IN (SELECT asset_id FROM asset_tags"
                 f" WHERE tag_id IN ({','.join('?' * len(alvo))}))")
         params.extend(alvo)
+    if min_rating:
+        sql += " AND a.rating >= ?"
+        params.append(min_rating)
+    if starred_only:
+        sql += " AND a.starred = 1"
+    if min_resolution:
+        # Resolução do arquivo principal; sem dimensões conhecidas = fica de fora
+        sql += " AND MAX(COALESCE(f.width, 0), COALESCE(f.height, 0)) >= ?"
+        params.append(min_resolution)
 
     if dir_prefix:
         if include_subdirs:
@@ -97,6 +111,27 @@ def distinct_types(conn: sqlite3.Connection) -> list[str]:
             "SELECT DISTINCT asset_type FROM assets WHERE deleted_at IS NULL ORDER BY 1"
         )
     ]
+
+
+def set_rating(conn: sqlite3.Connection, asset_id: int, rating: int | None) -> None:
+    """Nota 1–5, ou None = sem nota."""
+    from datetime import datetime, timezone
+
+    conn.execute(
+        "UPDATE assets SET rating = ?, updated_at = ? WHERE id = ?",
+        (rating, datetime.now(timezone.utc).isoformat(), asset_id),
+    )
+    conn.commit()
+
+
+def set_starred(conn: sqlite3.Connection, asset_id: int, starred: bool) -> None:
+    from datetime import datetime, timezone
+
+    conn.execute(
+        "UPDATE assets SET starred = ?, updated_at = ? WHERE id = ?",
+        (1 if starred else 0, datetime.now(timezone.utc).isoformat(), asset_id),
+    )
+    conn.commit()
 
 
 def set_notes(conn: sqlite3.Connection, asset_id: int, notes: str) -> None:
