@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QTreeWidget,
     QTreeWidgetItem,
+    QTreeWidgetItemIterator,
 )
 
 from assetdeck.db.repos import collections as collections_repo
@@ -71,6 +72,19 @@ class CollectionTree(QTreeWidget):
     def _on_current(self, current: QTreeWidgetItem | None, _prev) -> None:
         if current is not None:
             self.collection_selected.emit(current.data(0, _COLLECTION_ROLE))
+
+    def select(self, collection_id: int | None) -> None:
+        """Seleciona a coleção pelo id salvo (ex.: ao aplicar uma Smart
+        Collection). Não emite collection_selected — quem chama reaplica o filtro."""
+        self.blockSignals(True)
+        it = QTreeWidgetItemIterator(self)
+        while it.value():
+            item = it.value()
+            if item.data(0, _COLLECTION_ROLE) == collection_id:
+                self.setCurrentItem(item)
+                break
+            it += 1
+        self.blockSignals(False)
 
     # ---- drag-and-drop de assets ----
 
