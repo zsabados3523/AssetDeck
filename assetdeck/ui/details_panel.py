@@ -35,6 +35,9 @@ class DetailsPanel(QWidget):
     tag_toggled = Signal(int, int, bool)  # asset_id, tag_id, marcado?
     rating_changed = Signal(object)       # int 1–5 ou None (limpar)
     starred_changed = Signal(bool)
+    preview_add_requested = Signal(int)   # asset_id (botão 'Adicionar…')
+    preview_cover_requested = Signal(int)  # preview_id
+    preview_remove_requested = Signal(int)  # preview_id
 
     def __init__(self, library_root: Path, parent=None) -> None:
         super().__init__(parent)
@@ -73,6 +76,20 @@ class DetailsPanel(QWidget):
         self.open_file_btn = QPushButton("Abrir com app padrão")
         self.open_file_btn.clicked.connect(self._open_file)
         self._set_buttons(False)
+
+        # Galeria de previews (Fatia 10): thumbs horizontais + capa
+        from PySide6.QtCore import QSize
+        from PySide6.QtWidgets import QListWidget
+
+        self.gallery = QListWidget()
+        self.gallery.setViewMode(QListWidget.ViewMode.IconMode)
+        self.gallery.setFlow(QListWidget.Flow.LeftToRight)
+        self.gallery.setIconSize(QSize(56, 56))
+        self.gallery.setFixedHeight(84)
+        self.gallery.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.gallery.customContextMenuRequested.connect(self._gallery_menu)
+        self.add_preview_btn = QPushButton("Adicionar preview…")
+        self.add_preview_btn.clicked.connect(self._request_add_preview)
 
         # Rating (5 estrelas clicáveis) + favorito — Fatia 9
         from PySide6.QtWidgets import QHBoxLayout as _QHBox
@@ -126,6 +143,9 @@ class DetailsPanel(QWidget):
         layout.addWidget(self.open_file_btn)
         layout.addLayout(stars_row)
         layout.addWidget(self.multi_label)
+        layout.addWidget(QLabel("Galeria de previews:"))
+        layout.addWidget(self.gallery)
+        layout.addWidget(self.add_preview_btn)
         layout.addWidget(tags_label)
         layout.addWidget(self.tags_tree)
         layout.addWidget(notes_label)
@@ -181,6 +201,43 @@ class DetailsPanel(QWidget):
         except Exception:
             log.exception("Não consegui ler dimensões de %s", path)
             return "—"
+
+    # ---- galeria de previews ----
+
+    def load_gallery(self, previews: list) -> None:
+        from PySide6.QtGui import QIcon
+        from PySide6.QtWidgets import QListWidgetItem
+
+        self.gallery.clear()
+        for p in previews:
+            pix = QPixmap(p["file_path"])
+            item = QListWidgetItem()
+            if not pix.isNull():
+                item.setIcon(QIcon(pix.scaled(
+                    56, 56, Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation)))
+            item.setText("capa" if p["is_cover"] else "")
+            item.setData(32, p["id"])
+            self.gallery.addItem(item)
+        self.gallery.setVisible(bool(previews))
+
+    def _gallery_menu(self, pos) -> None:
+        from PySide6.QtWidgets import QMenu
+
+        item = self.gallery.itemAt(pos)
+        if item is None:
+            return
+        pid = item.data(32)
+        menu = QMenu(self)
+        menu.addAction("Definir como capa",
+                       lambda: self.preview_cover_requested.emit(pid))
+        menu.addAction("Remover da galeria",
+                       lambda: self.preview_remove_requested.emit(pid))
+        menu.exec(self.gallery.mapToGlobal(pos))
+
+    def _request_add_preview(self) -> None:
+        if self._current_asset_id is not None:
+            self.preview_add_requested.emit(self._current_asset_id)
 
     # ---- rating / favorito ----
 

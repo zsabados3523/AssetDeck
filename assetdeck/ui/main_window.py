@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
 
 from assetdeck import __version__
 from assetdeck.db.repos import assets as assets_repo
+from assetdeck.db.repos import previews as previews_repo
 from assetdeck.db.repos import tags as tags_repo
 from assetdeck.indexer.scanner import ScanStats
 from assetdeck.thumbs.pipeline import ThumbnailPipeline
@@ -123,6 +124,7 @@ class MainWindow(QMainWindow):
         self.grid.setModel(self.model)
         self.grid.selectionModel().currentChanged.connect(self._on_selection)
         self.model.dataChanged.connect(self._on_data_changed)
+        self.grid.image_dropped.connect(self._on_image_dropped)
         # Duplo clique = preview ampliado (NÃO abre o arquivo — pedido do Rafael)
         self.preview_popup = PreviewPopup(self)
         self.grid.doubleClicked.connect(self._open_preview)
@@ -152,6 +154,9 @@ class MainWindow(QMainWindow):
         self.details.tag_toggled.connect(self._on_tag_toggled)
         self.details.rating_changed.connect(self._on_rating_changed)
         self.details.starred_changed.connect(self._on_starred_changed)
+        self.details.preview_add_requested.connect(self._on_preview_add)
+        self.details.preview_cover_requested.connect(self._on_preview_cover)
+        self.details.preview_remove_requested.connect(self._on_preview_remove)
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.addWidget(left)
@@ -339,6 +344,7 @@ class MainWindow(QMainWindow):
                 {t["id"] for t in tags_repo.tags_of(self._conn, row["id"])},
             )
             self.details.set_multi_count(len(self._selected_asset_ids()))
+            self.details.load_gallery(previews_repo.list_for(self._conn, row["id"]))
 
     def _on_data_changed(self, top_left: QModelIndex, _br, _roles) -> None:
         # Se a thumb que acabou de ficar pronta é a do asset selecionado,
@@ -423,6 +429,45 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage(
                 f"Set desfeito em {n} assets (travados: o agrupador não refaz)"
             )
+
+    # ---- previews customizados (Fatia 10) ----
+
+    def _on_image_dropped(self, asset_id: int, path: str) -> None:
+        """Imagem externa solta sobre um card vira a capa do asset."""
+        from assetdeck import config
+
+        try:
+            previews_repo.add(self._conn, asset_id, Path(path), config.previews_dir())
+        except (FileNotFoundError, OSError) as exc:
+            log.exception("Falha ao adicionar preview")
+            self.statusBar().showMessage(f"Não consegui usar essa imagem: {exc}")
+            return
+        self.model.reload()
+        self._refresh_details_tags()
+        self.statusBar().showMessage("Preview definido como capa (imagem copiada — "
+                                     "seu arquivo original não é tocado)")
+
+    def _on_preview_add(self, asset_id: int) -> None:
+        from PySide6.QtWidgets import QFileDialog
+
+        path, _f = QFileDialog.getOpenFileName(
+            self, "Escolher imagem de preview", str(Path.home()),
+            "Imagens (*.jpg *.jpeg *.png *.tif *.tiff *.webp *.bmp *.tga *.gif)",
+        )
+        if path:
+            self._on_image_dropped(asset_id, path)
+
+    def _on_preview_cover(self, preview_id: int) -> None:
+        previews_repo.set_cover(self._conn, preview_id)
+        self.model.reload()
+        self._refresh_details_tags()
+        self.statusBar().showMessage("Capa atualizada")
+
+    def _on_preview_remove(self, preview_id: int) -> None:
+        previews_repo.soft_delete(self._conn, preview_id)
+        self.model.reload()
+        self._refresh_details_tags()
+        self.statusBar().showMessage("Preview removido da galeria")
 
     # ---- varredura ----
 

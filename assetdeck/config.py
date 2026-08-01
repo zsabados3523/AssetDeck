@@ -60,9 +60,15 @@ def thumbs_dir() -> Path:
     return cache_dir() / "thumbs"
 
 
+def previews_dir() -> Path:
+    """Cópias das imagens de preview escolhidas pelo usuário (Fatia 10)."""
+    return data_dir() / "previews"
+
+
 def ensure_dirs() -> None:
     """Cria todas as pastas do app se não existirem."""
-    for d in (config_dir(), data_dir(), cache_dir(), backups_dir(), logs_dir(), thumbs_dir()):
+    for d in (config_dir(), data_dir(), cache_dir(), backups_dir(), logs_dir(),
+              thumbs_dir(), previews_dir()):
         d.mkdir(parents=True, exist_ok=True)
 
 

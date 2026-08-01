@@ -10,6 +10,8 @@ import logging
 import sqlite3
 from pathlib import Path
 
+from PySide6.QtCore import Signal
+
 from PySide6.QtCore import QAbstractListModel, QMimeData, QModelIndex, QSize, Qt
 from PySide6.QtGui import QColor, QPainter, QPixmap, QPixmapCache
 from PySide6.QtWidgets import QListView
@@ -150,14 +152,22 @@ class AssetGridModel(QAbstractListModel):
     # ---- thumbnails ----
 
     def _pixmap_for(self, row) -> QPixmap:
-        key = f"thumb:{row['content_hash']}"
+        cover = row.get("cover_path")
+        if cover:
+            # Capa escolhida pelo usuário vence o arquivo do asset
+            src = Path(cover)
+            key_hash = f"prev-{src.stem}"  # nome já é uuid: chave estável
+        else:
+            src = self._root / row["rel_path"]
+            key_hash = row["content_hash"]
+
+        key = f"thumb:{key_hash}"
         cached = QPixmapCache.find(key)
         if cached:
             return cached
 
-        src = self._root / row["rel_path"]
-        if row["missing_since"] is None and can_preview(src):
-            path = self._pipeline.get_or_request(row["id"], src, row["content_hash"])
+        if (cover or row["missing_since"] is None) and can_preview(src):
+            path = self._pipeline.get_or_request(row["id"], src, key_hash)
             if path is not None:
                 pix = QPixmap(str(path))
                 if not pix.isNull():
@@ -195,8 +205,12 @@ class AssetGridModel(QAbstractListModel):
 
 
 class AssetGridView(QListView):
+    # Imagem externa solta sobre um card → vira preview do asset (Fatia 10)
+    image_dropped = Signal(int, str)  # asset_id, caminho local da imagem
+
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
+        self.setAcceptDrops(True)
         self.setViewMode(QListView.ViewMode.IconMode)
         self.setResizeMode(QListView.ResizeMode.Adjust)
         self.setLayoutMode(QListView.LayoutMode.Batched)  # nunca congela ao popular
@@ -212,6 +226,44 @@ class AssetGridView(QListView):
         # 200px por passo, o que fica rápido demais — feedback do Rafael)
         self.setVerticalScrollMode(QListView.ScrollMode.ScrollPerPixel)
         self.verticalScrollBar().setSingleStep(24)  # px por passo da rodinha
-        # Arrastar assets para a árvore de tags (Fatia 8)
+        # Arrastar assets para a árvore de tags (Fatia 8) E receber imagens
+        # externas como preview (Fatia 10)
         self.setDragEnabled(True)
-        self.setDragDropMode(QListView.DragDropMode.DragOnly)
+        self.setDragDropMode(QListView.DragDropMode.DragDrop)
+
+    # ---- receber imagem externa como preview ----
+
+    @staticmethod
+    def _dropped_image(mime) -> str | None:
+        from assetdeck.thumbs.raster import RASTER_EXTS
+
+        if not mime.hasUrls():
+            return None
+        for url in mime.urls():
+            if url.isLocalFile():
+                p = url.toLocalFile()
+                if p.rsplit(".", 1)[-1].lower() in RASTER_EXTS:
+                    return p
+        return None
+
+    def dragEnterEvent(self, event) -> None:  # noqa: N802
+        if self._dropped_image(event.mimeData()):
+            event.acceptProposedAction()
+        else:
+            super().dragEnterEvent(event)
+
+    def dragMoveEvent(self, event) -> None:  # noqa: N802
+        if self._dropped_image(event.mimeData()):
+            event.acceptProposedAction()
+        else:
+            super().dragMoveEvent(event)
+
+    def dropEvent(self, event) -> None:  # noqa: N802
+        path = self._dropped_image(event.mimeData())
+        if path is None:
+            return super().dropEvent(event)
+        index = self.indexAt(event.position().toPoint())
+        row = self.model().row_at(index) if index.isValid() else None
+        if row is not None:
+            self.image_dropped.emit(row["id"], path)
+            event.acceptProposedAction()

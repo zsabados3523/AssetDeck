@@ -36,10 +36,17 @@ def list_for_grid(
     """
     join_files = ("JOIN files f ON f.asset_id = a.id" if expand_sets
                   else "JOIN files f ON f.asset_id = a.id AND f.is_primary = 1")
+    # Capa customizada (Fatia 10): só na visão agrupada — no modo expandido
+    # cada card é um mapa e deve mostrar o próprio conteúdo
+    cover_select = ("NULL AS cover_path" if expand_sets else
+                    "(SELECT p.file_path FROM previews p WHERE p.asset_id = a.id"
+                    " AND p.is_cover = 1 AND p.deleted_at IS NULL LIMIT 1)"
+                    " AS cover_path")
     sql = f"""SELECT a.id, a.uuid, a.name, a.asset_type, a.notes,
                     a.rating, a.starred,
                     f.rel_path, f.size_bytes, f.content_hash, f.missing_since,
                     f.width, f.height,
+                    {cover_select},
                     (SELECT COUNT(*) FROM files f2
                      WHERE f2.asset_id = a.id AND f2.deleted_at IS NULL) AS files_count
              FROM assets a

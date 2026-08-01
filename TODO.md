@@ -1,10 +1,9 @@
 # TODO.md — Roadmap e estado atual
 
 ## Estado atual (2026-07-31)
-- Fatias 1–8 concluídas e validadas pelo Rafael. Tags hierárquicas com
-  aliases PT/EN, 3 formas de taggear, transparência real, 88 testes.
-- **Em andamento: Fatia 9 — ratings/favoritos/filtros** (inclui aplicar
-  checkbox de tag a TODOS os assets selecionados, sugestão do Rafael).
+- Fatias 1–9 concluídas e validadas pelo Rafael. Ratings, favoritos,
+  filtros combinados, edição em massa, 96 testes.
+- **Em andamento: Fatia 10 — previews customizados** (fecha o F1).
 
 ## Como ler este arquivo
 Uma fatia por vez, em branch própria. Cada fatia termina com: pytest verde,
@@ -67,8 +66,7 @@ Hierarquia N níveis, cor/ícone/ordem, aliases PT/EN, as 3 formas de taggear
 (arrastar, checkbox interativo, diálogo Ctrl+T), copiar/colar/substituir tags.
 **Deu certo quando:** buscar "madeira" acha asset taggeado "wood".
 
-### ☐ Fatia 9 — Ratings, favoritos e filtros combinados
-Estrelas, starred, filtros por tipo/resolução/tag/rating combináveis.
+### ☑ Fatia 9 — Ratings, favoritos e filtros combinados (concluída 2026-07-31; + edição em massa nos selecionados)
 
 ### ☐ Fatia 10 — Previews customizados *(fecha o F1)*
 Drag-and-drop de imagem sobre o card define preview; galeria 1:N com capa.
