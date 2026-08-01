@@ -27,11 +27,13 @@ class BridgeServer(QObject):
     command_handled = Signal(str)  # nome do comando (para a barra de status)
 
     def __init__(self, conn: sqlite3.Connection, library_root: Path, token: str,
+                 thumbs_dir: Path | None = None,
                  parent: QObject | None = None) -> None:
         super().__init__(parent)
         self._conn = conn
         self._library_root = library_root
         self._token = token
+        self._thumbs_dir = thumbs_dir
         self._server = QTcpServer(self)
         self._server.newConnection.connect(self._on_new_connection)
         self._buffers: dict[QTcpSocket, bytearray] = {}
@@ -116,6 +118,7 @@ class BridgeServer(QObject):
                 code="bad_token",
             )
 
-        resposta = handlers.handle(self._conn, self._library_root, req)
+        resposta = handlers.handle(self._conn, self._library_root, req,
+                                   self._thumbs_dir)
         self.command_handled.emit(str(req.get("cmd")))
         return resposta
