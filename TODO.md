@@ -7,12 +7,12 @@ tela dele.
 
 | | |
 |---|---|
-| Testes | 163 verdes (`pytest -q`) |
+| Testes | 176 verdes (`pytest -q`) |
 | Schema | migrations 001–004 aplicadas (ver SCHEMA.md) |
 | Biblioteca de trabalho | testlib: 750 arquivos → 391 assets → **127 visíveis** (dependências ocultas) |
 | Add-on do Blender | v0.4.0, Blender 5.2 Flatpak |
 
-**Próximo passo: F3 — Fatia 17 (Collections manuais).**
+**Próximo passo: F3 — Fatia 19 (Relocalizar assets perdidos).**
 
 ## Como ler este arquivo
 Uma fatia por vez, em branch própria. Cada fatia termina com: pytest verde,
@@ -97,10 +97,14 @@ selecionados; 1 item continua com o comportamento padrão do Qt.
 até uma coleção mostra um bloco compacto seguindo o mouse, e soltar ainda
 adiciona todos à coleção.
 
-### ☐ Fatia 18 — Smart Collections
-Tabela `smart_collections` (`query_json`). Salvar o conjunto de filtros
-ativos como coleção dinâmica, recalculada ao abrir. Serializar o mesmo
-dicionário que `assets_repo.list_for_grid` já aceita.
+### ☑ Fatia 18 — Smart Collections
+Tabela `smart_collections` (`query_json`), sem migration nova. Painel
+"Smart Collections" (lista achatada, sem hierarquia): "Salvar filtros
+atuais…" serializa o mesmo dicionário que `_apply_filters()` já monta para
+`assets_repo.list_for_grid`; aplicar uma delas reescreve os widgets da
+barra (busca, tipos, pastas, tag, coleção, nota, favoritos, resolução,
+ocultos, dependências) e reaplica — a reatividade que já existia (nota,
+reindexação) mantém a visão sempre recalculada, sem código extra.
 **Deu certo quando:** salvar "HDRIs com nota ≥ 4" e ela se atualizar sozinha
 ao dar 5 estrelas a um HDRI novo.
 
