@@ -38,10 +38,10 @@ def list_for_grid(
     """
     join_files = ("JOIN files f ON f.asset_id = a.id" if expand_sets
                   else "JOIN files f ON f.asset_id = a.id AND f.is_primary = 1")
-    # Capa customizada (Fatia 10): só na visão agrupada — no modo expandido
-    # cada card é um mapa e deve mostrar o próprio conteúdo
-    cover_select = ("NULL AS cover_path" if expand_sets else
-                    "(SELECT p.file_path FROM previews p WHERE p.asset_id = a.id"
+    # Capa customizada (Fatia 10). No modo expandido ela é descartada apenas
+    # para assets de VÁRIOS arquivos (cada mapa do set mostra a si mesmo);
+    # um modelo continua exibindo a capa escolhida — bug relatado pelo Rafael.
+    cover_select = ("(SELECT p.file_path FROM previews p WHERE p.asset_id = a.id"
                     " AND p.is_cover = 1 AND p.deleted_at IS NULL LIMIT 1)"
                     " AS cover_path")
     sql = f"""SELECT a.id, a.uuid, a.name, a.asset_type, a.notes,
@@ -100,10 +100,11 @@ def list_for_grid(
     sql += " ORDER BY a.name COLLATE NOCASE, f.rel_path COLLATE NOCASE"
     rows = [dict(r) for r in conn.execute(sql, params)]
     if expand_sets:
-        # No modo expandido, cada mapa mostra o próprio nome de arquivo
         for r in rows:
             if r["files_count"] > 1:
+                # Cada mapa do set mostra o próprio nome e o próprio conteúdo
                 r["name"] = r["rel_path"].rsplit("/", 1)[-1].rsplit(".", 1)[0]
+                r["cover_path"] = None
     return rows
 
 
