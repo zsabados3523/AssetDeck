@@ -29,6 +29,26 @@ log = logging.getLogger(__name__)
 def _uuid_livre(conn: sqlite3.Connection, uuid: str) -> bool:
     return conn.execute("SELECT 1 FROM assets WHERE uuid = ?", (uuid,)).fetchone() is None
 
+
+def image_meta(path: Path) -> tuple[int | None, int | None, int | None, int | None]:
+    """(width, height, has_alpha, bit_depth) lendo SÓ o cabeçalho da imagem
+    (Pillow não decodifica pixels aqui — é barato mesmo em 8K).
+    Formatos não-raster ou ilegíveis devolvem tudo None, sem erro."""
+    from assetdeck.thumbs.raster import RASTER_EXTS
+
+    if path.suffix.lower().lstrip(".") not in RASTER_EXTS:
+        return None, None, None, None
+    try:
+        from assetdeck.thumbs.raster import open_image
+
+        with open_image(path) as img:
+            has_alpha = 1 if "A" in img.getbands() else 0
+            bit_depth = 16 if img.mode.startswith("I;16") else 8
+            return img.width, img.height, has_alpha, bit_depth
+    except Exception:
+        log.warning("Não consegui ler o cabeçalho de imagem de %s", path, exc_info=True)
+        return None, None, None, None
+
 # Extensão (minúscula, sem ponto) → asset_type do schema.
 # O que não está aqui é ignorado (contado e logado, nunca erro).
 EXT_MAP = {
@@ -149,7 +169,8 @@ def scan_library(
     known = {
         row["rel_path"]: row
         for row in conn.execute(
-            """SELECT f.id, f.rel_path, f.size_bytes, f.mtime_ns, f.missing_since
+            """SELECT f.id, f.rel_path, f.size_bytes, f.mtime_ns, f.missing_since,
+                      f.width
                FROM files f JOIN assets a ON a.id = f.asset_id
                WHERE a.library_id = ? AND f.deleted_at IS NULL""",
             (library_id,),
@@ -261,16 +282,28 @@ def _process_file(conn, library_id, root, path, known, seen, stats) -> None:
                         "VALUES (?, ?, 'manual')",
                         (cur.lastrowid, tid),
                     )
+        w, h, alpha, depth = image_meta(path)
         conn.execute(
             """INSERT INTO files (asset_id, rel_path, size_bytes, mtime_ns,
-                                  content_hash, is_primary)
-               VALUES (?, ?, ?, ?, ?, 1)""",
-            (cur.lastrowid, rel_path, st.st_size, st.st_mtime_ns, fingerprint(path)),
+                                  content_hash, is_primary,
+                                  width, height, has_alpha, bit_depth)
+               VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?)""",
+            (cur.lastrowid, rel_path, st.st_size, st.st_mtime_ns, fingerprint(path),
+             w, h, alpha, depth),
         )
         stats.added += 1
         return
 
     if row["size_bytes"] == st.st_size and row["mtime_ns"] == st.st_mtime_ns:
+        if row["width"] is None:
+            # Backfill: linhas antigas (pré-Fatia 9) ainda sem dimensões
+            w, h, alpha, depth = image_meta(path)
+            if w is not None:
+                conn.execute(
+                    "UPDATE files SET width = ?, height = ?, has_alpha = ?, "
+                    "bit_depth = ?, updated_at = ? WHERE id = ?",
+                    (w, h, alpha, depth, _now(), row["id"]),
+                )
         if row["missing_since"] is not None:
             # Estava sumido e voltou ao mesmo lugar
             conn.execute(
@@ -283,11 +316,14 @@ def _process_file(conn, library_id, root, path, known, seen, stats) -> None:
         return
 
     # Conteúdo mudou → atualiza medidas e hash (uuid do asset não muda NUNCA)
+    w, h, alpha, depth = image_meta(path)
     conn.execute(
         """UPDATE files SET size_bytes = ?, mtime_ns = ?, content_hash = ?,
+                            width = ?, height = ?, has_alpha = ?, bit_depth = ?,
                             missing_since = NULL, updated_at = ?
            WHERE id = ?""",
-        (st.st_size, st.st_mtime_ns, fingerprint(path), _now(), row["id"]),
+        (st.st_size, st.st_mtime_ns, fingerprint(path),
+         w, h, alpha, depth, _now(), row["id"]),
     )
     if row["missing_since"] is not None:
         stats.reappeared += 1
