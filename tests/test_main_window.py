@@ -75,6 +75,26 @@ def test_smart_collection_salva_e_aplica_filtros(janela):
     assert janela.model.row_at(janela.model.index(0))["name"] == "textura"
 
 
+def test_smart_collection_nenhuma_aplicada_reseta_filtros(janela):
+    """Relatado pelo Rafael: voltar pro '(nenhuma aplicada)' deixava os
+    filtros da Smart Collection anterior parados em vez de mostrar tudo."""
+    janela.type_filter.set_selected(["texture"])
+    janela._apply_filters()
+    janela._on_save_smart_collection("Só texturas")  # já deixa o painel na raiz
+    assert janela.model.rowCount() == 1
+
+    salva = janela.smart_collections.item(1)
+    janela.smart_collections.setCurrentItem(salva)  # sai da raiz de propósito
+    assert janela.type_filter.selected() == ["texture"]
+
+    raiz = janela.smart_collections.item(0)
+    assert raiz.text() == "(nenhuma aplicada)"
+    janela.smart_collections.setCurrentItem(raiz)  # volta pra raiz — dispara o reset
+
+    assert janela.type_filter.selected() == []
+    assert janela.model.rowCount() == 2  # volta a mostrar tudo
+
+
 def test_ponte_e_render_ficam_prontos(janela):
     """Cobre o NameError que derrubava a abertura do app."""
     assert janela._bridge is not None

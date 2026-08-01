@@ -344,6 +344,11 @@ class AssetGridView(QListView):
         drag.setPixmap(pixmap)
         drag.setHotSpot(pixmap.rect().center())
         drag.exec(supportedActions, Qt.DropAction.CopyAction)
+        # Sem isso, às vezes sobrava uma cópia "presa" na tela no lugar
+        # onde soltou, em vez do card voltar limpo pro lugar de origem
+        # (Fatia 19b) — o QDrag manual não passa pela máquina de estados
+        # de repaint que o startDrag padrão do Qt já cuida sozinho.
+        self.viewport().update()
 
     # ---- receber imagem externa como preview ----
 
@@ -383,7 +388,12 @@ class AssetGridView(QListView):
                 self.asset_preview_dropped.emit(row["id"], origem)
                 event.acceptProposedAction()
             return
-        super().dropEvent(event)
+        # Sem alvo válido dentro da própria grade — o modelo não suporta
+        # reordenar por drop (sem InternalMove), então cair no dropEvent
+        # padrão do Qt aqui era um caminho morto que deixava a view com o
+        # "fantasma" da miniatura presa onde soltou (Fatia 19b).
+        event.ignore()
+        self.viewport().update()
 
     def dragEnterEvent(self, event) -> None:  # noqa: N802
         if self._dropped_image(event.mimeData()) or \

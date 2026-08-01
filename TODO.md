@@ -7,12 +7,12 @@ tela dele.
 
 | | |
 |---|---|
-| Testes | 204 verdes (`pytest -q`) |
+| Testes | 205 verdes (`pytest -q`) |
 | Schema | migrations 001–005 aplicadas (ver SCHEMA.md) |
 | Biblioteca de trabalho | testlib: 750 arquivos → 391 assets → **127 visíveis** (dependências ocultas) |
 | Add-on do Blender | v0.4.0, Blender 5.2 Flatpak |
 
-**Próximo passo: F3 — Fatia 19b (bug do "fantasma" no arrasto) ou Fatia 23 (Batch rename).**
+**Próximo passo: F3 — Fatia 23 (Batch rename).**
 
 ## Como ler este arquivo
 Uma fatia por vez, em branch própria. Cada fatia termina com: pytest verde,
@@ -121,23 +121,26 @@ reindexar, religar pelo menu e ver o asset original (com a mesma
 tag/nota de antes) apontando pro caminho novo, sem sobrar um asset
 fantasma duplicado na grid.
 
-### ☐ Fatia 19b — Bug: "fantasma" preso ao arrastar um asset
-Relatado pelo Rafael com print: arrastar um card na grade às vezes deixa
-uma cópia dele "presa" visualmente no lugar onde o mouse soltou, em vez de
-ele voltar pro lugar de origem (o dado no banco não muda, é só visual).
-**Suspeita já investigada, pronta pra quando entrar esta fatia:**
-`AssetGridView.dropEvent` (`ui/asset_grid.py`) cai em
-`super().dropEvent(event)` quando o drop não tem alvo válido dentro da
-própria grade — caminho morto, já que o modelo não usa
-`InternalMove` (não há reordenar por drop). É provável que esse caminho
-deixe a view num estado de repaint inconsistente. O `startDrag` customizado
-da Fatia 17b (mesmo arquivo) também nunca força `self.viewport().update()`
-depois do `drag.exec(...)`. Fix provável: trocar o fallback por
-`event.ignore()` + `self.viewport().update()`, e forçar o mesmo update ao
-final do `startDrag` customizado.
+### ☑ Fatia 19b — Bug: "fantasma" preso ao arrastar um asset
+Causa confirmada em `ui/asset_grid.py`: `AssetGridView.dropEvent` caía em
+`super().dropEvent(event)` quando o drop não tinha alvo válido dentro da
+própria grade (caminho morto, o modelo não usa `InternalMove`) — trocado
+por `event.ignore()` + `self.viewport().update()`. O `startDrag`
+customizado da Fatia 17b também passou a forçar `self.viewport().update()`
+depois do `drag.exec(...)`.
 **Deu certo quando:** arrastar um asset e soltar em espaço vazio da própria
-grade (ou em qualquer lugar sem soltar de fato) faz o card voltar limpo
-pro lugar de origem, sem nenhuma cópia grudada na tela.
+grade faz o card voltar limpo pro lugar de origem, sem cópia grudada.
+
+### ☑ Fix — Smart Collection "(nenhuma aplicada)" não resetava os filtros
+Relatado pelo Rafael: voltar pro item raiz do painel de Smart Collections
+deixava os filtros da coleção anterior (tipo, nota, etc.) parados, em vez
+de mostrar tudo de novo. `_on_smart_collection_selected` só dava `return`
+quando `smart_id` era `None`; agora chama `_restore_filters({})` — reusa a
+mesma função da Fatia 18, que já cai no "mostrar tudo" quando a chave não
+existe no dicionário.
+**Deu certo quando:** aplicar uma Smart Collection e depois clicar em
+"(nenhuma aplicada)" mostra a biblioteca inteira de novo, sem filtro
+nenhum sobrando.
 
 ### ✕ Decidido — mover asset para outra categoria arrastando
 Avaliado e descartado (2026-08-01): o Rafael confirmou que a Tag/Collection
