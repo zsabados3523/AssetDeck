@@ -99,6 +99,12 @@ class MainWindow(QMainWindow):
             self.res_combo.addItem(label, px)
         self.res_combo.currentIndexChanged.connect(lambda _i: self._apply_filters())
 
+        self.hidden_check = QCheckBox("Mostrar ocultos")
+        self.hidden_check.setToolTip(
+            "Inclui imagens ocultadas por terem virado preview de um modelo"
+        )
+        self.hidden_check.toggled.connect(lambda _c: self._apply_filters())
+
         self.count_label = QLabel()
         self.progress = QProgressBar()
         self.progress.setVisible(False)
@@ -114,6 +120,7 @@ class MainWindow(QMainWindow):
         top.addWidget(self.res_combo)
         top.addWidget(self.subdirs_check)
         top.addWidget(self.group_check)
+        top.addWidget(self.hidden_check)
         top.addWidget(self.count_label)
         top.addWidget(self.progress)
         top.addWidget(self.rescan_btn)
@@ -125,6 +132,7 @@ class MainWindow(QMainWindow):
         self.grid.selectionModel().currentChanged.connect(self._on_selection)
         self.model.dataChanged.connect(self._on_data_changed)
         self.grid.image_dropped.connect(self._on_image_dropped)
+        self.grid.asset_preview_dropped.connect(self._on_asset_preview_dropped)
         # Duplo clique = preview ampliado (NÃO abre o arquivo — pedido do Rafael)
         self.preview_popup = PreviewPopup(self)
         self.grid.doubleClicked.connect(self._open_preview)
@@ -204,6 +212,7 @@ class MainWindow(QMainWindow):
             min_rating=self.rating_combo.currentData(),
             starred_only=self.fav_check.isChecked(),
             min_resolution=self.res_combo.currentData(),
+            include_hidden=self.hidden_check.isChecked(),
         )
         self.refresh_count()
 
@@ -388,6 +397,14 @@ class MainWindow(QMainWindow):
             menu.addAction(f"Substituir tags (colar {n} por cima)",
                            lambda: self._paste_tags(ids, replace=True))
 
+        # Reexibir assets ocultos
+        ocultos = [r for r in selecionados if r.get("hidden")]
+        if ocultos:
+            menu.addAction(
+                f"Reexibir {len(ocultos)} oculto(s)",
+                lambda: self._unhide([r["id"] for r in ocultos]),
+            )
+
         # Agrupamento: só na visão agrupada
         if self.group_check.isChecked():
             menu.addSeparator()
@@ -399,6 +416,12 @@ class MainWindow(QMainWindow):
                 act = menu.addAction(f"Desagrupar ({atual['files_count']} arquivos)")
                 act.triggered.connect(lambda: self._ungroup(atual))
         menu.exec(self.grid.mapToGlobal(pos))
+
+    def _unhide(self, asset_ids: list[int]) -> None:
+        for aid in asset_ids:
+            assets_repo.set_hidden(self._conn, aid, False)
+        self.model.reload()
+        self.statusBar().showMessage(f"{len(asset_ids)} asset(s) reexibidos")
 
     def _copy_tags(self, asset_id: int) -> None:
         self._tag_clipboard = [t["id"] for t in tags_repo.tags_of(self._conn, asset_id)]
@@ -446,6 +469,70 @@ class MainWindow(QMainWindow):
         self._refresh_details_tags()
         self.statusBar().showMessage("Preview definido como capa (imagem copiada — "
                                      "seu arquivo original não é tocado)")
+
+    def _on_asset_preview_dropped(self, target_id: int, source_ids: list) -> None:
+        """Asset de imagem arrastado de dentro da grid sobre um model (Fatia 10b)."""
+        from assetdeck import config
+        from assetdeck.thumbs.preview import can_preview
+
+        alvo = self._conn.execute(
+            "SELECT name, asset_type FROM assets WHERE id = ?", (target_id,)
+        ).fetchone()
+        if alvo is None or alvo["asset_type"] not in ("model", "scene"):
+            self.statusBar().showMessage(
+                "Previews internos só podem ser aplicados a MODELOS (.blend/.fbx/.obj…)"
+            )
+            return
+
+        aplicados: list[int] = []
+        for sid in source_ids:
+            origem = assets_repo.primary_abs_path(self._conn, sid, self._library_root)
+            if origem is None or not can_preview(origem):
+                log.info("Origem %d ignorada (sumida ou sem preview visual).", sid)
+                continue
+            previews_repo.add(self._conn, target_id, origem, config.previews_dir())
+            aplicados.append(sid)
+        if not aplicados:
+            self.statusBar().showMessage(
+                "Nenhuma das origens era uma imagem utilizável como preview."
+            )
+            return
+
+        # Ocultar as imagens de origem? (pergunta, com memória da escolha)
+        cfg = config.load_config()
+        pref = cfg.get("hide_preview_source", "ask")
+        if pref == "ask":
+            from PySide6.QtWidgets import QCheckBox as _QCheck, QMessageBox
+
+            box = QMessageBox(self)
+            box.setWindowTitle("Ocultar preview de origem?")
+            box.setText(
+                f"A(s) imagem(ns) agora são preview de '{alvo['name']}'.\n"
+                f"Deseja OCULTÁ-la(s) da grade? (reversível em 'Mostrar ocultos')"
+            )
+            box.setStandardButtons(
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            )
+            lembrar = _QCheck("Não perguntar de novo (lembrar esta escolha)")
+            box.setCheckBox(lembrar)
+            esconder = box.exec() == QMessageBox.StandardButton.Yes
+            if lembrar.isChecked():
+                cfg["hide_preview_source"] = "always" if esconder else "never"
+                config.save_config(cfg)
+        else:
+            esconder = pref == "always"
+
+        if esconder:
+            for sid in aplicados:
+                assets_repo.set_hidden(self._conn, sid, True)
+
+        self.model.reload()
+        self._refresh_details_tags()
+        sufixo = " (origens ocultadas)" if esconder else ""
+        self.statusBar().showMessage(
+            f"Preview de '{alvo['name']}' definido a partir de "
+            f"{len(aplicados)} asset(s){sufixo}"
+        )
 
     def _on_preview_add(self, asset_id: int) -> None:
         from PySide6.QtWidgets import QFileDialog
