@@ -1,0 +1,423 @@
+/* Folha de estilo do AssetDeck.
+ *
+ * NÃO é um arquivo QSS comum: os "$$nome" são tokens substituídos por
+ * `theme.build_qss()`. Nunca escreva uma cor literal aqui — acrescente um
+ * token em `theme.py`. Um "$$" solto levanta erro na hora (de propósito);
+ * para escrever um cifrão literal, dobre-o como nesta própria frase.
+ *
+ * Duas regras que NÃO podem ser quebradas, medidas no Qt do projeto:
+ *
+ *  1. NÃO estilizar `QListView::item`. Isso joga a pintura da grade para o
+ *     QStyleSheetStyle item a item e mata a rolagem com centenas de assets.
+ *     O visual do card é responsabilidade do delegate (Fatia 27).
+ *  2. NÃO estilizar subcontrole (::drop-down, ::indicator, ::branch) sem
+ *     fornecer a `image:` de reposição — a seta do combo e o quadrinho do
+ *     checkbox somem. Enquanto não houver SVG (Fatia 26), eles ficam com o
+ *     desenho do Fusion, que a paleta já colore corretamente.
+ */
+
+/* ---------------------------------------------------------------- base -- */
+
+QWidget {
+    color: $text;
+    font-size: $font_size;
+}
+
+QMainWindow, QDialog {
+    background-color: $bg;
+}
+
+/* Superfície de fundo da janela. É o widget central que recebe o fundo, e não
+ * o QMainWindow: o QMainWindow tem tratamento próprio de fundo e deu resultado
+ * inconsistente no teste. */
+QWidget#appSurface {
+    background-color: $bg;
+    $bg_image
+}
+
+/* --------------------------------------------------------------- cards -- */
+
+/* O "vidro fosco": preenchimento translúcido + fio de luz na borda.
+ * Toda view (árvore, lista, grade) mora DENTRO de um destes, porque o
+ * viewport de uma view pinta retângulo no canto e vaza por cima de qualquer
+ * border-radius aplicado nela diretamente. */
+QFrame#card {
+    background-color: $surface;
+    border: 1px solid $hairline;
+    border-radius: $radius_panel;
+}
+
+QFrame#cardFlat {
+    background-color: $surface;
+    border: 1px solid $border;
+    border-radius: $radius_card;
+}
+
+/* ---------------------------------------------------------------- texto -- */
+
+QLabel {
+    background: transparent;
+}
+
+QLabel#sectionTitle {
+    color: $text_muted;
+    font-size: $font_size_small;
+    font-weight: 600;
+}
+
+QLabel#title {
+    color: $text;
+    font-size: $font_size_title;
+    font-weight: 600;
+}
+
+QLabel#muted, QLabel#previewInfo {
+    color: $text_muted;
+}
+
+QLabel#multiWarn {
+    color: $warning;
+    font-weight: 600;
+}
+
+QLabel#danger {
+    color: $danger;
+}
+
+QLabel:disabled {
+    color: $text_disabled;
+}
+
+/* -------------------------------------------------------------- campos -- */
+
+QLineEdit, QPlainTextEdit, QTextEdit, QSpinBox, QDoubleSpinBox, QDateEdit {
+    background-color: $field;
+    border: 1px solid $border;
+    border-radius: $radius_control;
+    padding: $pad_m;
+    color: $text;
+    selection-background-color: $accent;
+    selection-color: $on_accent;
+}
+
+QLineEdit:focus, QPlainTextEdit:focus, QTextEdit:focus,
+QSpinBox:focus, QDoubleSpinBox:focus, QDateEdit:focus {
+    border: 1px solid $accent;
+}
+
+QLineEdit:disabled, QPlainTextEdit:disabled, QTextEdit:disabled {
+    color: $text_disabled;
+}
+
+/* -------------------------------------------------------------- botões -- */
+
+QPushButton, QToolButton {
+    background-color: $surface_strong;
+    border: 1px solid $border;
+    border-radius: $radius_control;
+    padding: $pad_m $pad_l;
+    color: $text;
+}
+
+QPushButton:hover, QToolButton:hover {
+    background-color: $surface_hover;
+    border: 1px solid $hairline;
+}
+
+QPushButton:pressed, QToolButton:pressed,
+QPushButton:checked, QToolButton:checked {
+    background-color: $accent_soft;
+    border: 1px solid $accent;
+}
+
+QPushButton:disabled, QToolButton:disabled {
+    color: $text_disabled;
+    background-color: $surface;
+}
+
+/* Só UM botão principal por tela (é o que dá hierarquia). */
+QPushButton#primary {
+    background-color: $accent;
+    border: 1px solid $accent;
+    color: $on_accent;
+    font-weight: 600;
+}
+
+QPushButton#primary:hover {
+    background-color: $accent_hover;
+    border: 1px solid $accent_hover;
+}
+
+QPushButton#primary:pressed {
+    background-color: $accent_press;
+    border: 1px solid $accent_press;
+}
+
+/* Botão sem moldura, para ações discretas (estrelas, ícones do painel). */
+QPushButton#ghost, QToolButton#ghost {
+    background: transparent;
+    border: 1px solid transparent;
+}
+
+QPushButton#ghost:hover, QToolButton#ghost:hover {
+    background-color: $surface_hover;
+    border: 1px solid $hairline;
+}
+
+QCheckBox, QRadioButton {
+    background: transparent;
+    color: $text;
+    spacing: 7px;
+    padding: 2px 0;
+}
+
+QCheckBox:disabled, QRadioButton:disabled {
+    color: $text_disabled;
+}
+
+/* Exceção consciente à regra "não estilizar subcontrole sem repor a image:".
+ * Com a paleta clara, o indicador que o Fusion desenha usa a cor de botão —
+ * quase branco sobre quase branco — e a caixa DESMARCADA fica invisível na
+ * tela. Aqui o estado é legível pelo preenchimento: cheio de petróleo =
+ * marcado, vazio com borda = desmarcado. O "✓" branco por dentro entra na
+ * Fatia 26, junto com o check.svg. */
+QCheckBox::indicator, QRadioButton::indicator {
+    width: 15px;
+    height: 15px;
+    border: 1px solid $border_strong;
+    background-color: #FFFFFF;
+}
+
+QCheckBox::indicator {
+    border-radius: 4px;
+}
+
+QRadioButton::indicator {
+    border-radius: 8px;
+}
+
+QCheckBox::indicator:hover, QRadioButton::indicator:hover {
+    border: 1px solid $accent;
+}
+
+QCheckBox::indicator:checked, QRadioButton::indicator:checked {
+    background-color: $accent;
+    border: 1px solid $accent;
+}
+
+QCheckBox::indicator:disabled, QRadioButton::indicator:disabled {
+    border: 1px solid $border;
+    background-color: $bg_tint;
+}
+
+QComboBox {
+    background-color: $surface_strong;
+    border: 1px solid $border;
+    border-radius: $radius_control;
+    padding: $pad_m $pad_l;
+    color: $text;
+}
+
+QComboBox:hover {
+    background-color: $surface_hover;
+}
+
+QComboBox:focus {
+    border: 1px solid $accent;
+}
+
+/* O popup do combo é uma JANELA separada: não herda o fundo do card e
+ * ficaria branco-padrão sem esta regra. */
+QComboBox QAbstractItemView {
+    background-color: $popover;
+    border: 1px solid $border;
+    border-radius: $radius_control;
+    padding: $pad_s;
+    color: $text;
+    selection-background-color: $accent;
+    selection-color: $on_accent;
+    outline: none;
+}
+
+/* --------------------------------------------------------------- views -- */
+
+/* Fundo transparente porque quem pinta a superfície é o QFrame#card em volta.
+ * `QListView` aparece aqui só para zerar moldura e fundo — nunca com ::item. */
+QTreeView, QTreeWidget, QListView, QListWidget, QTableView, QTableWidget {
+    background: transparent;
+    border: none;
+    color: $text;
+    outline: none;
+    selection-background-color: $accent;
+    selection-color: $on_accent;
+}
+
+QTreeView::item, QListWidget::item, QTableView::item {
+    padding: 4px 6px;
+}
+
+QTreeView::item:hover, QListWidget::item:hover, QTableView::item:hover {
+    background-color: $surface_hover;
+}
+
+QTreeView::item:selected, QListWidget::item:selected, QTableView::item:selected {
+    background-color: $accent;
+    color: $on_accent;
+}
+
+/* Seleção arredondada só onde NÃO há coluna de indicador (as listas).
+ * Na árvore, o indicador de expandir é pintado quadrado pelo estilo e fica um
+ * degrau visível ao lado do item arredondado — medido pixel a pixel. Estilizar
+ * `QTreeView::branch` para corrigir é pior: o Qt volta a pintar a seleção com
+ * o azul padrão dele. Então a árvore usa barra de linha inteira, de propósito. */
+QListWidget::item {
+    border-radius: $radius_control;
+}
+
+QHeaderView::section {
+    background-color: $bg_tint;
+    border: none;
+    border-bottom: 1px solid $border;
+    padding: 6px 8px;
+    color: $text_muted;
+    font-weight: 600;
+}
+
+/* --------------------------------------------------------------- menus -- */
+
+QMenuBar {
+    background: transparent;
+    color: $text;
+}
+
+QMenuBar::item {
+    background: transparent;
+    padding: 6px 10px;
+    border-radius: $radius_control;
+}
+
+QMenuBar::item:selected {
+    background-color: $surface_hover;
+}
+
+QMenu {
+    background-color: $popover;
+    border: 1px solid $border;
+    border-radius: $radius_card;
+    padding: $pad_s;
+    color: $text;
+}
+
+QMenu::item {
+    padding: 6px 22px 6px 12px;
+    border-radius: $radius_control;
+}
+
+QMenu::item:selected {
+    background-color: $accent;
+    color: $on_accent;
+}
+
+QMenu::item:disabled {
+    color: $text_disabled;
+}
+
+QMenu::separator {
+    height: 1px;
+    background-color: $border;
+    margin: 5px 8px;
+}
+
+QToolTip {
+    background-color: $popover;
+    border: 1px solid $border;
+    border-radius: $radius_control;
+    padding: 5px 8px;
+    color: $text;
+}
+
+/* ------------------------------------------------------------- rolagem -- */
+
+QScrollBar:vertical {
+    background: transparent;
+    width: 12px;
+    margin: 0;
+}
+
+QScrollBar:horizontal {
+    background: transparent;
+    height: 12px;
+    margin: 0;
+}
+
+QScrollBar::handle:vertical, QScrollBar::handle:horizontal {
+    background-color: $bg_tint;
+    border-radius: 6px;
+    min-height: 32px;
+    min-width: 32px;
+}
+
+QScrollBar::handle:vertical:hover, QScrollBar::handle:horizontal:hover {
+    background-color: $accent_soft;
+}
+
+QScrollBar::add-line, QScrollBar::sub-line {
+    height: 0;
+    width: 0;
+}
+
+QScrollBar::add-page, QScrollBar::sub-page {
+    background: transparent;
+}
+
+/* ------------------------------------------------------------- diversos -- */
+
+/* Barra fina e SEM texto por dentro: a porcentagem escrita por cima do trecho
+ * preenchido fica com contraste de 2,4:1 contra o petróleo — ilegível. Quem
+ * precisar do número escreve num QLabel ao lado. */
+QProgressBar {
+    background-color: $bg_tint;
+    border: none;
+    border-radius: 5px;
+    min-height: 10px;
+    max-height: 10px;
+    color: $text_muted;
+}
+
+QProgressBar::chunk {
+    background-color: $accent;
+    border-radius: 5px;
+}
+
+QSplitter::handle {
+    background: transparent;
+}
+
+QSplitter::handle:hover {
+    background-color: $accent_soft;
+}
+
+QStatusBar {
+    background: transparent;
+    color: $text_muted;
+}
+
+QStatusBar::item {
+    border: none;
+}
+
+QGroupBox {
+    background: transparent;
+    border: 1px solid $border;
+    border-radius: $radius_card;
+    margin-top: 10px;
+    padding: $pad_l;
+}
+
+QGroupBox::title {
+    subcontrol-origin: margin;
+    left: 10px;
+    padding: 0 5px;
+    color: $text_muted;
+    font-weight: 600;
+}
