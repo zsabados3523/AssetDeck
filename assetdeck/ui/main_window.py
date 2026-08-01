@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
 )
 
 from assetdeck import __version__
+from assetdeck import batch_rename
 from assetdeck.db.repos import assets as assets_repo
 from assetdeck.db.repos import collections as collections_repo
 from assetdeck.db.repos import previews as previews_repo
@@ -33,6 +34,7 @@ from assetdeck.indexer import relocator
 from assetdeck.indexer.scanner import ScanStats
 from assetdeck.thumbs.pipeline import ThumbnailPipeline
 from assetdeck.ui.asset_grid import AssetGridModel, AssetGridView
+from assetdeck.ui.batch_rename_dialog import BatchRenameDialog
 from assetdeck.ui.collection_tree import CollectionTree
 from assetdeck.ui.details_panel import DetailsPanel
 from assetdeck.sidecar import writer as sidecar_writer
@@ -430,6 +432,26 @@ class MainWindow(QMainWindow):
             "('Mostrar ocultos' traz de volta)"
         )
 
+    # ---- batch rename (Fatia 23) — a única exceção ao somente-leitura ----
+
+    def _batch_rename_selected(self, asset_ids: list[int]) -> None:
+        from assetdeck.db.repos import libraries as libraries_repo
+
+        lib_id = libraries_repo.get_or_create(self._conn, self._library_root)
+        dlg = BatchRenameDialog(self._conn, lib_id, asset_ids, self)
+        if not dlg.exec():
+            return
+
+        plano = dlg.get_plan()
+        if not plano:
+            return
+        sucesso, falhas = batch_rename.apply_plan(self._conn, self._library_root, plano)
+        self._reload_all()
+        recado = f"{sucesso} arquivo(s) renomeado(s)"
+        if falhas:
+            recado += f" · {falhas} falharam (ver log)"
+        self.statusBar().showMessage(recado)
+
     # ---- coleções inteligentes / buscas salvas (Fatia 18) ----
 
     def _on_save_smart_collection(self, nome: str) -> None:
@@ -637,6 +659,10 @@ class MainWindow(QMainWindow):
                 f"Remover da coleção atual ({len(ids)})",
                 lambda: self._remove_from_current_collection(ids),
             )
+
+        # Batch rename (Fatia 23) — a única exceção ao somente-leitura
+        menu.addSeparator()
+        menu.addAction("Renomear em lote…", lambda: self._batch_rename_selected(ids))
 
         # Agrupamento: só na visão agrupada
         if self.group_check.isChecked():
