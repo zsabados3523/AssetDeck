@@ -71,17 +71,41 @@ def test_set_cover_troca_a_capa(env):
     assert [p["is_cover"] for p in galeria] == [1, 0]
 
 
-def test_grid_ve_cover_path_so_na_visao_agrupada(env):
+def test_capa_de_modelo_sobrevive_ao_modo_expandido(env):
+    """Bug relatado pelo Rafael: desmarcar 'Agrupar sets PBR' sumia com a
+    capa dos modelos. Só os MAPAS de um set devem perder a capa."""
     conn, _, pdir, externa = env
     aid = _id(conn, "modelo")
     stored = previews_repo.add(conn, aid, externa, pdir)
 
     agrupado = {r["name"]: r for r in assets_repo.list_for_grid(conn)}
     assert agrupado["modelo"]["cover_path"] == str(stored)
-    assert agrupado["textura"]["cover_path"] is None
 
     expandido = {r["name"]: r for r in assets_repo.list_for_grid(conn, expand_sets=True)}
-    assert expandido["modelo"]["cover_path"] is None  # modo expandido: sem capa
+    assert expandido["modelo"]["cover_path"] == str(stored)  # continua lá
+
+
+def test_mapas_de_set_expandido_mostram_o_proprio_conteudo(env, tmp_path):
+    """No modo expandido, cada mapa do set exibe a si mesmo — não a capa."""
+    from assetdeck.db.repos import libraries as libraries_repo
+    from assetdeck.indexer.grouper import apply_grouping
+    from assetdeck.indexer.scanner import scan_library
+
+    conn, root, pdir, externa = env
+    (root / "Tijolo_Color.jpg").write_bytes(b"c" * 40)
+    (root / "Tijolo_Normal.jpg").write_bytes(b"n" * 40)
+    lib_id = libraries_repo.get_or_create(conn, root)
+    scan_library(conn, lib_id, root)
+    apply_grouping(conn, lib_id)
+
+    set_id = conn.execute(
+        "SELECT id FROM assets WHERE asset_type = 'pbr_set' AND deleted_at IS NULL"
+    ).fetchone()["id"]
+    previews_repo.add(conn, set_id, externa, pdir)
+
+    expandido = assets_repo.list_for_grid(conn, expand_sets=True)
+    mapas = [r for r in expandido if r["files_count"] > 1]
+    assert mapas and all(r["cover_path"] is None for r in mapas)
 
 
 def test_soft_delete_tira_da_galeria_mas_preserva_o_arquivo(env):

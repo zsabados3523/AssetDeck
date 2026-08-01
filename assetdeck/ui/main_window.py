@@ -271,7 +271,7 @@ class MainWindow(QMainWindow):
         for aid in alvos:
             assets_repo.set_rating(self._conn, aid, rating)
             sidecar_writer.write_for_asset(self._conn, self._library_root, aid)
-        self.model.reload()  # a estrela/nota aparece na grid
+        self._reload_grid()  # a estrela/nota aparece na grid
         texto = f"{'★' * rating}" if rating else "nota removida"
         sufixo = f" em {len(alvos)} assets" if len(alvos) > 1 else ""
         self.statusBar().showMessage(f"Nota: {texto}{sufixo}")
@@ -285,7 +285,7 @@ class MainWindow(QMainWindow):
         for aid in alvos:
             assets_repo.set_starred(self._conn, aid, starred)
             sidecar_writer.write_for_asset(self._conn, self._library_root, aid)
-        self.model.reload()
+        self._reload_grid()
         sufixo = f" em {len(alvos)} assets" if len(alvos) > 1 else ""
         self.statusBar().showMessage(
             ("★ Favoritado" if starred else "Favorito removido") + sufixo
@@ -331,6 +331,25 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage(
                 "Nota salva no banco; sidecar adiado (arquivo sumido — ver log)"
             )
+
+    def _reload_grid(self) -> None:
+        """Recarrega a grid PRESERVANDO rolagem e seleção.
+
+        Sem isso, anexar um preview jogava a lista de volta ao topo e o
+        Rafael tinha que rolar tudo de novo a cada asset.
+        """
+        barra = self.grid.verticalScrollBar()
+        posicao = barra.value()
+        atual = self.model.row_at(self.grid.currentIndex())
+        asset_id = atual["id"] if atual else None
+
+        self.model.reload()
+
+        if asset_id is not None:
+            idx = self.model.index_of_asset(asset_id)
+            if idx is not None:
+                self.grid.setCurrentIndex(idx)
+        barra.setValue(min(posicao, barra.maximum()))
 
     def refresh_count(self) -> int:
         total = assets_repo.count_active(self._conn)
@@ -434,7 +453,7 @@ class MainWindow(QMainWindow):
     def _unhide(self, asset_ids: list[int]) -> None:
         for aid in asset_ids:
             assets_repo.set_hidden(self._conn, aid, False)
-        self.model.reload()
+        self._reload_grid()
         self.statusBar().showMessage(f"{len(asset_ids)} asset(s) reexibidos")
 
     def _copy_tags(self, asset_id: int) -> None:
@@ -553,7 +572,7 @@ class MainWindow(QMainWindow):
             log.exception("Falha ao adicionar preview")
             self.statusBar().showMessage(f"Não consegui usar essa imagem: {exc}")
             return
-        self.model.reload()
+        self._reload_grid()
         self._refresh_details_tags()
         self.statusBar().showMessage("Preview definido como capa (imagem copiada — "
                                      "seu arquivo original não é tocado)")
@@ -614,7 +633,7 @@ class MainWindow(QMainWindow):
             for sid in aplicados:
                 assets_repo.set_hidden(self._conn, sid, True)
 
-        self.model.reload()
+        self._reload_grid()
         self._refresh_details_tags()
         sufixo = " (origens ocultadas)" if esconder else ""
         self.statusBar().showMessage(
@@ -634,13 +653,13 @@ class MainWindow(QMainWindow):
 
     def _on_preview_cover(self, preview_id: int) -> None:
         previews_repo.set_cover(self._conn, preview_id)
-        self.model.reload()
+        self._reload_grid()
         self._refresh_details_tags()
         self.statusBar().showMessage("Capa atualizada")
 
     def _on_preview_remove(self, preview_id: int) -> None:
         previews_repo.soft_delete(self._conn, preview_id)
-        self.model.reload()
+        self._reload_grid()
         self._refresh_details_tags()
         self.statusBar().showMessage("Preview removido da galeria")
 

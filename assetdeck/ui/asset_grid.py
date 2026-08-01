@@ -121,10 +121,15 @@ class AssetGridModel(QAbstractListModel):
         ]
         self._pipeline.warmup(items)
 
-    def row_at(self, index: QModelIndex) -> sqlite3.Row | None:
+    def row_at(self, index: QModelIndex):
         if index.isValid() and 0 <= index.row() < len(self._rows):
             return self._rows[index.row()]
         return None
+
+    def index_of_asset(self, asset_id: int) -> QModelIndex | None:
+        """Onde este asset está agora (para restaurar a seleção pós-recarga)."""
+        linha = self._row_by_asset.get(asset_id)
+        return self.index(linha) if linha is not None else None
 
     # ---- API do Qt ----
 
