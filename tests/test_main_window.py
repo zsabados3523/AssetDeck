@@ -40,9 +40,32 @@ def janela(qapp, tmp_path, monkeypatch):
 
 def test_janela_abre_com_todos_os_paineis(janela):
     assert janela.model.rowCount() == 2
-    for atributo in ("grid", "details", "folders", "tags", "collections", "type_filter",
+    for atributo in ("grid", "details", "folders", "tags", "collections",
+                     "smart_collections", "type_filter",
                      "search_box", "deps_check", "hidden_check", "group_check"):
         assert getattr(janela, atributo) is not None
+
+
+def test_smart_collection_salva_e_aplica_filtros(janela):
+    """Ciclo completo pela janela real: marcar filtros, salvar, mudar os
+    filtros para outra coisa e aplicar a coleção inteligente salva."""
+    janela.type_filter.set_selected(["texture"])
+    janela._apply_filters()
+    assert janela.model.rowCount() == 1  # só a textura.jpg
+
+    janela._on_save_smart_collection("Só texturas")
+
+    janela.type_filter.set_selected(["model"])
+    janela._apply_filters()
+    assert janela.model.rowCount() == 1  # só o modelo.blend
+
+    salva = janela.smart_collections.item(1)  # índice 0 é "(nenhuma aplicada)"
+    assert salva.text() == "Só texturas"
+    janela.smart_collections.setCurrentItem(salva)
+
+    assert janela.type_filter.selected() == ["texture"]
+    assert janela.model.rowCount() == 1
+    assert janela.model.row_at(janela.model.index(0))["name"] == "textura"
 
 
 def test_ponte_e_render_ficam_prontos(janela):

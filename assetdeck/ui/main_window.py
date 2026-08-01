@@ -25,6 +25,7 @@ from assetdeck import __version__
 from assetdeck.db.repos import assets as assets_repo
 from assetdeck.db.repos import collections as collections_repo
 from assetdeck.db.repos import previews as previews_repo
+from assetdeck.db.repos import smart_collections as smart_collections_repo
 from assetdeck.db.repos import tags as tags_repo
 from assetdeck.indexer.scanner import ScanStats
 from assetdeck.thumbs.pipeline import ThumbnailPipeline
@@ -35,6 +36,7 @@ from assetdeck.sidecar import writer as sidecar_writer
 from assetdeck.ui.folder_tree import FolderTree
 from assetdeck.ui.preview_popup import PreviewPopup
 from assetdeck.ui.scan_worker import ScanController
+from assetdeck.ui.smart_collection_panel import SmartCollectionPanel
 from assetdeck.ui.tag_dialogs import QuickTagDialog
 from assetdeck.ui.tag_tree import TagTree
 from assetdeck.ui.type_filter import TypeFilter
@@ -167,11 +169,19 @@ class MainWindow(QMainWindow):
         self.collections.assets_dropped.connect(self._on_assets_dropped_to_collection)
         self.collections.structure_changed.connect(self._on_collections_structure_changed)
 
+        self.smart_collections = SmartCollectionPanel()
+        self.smart_collections.smart_selected.connect(self._on_smart_collection_selected)
+        self.smart_collections.save_requested.connect(self._on_save_smart_collection)
+        self.smart_collections.structure_changed.connect(
+            lambda: self.smart_collections.reload(self._conn)
+        )
+
         left = QSplitter(Qt.Orientation.Vertical)
         left.addWidget(self.folders)
         left.addWidget(self.tags)
         left.addWidget(self.collections)
-        left.setSizes([320, 240, 240])
+        left.addWidget(self.smart_collections)
+        left.setSizes([280, 200, 200, 200])
         left.setMinimumWidth(180)
         left.setMaximumWidth(320)
 
@@ -219,14 +229,18 @@ class MainWindow(QMainWindow):
         self.folders.reload(self._conn)
         self.tags.reload(self._conn)
         self.collections.reload(self._conn)
+        self.smart_collections.reload(self._conn)
         self.type_filter.reload(assets_repo.distinct_types(self._conn))
         self.model.reload()
         self._apply_filters()
 
-    def _apply_filters(self) -> None:
+    def _current_filters_dict(self) -> dict:
+        """O dicionário de filtros ativos — o mesmo que `list_for_grid`
+        aceita. Usado para consultar a grid E para salvar uma Smart
+        Collection (Fatia 18)."""
         current = self.folders.currentItem()
         dir_prefix = current.data(0, 32) if current else ""
-        self.model.set_filters(
+        return dict(
             search=self.search_box.text().strip(),
             asset_types=self.type_filter.selected(),
             dir_prefix=dir_prefix,
@@ -239,6 +253,9 @@ class MainWindow(QMainWindow):
             include_dependencies=self.deps_check.isChecked(),
             collection_id=self.collections.current_collection_id(),
         )
+
+    def _apply_filters(self) -> None:
+        self.model.set_filters(**self._current_filters_dict())
         self.refresh_count()
 
     # ---- tags ----
@@ -329,6 +346,44 @@ class MainWindow(QMainWindow):
             collections_repo.remove_item(self._conn, collection_id, aid)
         self._apply_filters()
         self.statusBar().showMessage(f"{len(asset_ids)} asset(s) removidos da coleção")
+
+    # ---- coleções inteligentes / buscas salvas (Fatia 18) ----
+
+    def _on_save_smart_collection(self, nome: str) -> None:
+        smart_collections_repo.create(self._conn, nome, self._current_filters_dict())
+        self.smart_collections.reload(self._conn)
+        self.statusBar().showMessage(f"Coleção inteligente '{nome}' salva")
+
+    def _on_smart_collection_selected(self, smart_id) -> None:
+        if smart_id is None:
+            return
+        registro = smart_collections_repo.get(self._conn, smart_id)
+        if registro is None:
+            return
+        self._restore_filters(registro["query"])
+        self.statusBar().showMessage(f"Coleção inteligente '{registro['name']}' aplicada")
+
+    def _restore_filters(self, query: dict) -> None:
+        """Reescreve os widgets de filtro a partir de uma query salva e
+        reaplica — a partir daí, a reatividade que já existe (nota, tags,
+        reindexação) mantém a visão sempre recalculada."""
+        self.search_box.setText(query.get("search") or "")
+        self.type_filter.set_selected(query.get("asset_types") or [])
+        self.subdirs_check.setChecked(bool(query.get("include_subdirs", True)))
+        self._set_combo_value(self.rating_combo, query.get("min_rating"))
+        self.fav_check.setChecked(bool(query.get("starred_only")))
+        self._set_combo_value(self.res_combo, query.get("min_resolution"))
+        self.hidden_check.setChecked(bool(query.get("include_hidden")))
+        self.deps_check.setChecked(bool(query.get("include_dependencies")))
+        self.folders.select(query.get("dir_prefix") or "")
+        self.tags.select(query.get("tag_id"))
+        self.collections.select(query.get("collection_id"))
+        self._apply_filters()
+
+    @staticmethod
+    def _set_combo_value(combo, value) -> None:
+        idx = combo.findData(value)
+        combo.setCurrentIndex(idx if idx >= 0 else 0)
 
     def _selected_asset_ids(self) -> list[int]:
         rows = [self.model.row_at(i)

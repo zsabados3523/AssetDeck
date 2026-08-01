@@ -6,7 +6,7 @@ import logging
 import sqlite3
 
 from PySide6.QtCore import Signal
-from PySide6.QtWidgets import QTreeWidget, QTreeWidgetItem
+from PySide6.QtWidgets import QTreeWidget, QTreeWidgetItem, QTreeWidgetItemIterator
 
 log = logging.getLogger(__name__)
 
@@ -59,3 +59,16 @@ class FolderTree(QTreeWidget):
     def _on_current(self, current: QTreeWidgetItem | None, _prev) -> None:
         if current is not None:
             self.dir_selected.emit(current.data(0, _DIR_ROLE))
+
+    def select(self, dir_prefix: str) -> None:
+        """Seleciona a pasta pelo caminho salvo (ex.: ao aplicar uma Smart
+        Collection). Não emite dir_selected — quem chama reaplica o filtro."""
+        self.blockSignals(True)
+        it = QTreeWidgetItemIterator(self)
+        while it.value():
+            item = it.value()
+            if item.data(0, _DIR_ROLE) == dir_prefix:
+                self.setCurrentItem(item)
+                break
+            it += 1
+        self.blockSignals(False)

@@ -57,6 +57,16 @@ class TypeFilter(QToolButton):
         """Tipos marcados; lista vazia significa 'todos'."""
         return [t for t, cb in self._checks.items() if cb.isChecked()]
 
+    def set_selected(self, types: list[str]) -> None:
+        """Restaura uma seleção (ex.: ao aplicar uma Smart Collection salva).
+        Não emite 'changed' — quem chama decide quando reaplicar o filtro."""
+        alvo = set(types)
+        for t, cb in self._checks.items():
+            cb.blockSignals(True)
+            cb.setChecked(t in alvo)
+            cb.blockSignals(False)
+        self._update_label()
+
     def _on_toggle(self, _checked: bool) -> None:
         self._update_label()
         self.changed.emit()

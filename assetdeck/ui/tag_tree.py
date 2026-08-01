@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QTreeWidget,
     QTreeWidgetItem,
+    QTreeWidgetItemIterator,
 )
 
 from assetdeck.db.repos import tags as tags_repo
@@ -78,6 +79,19 @@ class TagTree(QTreeWidget):
     def _on_current(self, current: QTreeWidgetItem | None, _prev) -> None:
         if current is not None:
             self.tag_selected.emit(current.data(0, _TAG_ROLE))
+
+    def select(self, tag_id: int | None) -> None:
+        """Seleciona a tag pelo id salvo (ex.: ao aplicar uma Smart
+        Collection). Não emite tag_selected — quem chama reaplica o filtro."""
+        self.blockSignals(True)
+        it = QTreeWidgetItemIterator(self)
+        while it.value():
+            item = it.value()
+            if item.data(0, _TAG_ROLE) == tag_id:
+                self.setCurrentItem(item)
+                break
+            it += 1
+        self.blockSignals(False)
 
     # ---- drag-and-drop de assets ----
 
