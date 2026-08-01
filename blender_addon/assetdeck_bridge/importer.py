@@ -30,6 +30,25 @@ def _conteudo(filepath: str) -> dict[str, list[str]]:
     return achado
 
 
+def _objeto_sob_o_mouse(context, event):
+    """Objeto que está debaixo do cursor (para 'Append & Place' de material)."""
+    if event is None or context.area is None or context.area.type != "VIEW_3D":
+        return None
+    try:
+        from bpy_extras import view3d_utils
+
+        region, rv3d = context.region, context.region_data
+        coord = (event.mouse_region_x, event.mouse_region_y)
+        origem = view3d_utils.region_2d_to_origin_3d(region, rv3d, coord)
+        direcao = view3d_utils.region_2d_to_vector_3d(region, rv3d, coord)
+        achou, _loc, _nor, _idx, obj, _m = context.scene.ray_cast(
+            context.view_layer.depsgraph, origem, direcao
+        )
+        return obj if achou else None
+    except Exception:
+        return None
+
+
 def _ponto_do_mouse(context, event):
     """Coordenada 3D sob o cursor (plano z=0), ou None fora da viewport."""
     if event is None or context.area is None or context.area.type != "VIEW_3D":
@@ -62,6 +81,7 @@ class ASSETDECK_OT_import_blend(Operator):
 
     def invoke(self, context, event):
         self._ponto = _ponto_do_mouse(context, event)
+        self._sob_o_mouse = _objeto_sob_o_mouse(context, event)
         return self.execute(context)
 
     def execute(self, context):
@@ -99,19 +119,26 @@ class ASSETDECK_OT_import_blend(Operator):
 
     def _aplicar_materiais(self, context, verbo: str) -> set[str]:
         mats = self._carregados
-        alvos = [o for o in context.selected_objects if hasattr(o.data, "materials")]
+        # No modo "& Place", o alvo é o objeto sob o cursor — é onde você
+        # soltou. Sem ele (ou fora do modo), valem os selecionados.
+        sob = getattr(self, "_sob_o_mouse", None) if self.place else None
+        if sob is not None and hasattr(sob.data, "materials"):
+            alvos = [sob]
+        else:
+            alvos = [o for o in context.selected_objects
+                     if hasattr(o.data, "materials")]
         if not alvos:
             self.report({"INFO"},
                         f"{verbo}: {len(mats)} material(is) carregado(s). "
-                        "Selecione objetos para aplicar.")
+                        "Selecione um objeto (ou solte sobre ele) para aplicar.")
             return {"FINISHED"}
         for obj in alvos:
             if obj.data.materials:
                 obj.data.materials[0] = mats[0]
             else:
                 obj.data.materials.append(mats[0])
-        self.report({"INFO"},
-                    f"{verbo}: '{mats[0].name}' em {len(alvos)} objeto(s)")
+        onde = f"'{alvos[0].name}'" if len(alvos) == 1 else f"{len(alvos)} objetos"
+        self.report({"INFO"}, f"{verbo}: '{mats[0].name}' em {onde}")
         return {"FINISHED"}
 
     def _trazer_para_a_cena(self, context, verbo: str) -> set[str]:
@@ -150,6 +177,55 @@ class ASSETDECK_OT_import_blend(Operator):
         return {"FINISHED"}
 
 
+ICONES = {
+    "objects": "OBJECT_DATA",
+    "materials": "MATERIAL",
+    "collections": "OUTLINER_COLLECTION",
+}
+
+
+class _SubmenuBase(Menu):
+    """Submenu com Objects / Materials / Collections para um modo."""
+
+    link = False
+    place = False
+
+    def draw(self, context):
+        caminho = context.window_manager.assetdeck_drop_path
+        for tipo, rotulo, _desc in TIPOS:
+            op = self.layout.operator(
+                "assetdeck.import_blend", text=rotulo, icon=ICONES[tipo]
+            )
+            op.filepath = caminho
+            op.datablock = tipo
+            op.link = self.link
+            op.place = self.place
+
+
+class ASSETDECK_MT_link_place(_SubmenuBase):
+    bl_idname = "ASSETDECK_MT_link_place"
+    bl_label = "Link & Place"
+    link, place = True, True
+
+
+class ASSETDECK_MT_append_place(_SubmenuBase):
+    bl_idname = "ASSETDECK_MT_append_place"
+    bl_label = "Append & Place"
+    link, place = False, True
+
+
+class ASSETDECK_MT_link(_SubmenuBase):
+    bl_idname = "ASSETDECK_MT_link"
+    bl_label = "Link"
+    link, place = True, False
+
+
+class ASSETDECK_MT_append(_SubmenuBase):
+    bl_idname = "ASSETDECK_MT_append"
+    bl_label = "Append"
+    link, place = False, False
+
+
 class ASSETDECK_MT_drop_blend(Menu):
     bl_idname = "ASSETDECK_MT_drop_blend"
     bl_label = "AssetDeck"
@@ -159,25 +235,15 @@ class ASSETDECK_MT_drop_blend(Menu):
         layout = self.layout
         layout.label(text=os.path.basename(caminho), icon="BLENDER")
         layout.separator()
-
-        def item(rotulo, tipo, link, place, icone):
-            op = layout.operator("assetdeck.import_blend", text=rotulo, icon=icone)
-            op.filepath = caminho
-            op.datablock = tipo
-            op.link = link
-            op.place = place
-
-        item("Append & Place", "objects", False, True, "OBJECT_DATA")
-        item("Link & Place", "objects", True, True, "LINKED")
+        # Cada entrada abre um submenu com Objects / Materials / Collections
+        layout.menu(ASSETDECK_MT_link_place.bl_idname, icon="LINKED")
+        layout.menu(ASSETDECK_MT_append_place.bl_idname, icon="APPEND_BLEND")
         layout.separator()
-        item("Append Objects", "objects", False, False, "OBJECT_DATA")
-        item("Link Objects", "objects", True, False, "LINKED")
+        layout.menu(ASSETDECK_MT_link.bl_idname, icon="LINKED")
+        layout.menu(ASSETDECK_MT_append.bl_idname, icon="APPEND_BLEND")
         layout.separator()
-        item("Append Materials", "materials", False, False, "MATERIAL")
-        item("Link Materials", "materials", True, False, "MATERIAL")
-        layout.separator()
-        item("Append Collections", "collections", False, False, "OUTLINER_COLLECTION")
-        item("Link Collections", "collections", True, False, "OUTLINER_COLLECTION")
+        op = layout.operator("wm.open_mainfile", text="Open", icon="FILE_FOLDER")
+        op.filepath = caminho
 
 
 class ASSETDECK_OT_drop_blend(Operator):
@@ -217,7 +283,10 @@ class ASSETDECK_FH_blend(FileHandler):
 
 
 CLASSES = (
-    ASSETDECK_OT_import_blend, ASSETDECK_MT_drop_blend,
+    ASSETDECK_OT_import_blend,
+    ASSETDECK_MT_link_place, ASSETDECK_MT_append_place,
+    ASSETDECK_MT_link, ASSETDECK_MT_append,
+    ASSETDECK_MT_drop_blend,
     ASSETDECK_OT_drop_blend, ASSETDECK_FH_blend,
 )
 
