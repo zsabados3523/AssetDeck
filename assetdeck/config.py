@@ -21,6 +21,9 @@ APP_NAME = "assetdeck"
 DEFAULTS = {
     "library_root": "/home/rafael/00 - PROJETOS/assetdeck-testlib",
     "backup_keep": 14,  # quantos backups diários do .db manter
+    # Ao usar uma imagem da biblioteca como preview de um modelo:
+    # "ask" pergunta se oculta a imagem; "always"/"never" lembram a escolha
+    "hide_preview_source": "ask",
 }
 
 
@@ -103,3 +106,13 @@ def load_config() -> dict:
     # Completa chaves que faltarem (config antigo + padrões novos)
     merged = {**DEFAULTS, **cfg}
     return merged
+
+
+def save_config(cfg: dict) -> None:
+    """Regrava o config.json (escrita atômica)."""
+    path = config_file()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(f"config.json.{os.getpid()}.tmp")
+    tmp.write_text(json.dumps(cfg, indent=2, ensure_ascii=False), encoding="utf-8")
+    tmp.replace(path)
+    log.info("config.json atualizado.")

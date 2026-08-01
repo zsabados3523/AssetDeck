@@ -24,6 +24,7 @@ def list_for_grid(
     min_rating: int | None = None,
     starred_only: bool = False,
     min_resolution: int | None = None,
+    include_hidden: bool = False,
 ) -> list[dict]:
     """Assets para a grid (asset + arquivo principal), com filtros combináveis.
 
@@ -43,7 +44,7 @@ def list_for_grid(
                     " AND p.is_cover = 1 AND p.deleted_at IS NULL LIMIT 1)"
                     " AS cover_path")
     sql = f"""SELECT a.id, a.uuid, a.name, a.asset_type, a.notes,
-                    a.rating, a.starred,
+                    a.rating, a.starred, a.hidden,
                     f.rel_path, f.size_bytes, f.content_hash, f.missing_since,
                     f.width, f.height,
                     {cover_select},
@@ -53,6 +54,9 @@ def list_for_grid(
              {join_files}
              WHERE a.deleted_at IS NULL AND f.deleted_at IS NULL"""
     params: list = []
+
+    if not include_hidden:
+        sql += " AND a.hidden = 0"
 
     match = _fts_query(search)
     if match:
@@ -139,6 +143,31 @@ def set_starred(conn: sqlite3.Connection, asset_id: int, starred: bool) -> None:
         (1 if starred else 0, datetime.now(timezone.utc).isoformat(), asset_id),
     )
     conn.commit()
+
+
+def set_hidden(conn: sqlite3.Connection, asset_id: int, hidden: bool) -> None:
+    """Oculta/reexibe na grade (não é apagar: reversível a qualquer momento)."""
+    from datetime import datetime, timezone
+
+    conn.execute(
+        "UPDATE assets SET hidden = ?, updated_at = ? WHERE id = ?",
+        (1 if hidden else 0, datetime.now(timezone.utc).isoformat(), asset_id),
+    )
+    conn.commit()
+
+
+def primary_abs_path(conn: sqlite3.Connection, asset_id: int, library_root) -> "Path | None":
+    """Caminho absoluto do arquivo principal do asset (None se sumido)."""
+    from pathlib import Path
+
+    row = conn.execute(
+        """SELECT f.rel_path, f.missing_since FROM files f
+           WHERE f.asset_id = ? AND f.is_primary = 1 AND f.deleted_at IS NULL""",
+        (asset_id,),
+    ).fetchone()
+    if row is None or row["missing_since"] is not None:
+        return None
+    return Path(library_root) / row["rel_path"]
 
 
 def set_notes(conn: sqlite3.Connection, asset_id: int, notes: str) -> None:

@@ -57,6 +57,7 @@ class AssetGridModel(QAbstractListModel):
         self._min_rating: int | None = None       # Fatia 9
         self._starred_only: bool = False
         self._min_resolution: int | None = None
+        self._include_hidden: bool = False        # Fatia 10b
         QPixmapCache.setCacheLimit(128 * 1024)  # 128MB de thumbs em RAM
 
     # ---- dados ----
@@ -65,7 +66,8 @@ class AssetGridModel(QAbstractListModel):
                     dir_prefix: str | None = None, include_subdirs: bool = True,
                     tag_id: int | None = None, min_rating: int | None = None,
                     starred_only: bool = False,
-                    min_resolution: int | None = None) -> None:
+                    min_resolution: int | None = None,
+                    include_hidden: bool = False) -> None:
         self._search = search or None
         self._asset_types = asset_types or []
         self._dir_prefix = dir_prefix or None
@@ -74,6 +76,7 @@ class AssetGridModel(QAbstractListModel):
         self._min_rating = min_rating
         self._starred_only = starred_only
         self._min_resolution = min_resolution
+        self._include_hidden = include_hidden
         self._requery()
 
     def set_expand_sets(self, expand: bool) -> None:
@@ -96,6 +99,7 @@ class AssetGridModel(QAbstractListModel):
             expand_sets=self._expand_sets, tag_id=self._tag_id,
             min_rating=self._min_rating, starred_only=self._starred_only,
             min_resolution=self._min_resolution,
+            include_hidden=self._include_hidden,
         )
         self._row_by_asset = {r["id"]: i for i, r in enumerate(self._rows)}
         self.endResetModel()
@@ -128,7 +132,8 @@ class AssetGridModel(QAbstractListModel):
         if row is None:
             return None
         if role == Qt.ItemDataRole.DisplayRole:
-            return f"★ {row['name']}" if row["starred"] else row["name"]
+            nome = f"★ {row['name']}" if row["starred"] else row["name"]
+            return f"[oculto] {nome}" if row.get("hidden") else nome
         if role == Qt.ItemDataRole.DecorationRole:
             return self._pixmap_for(row)
         if role == Qt.ItemDataRole.ToolTipRole:
@@ -207,6 +212,8 @@ class AssetGridModel(QAbstractListModel):
 class AssetGridView(QListView):
     # Imagem externa solta sobre um card → vira preview do asset (Fatia 10)
     image_dropped = Signal(int, str)  # asset_id, caminho local da imagem
+    # Asset de imagem arrastado DE DENTRO da grid sobre um model (Fatia 10b)
+    asset_preview_dropped = Signal(int, list)  # alvo, [asset_ids de origem]
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -246,24 +253,39 @@ class AssetGridView(QListView):
                     return p
         return None
 
+    def dropEvent(self, event) -> None:  # noqa: N802
+        index = self.indexAt(event.position().toPoint())
+        row = self.model().row_at(index) if index.isValid() else None
+
+        # Caso 1: imagem externa (do gerenciador de arquivos)
+        path = self._dropped_image(event.mimeData())
+        if path is not None:
+            if row is not None:
+                self.image_dropped.emit(row["id"], path)
+                event.acceptProposedAction()
+            return
+
+        # Caso 2: asset(s) da própria grid soltos sobre um model
+        if event.mimeData().hasFormat(MIME_ASSETS) and row is not None:
+            origem = [int(x) for x in
+                      bytes(event.mimeData().data(MIME_ASSETS)).decode().split(",") if x]
+            origem = [i for i in origem if i != row["id"]]  # não sobre si mesmo
+            if origem:
+                self.asset_preview_dropped.emit(row["id"], origem)
+                event.acceptProposedAction()
+            return
+        super().dropEvent(event)
+
     def dragEnterEvent(self, event) -> None:  # noqa: N802
-        if self._dropped_image(event.mimeData()):
+        if self._dropped_image(event.mimeData()) or \
+                event.mimeData().hasFormat(MIME_ASSETS):
             event.acceptProposedAction()
         else:
             super().dragEnterEvent(event)
 
     def dragMoveEvent(self, event) -> None:  # noqa: N802
-        if self._dropped_image(event.mimeData()):
+        if self._dropped_image(event.mimeData()) or \
+                event.mimeData().hasFormat(MIME_ASSETS):
             event.acceptProposedAction()
         else:
             super().dragMoveEvent(event)
-
-    def dropEvent(self, event) -> None:  # noqa: N802
-        path = self._dropped_image(event.mimeData())
-        if path is None:
-            return super().dropEvent(event)
-        index = self.indexAt(event.position().toPoint())
-        row = self.model().row_at(index) if index.isValid() else None
-        if row is not None:
-            self.image_dropped.emit(row["id"], path)
-            event.acceptProposedAction()

@@ -98,6 +98,51 @@ def test_soft_delete_tira_da_galeria_mas_preserva_o_arquivo(env):
     assert modelo["cover_path"] is None  # a grid volta à thumb normal
 
 
+def test_ocultar_asset_some_da_grid_e_reexibir_volta(env):
+    """Fatia 10b: imagem que virou preview de model pode ser ocultada."""
+    conn, _, _, _ = env
+    aid = _id(conn, "textura")
+
+    assets_repo.set_hidden(conn, aid, True)
+    nomes = {r["name"] for r in assets_repo.list_for_grid(conn)}
+    assert "textura" not in nomes                     # sumiu da visão padrão
+
+    com_ocultos = {r["name"] for r in assets_repo.list_for_grid(conn, include_hidden=True)}
+    assert "textura" in com_ocultos                   # 'Mostrar ocultos' acha
+
+    assets_repo.set_hidden(conn, aid, False)
+    nomes = {r["name"] for r in assets_repo.list_for_grid(conn)}
+    assert "textura" in nomes                         # reexibido
+
+
+def test_preview_interno_a_partir_de_outro_asset(env):
+    """O fluxo da 10b em nível de repositório: imagem da biblioteca vira
+    preview do model, e a origem continua existindo (oculta ou não)."""
+    conn, root, pdir, _ = env
+    modelo = _id(conn, "modelo")
+    origem = assets_repo.primary_abs_path(conn, _id(conn, "textura"), root)
+
+    stored = previews_repo.add(conn, modelo, origem, pdir)
+
+    assert stored.exists()
+    linha = next(r for r in assets_repo.list_for_grid(conn) if r["name"] == "modelo")
+    assert linha["cover_path"] == str(stored)
+    assert origem.exists()  # arquivo da biblioteca intocado
+
+
+def test_config_lembra_escolha_de_ocultar(tmp_path, monkeypatch):
+    from assetdeck import config
+
+    monkeypatch.setenv("ASSETDECK_CONFIG_DIR", str(tmp_path))
+    cfg = config.load_config()
+    assert cfg["hide_preview_source"] == "ask"
+
+    cfg["hide_preview_source"] = "always"
+    config.save_config(cfg)
+
+    assert config.load_config()["hide_preview_source"] == "always"
+
+
 def test_add_de_arquivo_inexistente_da_erro_legivel(env):
     conn, _, pdir, _ = env
     with pytest.raises(FileNotFoundError):
