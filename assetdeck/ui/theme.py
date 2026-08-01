@@ -44,14 +44,18 @@ QSS_FILE = Path(__file__).parent / "theme.qss"
 # cartão BRANCO flutuando sobre ele, com sombra suave e nenhum contorno duro.
 # A cor aparece só em detalhe pequeno (seleção, foco, um botão principal).
 
-BG = "#F2F2F4"          # fundo da janela: cinza claríssimo, sem cor
-BG_TINT = "#E7E7EB"     # variação do fundo (trilho de barra de rolagem, cabeçalho)
+BG = "#FFFFFF"          # fundo da janela: branco puro
+BG_TINT = "#F0F0F2"     # variação do fundo (trilho de barra de rolagem, cabeçalho)
 
-ACCENT = "#1B6B78"      # azul-petróleo, usado com parcimônia
-ACCENT_HOVER = "#217F8E"
-ACCENT_PRESS = "#145560"
+# Monocromático: o "destaque" não é mais uma cor, é um cinza bem escuro. Serve
+# ao botão principal e à ênfase de texto. Cor de verdade sobrou só em dois
+# lugares onde ela CARREGA informação: a cor da tag e o tipo do asset.
+ACCENT = "#2E2E33"
+ACCENT_HOVER = "#3D3D43"
+ACCENT_PRESS = "#1B1B1F"
 ON_ACCENT = "#FFFFFF"
 
+TITLE = "#111216"       # títulos: mais escuros que o corpo, é o que dá hierarquia
 TEXT = "#1F2024"
 TEXT_MUTED = "#6B6C74"
 TEXT_DISABLED = "#A9AAB2"
@@ -60,36 +64,40 @@ WARNING = "#8A5A12"     # substitui o "#b07d2b" que estava inline no details_pan
 DANGER = "#A32D2D"
 
 POPOVER = "#FFFFFF"     # menus e popups são JANELAS separadas: sempre opacos
-BORDER = (0, 0, 0, 0.09)         # contorno quase invisível; a sombra é que separa
+BORDER = (0, 0, 0, 0.09)         # contorno de campo/botão
 BORDER_STRONG = (0, 0, 0, 0.28)  # contorno de controle (caixa de checkbox)
-HAIRLINE = (0, 0, 0, 0.06)       # fio do cartão — cinza levíssimo, não branco
+FOCUS = "#8A8B93"                # foco monocromático: contorno mais escuro
+
+# Seleção monocromática: pastilha de cinza claro com o texto normal por cima.
+SELECTION = (0, 0, 0, 0.065)
+HOVER = (0, 0, 0, 0.035)
 
 # Tints por tipo de asset — o fundo do card quando o asset não tem miniatura.
-# Vieram de `asset_grid.TYPE_COLORS`, que eram cores chapadas e saturadas com
-# texto branco por cima. Aqui são pastilhas claras com texto escuro: numa grade
-# de centenas de cards, o que não tem miniatura precisa recuar, não competir com
-# as texturas reais ao lado. Consumidos pelo delegate da grade (Fatia 27).
+# Vieram de `asset_grid.TYPE_COLORS`. Com o resto da interface monocromática,
+# ESTE é um dos dois lugares onde a cor carrega informação de verdade — então
+# ela tem de ter contraste suficiente para o tipo ser reconhecido de relance,
+# em vez de recuar. Consumidos pelo delegate da grade (Fatia 27).
 TYPE_TINTS = {
-    "texture": "#D8DCE6",
-    "hdri": "#CFDCEF",
-    "model": "#D6DDE4",
-    "material": "#DCD9E7",
-    "image": "#E0DCE2",
-    "video": "#E7D8E2",
-    "lut": "#CFE4DF",
-    "ies": "#E8E0C6",
-    "vector": "#D5E4D6",
-    "psd": "#D6DEE9",
-    "audio": "#E2DAE6",
-    "other": "#DEDEE3",
+    "texture": "#5B6472",
+    "hdri": "#3F5F8F",
+    "model": "#4E6270",
+    "material": "#5D5470",
+    "image": "#6B5F6E",
+    "video": "#7A4E63",
+    "lut": "#2F6E66",
+    "ies": "#7A6A2A",
+    "vector": "#3F6B4A",
+    "psd": "#45566E",
+    "audio": "#63527A",
+    "other": "#5A5A63",
 }
-ON_TYPE_TINT = "#3A3A42"  # texto sobre as pastilhas acima
+ON_TYPE_TINT = "#FFFFFF"  # texto sobre as pastilhas acima
 
 # Variações que o Rafael escolhe na tela (vitrine da Fatia 24).
-# Com fundo cinza-claro e cartão branco não há "vidro fosco" nenhum a simular —
-# não existe nada atrás para filtrar. O que este número regula agora é o quanto
-# o painel é branco puro contra o fundo.
-SURFACE_ALPHA = {"sutil": 0.55, "media": 0.85, "forte": 1.0}
+# Fundo e painel são os DOIS brancos: o que separa um do outro é uma linha de
+# contorno quase invisível mais uma sombra de opacidade baixa. Este número é a
+# opacidade dessa linha — é o único ajuste de "quanto o painel se destaca".
+SEPARATION = {"sutil": 0.05, "media": 0.075, "forte": 0.11}
 RADII = {  # (painel, card, controle)
     "discreto": (14, 12, 9),
     "marcante": (20, 18, 13),
@@ -112,14 +120,14 @@ class Variant:
     """
 
     background: str = "liso"      # liso | grao
-    translucency: str = "media"   # sutil | media | forte
+    separation: str = "media"     # sutil | media | forte (opacidade da linha)
     radius: str = "discreto"      # discreto | marcante
     font: str = "inter"           # inter | sistema
 
     def __post_init__(self) -> None:
         for campo, valor, validos in (
             ("background", self.background, BACKGROUNDS),
-            ("translucency", self.translucency, tuple(SURFACE_ALPHA)),
+            ("separation", self.separation, tuple(SEPARATION)),
             ("radius", self.radius, tuple(RADII)),
             ("font", self.font, tuple(FONTS)),
         ):
@@ -246,22 +254,23 @@ def background_tile_path(variant: Variant = DEFAULT) -> Path | None:
 # Tokens e QSS
 # --------------------------------------------------------------------------
 
-def surface_alpha(variant: Variant = DEFAULT) -> float:
-    return SURFACE_ALPHA[variant.translucency]
+def separation_alpha(variant: Variant = DEFAULT) -> float:
+    """Opacidade da linha que separa o painel do fundo (ambos brancos)."""
+    return SEPARATION[variant.separation]
 
 
 def surface_solid(variant: Variant = DEFAULT) -> str:
-    """Cor OPACA equivalente ao painel translúcido sobre o fundo.
+    """Cor do painel. Branco — igual ao fundo, por decisão do Rafael.
 
-    É o que a tela realmente mostra — e portanto é contra ela que o contraste
-    do texto tem de ser medido.
+    Continua existindo como função porque é contra esta cor que o contraste do
+    texto é medido, e porque o dia em que o painel deixar de ser branco puro é
+    aqui que muda.
     """
-    return blend((255, 255, 255, surface_alpha(variant)), BG)
+    return BG
 
 
 def build_tokens(variant: Variant = DEFAULT) -> dict[str, str]:
     """Todos os `$nome` que o theme.qss pode usar."""
-    alfa = surface_alpha(variant)
     raio_painel, raio_card, raio_controle = RADII[variant.radius]
     familia = FONTS[variant.font]
 
@@ -276,22 +285,23 @@ def build_tokens(variant: Variant = DEFAULT) -> dict[str, str]:
         "bg_tint": BG_TINT,
         "bg_image": bg_image,
 
-        "surface": rgba_css((255, 255, 255, alfa)),
-        "surface_strong": rgba_css((255, 255, 255, min(1.0, alfa + 0.18))),
-        "surface_hover": rgba_css((255, 255, 255, min(1.0, alfa + 0.30))),
-        "field": rgba_css((255, 255, 255, min(1.0, alfa + 0.24))),
+        "surface": BG,
+        "surface_hover": rgba_css(HOVER),
+        "selection": rgba_css(SELECTION),
+        "field": BG,
         "popover": POPOVER,
 
         "border": rgba_css(BORDER),
         "border_strong": rgba_css(BORDER_STRONG),
-        "hairline": rgba_css(HAIRLINE),
+        "hairline": rgba_css((0, 0, 0, separation_alpha(variant))),
+        "focus": FOCUS,
 
         "accent": ACCENT,
         "accent_hover": ACCENT_HOVER,
         "accent_press": ACCENT_PRESS,
-        "accent_soft": rgba_css((*hex_to_rgb(ACCENT), 0.14)),
         "on_accent": ON_ACCENT,
 
+        "title": TITLE,
         "text": TEXT,
         "text_muted": TEXT_MUTED,
         "text_disabled": TEXT_DISABLED,
@@ -432,6 +442,6 @@ def apply_theme(app, variant: Variant = DEFAULT) -> None:
     app.setPalette(build_palette(variant))
     app.setStyleSheet(build_qss(variant))
     log.info(
-        "Tema aplicado (fundo=%s, translucidez=%s, cantos=%s, fonte=%s).",
-        variant.background, variant.translucency, variant.radius, variant.font,
+        "Tema aplicado (fundo=%s, separação=%s, cantos=%s, fonte=%s).",
+        variant.background, variant.separation, variant.radius, variant.font,
     )

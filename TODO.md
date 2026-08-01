@@ -286,10 +286,12 @@ aponta na tela qual fundo, translucidez, raio e fonte valem. 23 testes novos
 (239 na suíte), incluindo teste de PIXEL — o Qt descarta regra de QSS com erro
 de sintaxe em silêncio, então só ler a cor do pixel prova que a folha pegou.
 
-### ☐ Fatia 25 — Aplicar o tema à janela principal
-### ☐ Fatia 26 — Ícones SVG (estrelas, lupa, ✓ do checkbox, chevron)
-### ☐ Fatia 27 — Delegate dos cards da grade
-### ☐ Fatia 28 — Acabamento: diálogos, popup, barra de filtros
+### Fatias 25 a 30 — ver **REDESIGN.md**
+O plano detalhado do resto do redesign saiu deste arquivo e virou um documento
+próprio (`REDESIGN.md`), escrito para ser executado numa sessão futura sem
+redescobrir nada: 25 aplicar o tema · 26 ícones SVG · 27 delegate dos cards ·
+28 reorganização estilo Connecter · 29 tags com ícone (**mexe no banco, precisa
+de autorização**) · 30 acabamento.
 
 ### ☐ Redesign visual — tema mais estiloso e translúcido
 Hoje o app usa a aparência padrão do Qt (cinza, sem estilo). Objetivo: um

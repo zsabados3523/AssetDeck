@@ -31,3 +31,4 @@ Rafael usa o app desktop, não o terminal — execute os comandos você mesmo.
 - PROJECT.md — visão, decisões e arquitetura de módulos.
 - SCHEMA.md — modelo de dados. Fonte da verdade.
 - TODO.md — roadmap e estado atual.
+- REDESIGN.md — plano do redesign visual (F4), fatias 25 a 30.
