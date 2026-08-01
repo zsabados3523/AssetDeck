@@ -7,12 +7,15 @@ tela dele.
 
 | | |
 |---|---|
-| Testes | 204 verdes (`pytest -q`) |
+| Testes | 214 verdes (`pytest -q`) |
 | Schema | migrations 001–005 aplicadas (ver SCHEMA.md) |
 | Biblioteca de trabalho | testlib: 750 arquivos → 391 assets → **127 visíveis** (dependências ocultas) |
 | Add-on do Blender | v0.4.0, Blender 5.2 Flatpak |
 
-**Próximo passo: F3 — Fatia 19b (bug do "fantasma" no arrasto) ou Fatia 23 (Batch rename).**
+**F3 completa** (Fatias 17–23 + fixes da 17b/19b) — aguardando o Rafael
+confirmar na tela `fatia-19b-drag-ghost-fix` e `fatia-23-batch-rename`
+antes do merge de cada uma. Depois disso: F4 (opcional) ou o Rafael decidir
+os próximos passos.
 
 ## Como ler este arquivo
 Uma fatia por vez, em branch própria. Cada fatia termina com: pytest verde,
@@ -189,9 +192,21 @@ soft-deleted em vez de tentar inserir de novo.
 trocar de asset e voltar (valor ficou só naquele), apagar o banco e
 reindexar (propriedade e valor voltam via sidecar).
 
-### ☐ Fatia 23 — Batch rename
-**Por último de propósito:** é a única exceção ao somente-leitura. Exige
-pré-visualização e confirmação explícita antes de tocar em qualquer arquivo.
+### ☑ Fatia 23 — Batch rename
+**A única exceção ao somente-leitura.** Perguntei o formato ao Rafael antes
+de programar (não tinha spec). Escolhido: busca-e-substituição no NOME do
+arquivo (não mexe no campo "Nome" do banco — fica pra outra hora),
+aplicada a TODOS os arquivos do asset selecionado (um set PBR de 6 mapas
+troca os 6 juntos, preservando o que não bate, tipo "_basecolor").
+`assetdeck/batch_rename.py` — na raiz do pacote de propósito, é a única
+operação que escreve fora de sidecars: `build_plan`/`find_conflicts` (só
+leitura, prévia ao vivo no diálogo) e `apply_plan` (só depois de confirmar
+explicitamente); sidecar do arquivo renomeado acompanha; item problemático
+falha sozinho sem derrubar o lote. Menu de contexto da grid → "Renomear em
+lote…".
+**Deu certo quando:** selecionar 2-3 assets, trocar um pedaço do nome, ver
+a prévia, confirmar, e os arquivos mudarem de nome no disco de verdade,
+sem sobrar nada quebrado na grade.
 
 ## F4 — Opcional
 Auto-tagging local via Ollama (Qwen2.5-VL 7B) · checagem seamless/tileable ·

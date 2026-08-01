@@ -113,3 +113,7 @@ def test_reload_grid_funciona_com_lista_vazia(janela):
     janela._apply_filters()
     assert janela.model.rowCount() == 0
     janela._reload_grid()  # não pode levantar
+
+
+def test_batch_rename_selected_existe(janela):
+    assert hasattr(janela, "_batch_rename_selected")
