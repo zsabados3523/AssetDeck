@@ -42,6 +42,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self._conn = conn  # conexão da thread da UI: SÓ leitura
         self._library_root = Path(library_root)
+        self._thumbs_dir = thumbs_dir
         self._scan = ScanController(db_path, self._library_root, parent=self)
         self._pipeline = ThumbnailPipeline(thumbs_dir, parent=self)
 
@@ -67,6 +68,14 @@ class MainWindow(QMainWindow):
         self.subdirs_check.setChecked(True)
         self.subdirs_check.toggled.connect(lambda _c: self._apply_filters())
 
+        # Toggle do Rafael: ver sets PBR como 1 card (ligado) ou cada mapa
+        # separado (desligado). Só visualização — o banco não muda.
+        self.group_check = QCheckBox("Agrupar sets PBR")
+        self.group_check.setChecked(True)
+        self.group_check.toggled.connect(
+            lambda c: (self.model.set_expand_sets(not c), self.refresh_count())
+        )
+
         self.count_label = QLabel()
         self.progress = QProgressBar()
         self.progress.setVisible(False)
@@ -78,6 +87,7 @@ class MainWindow(QMainWindow):
         top.addWidget(self.search_box, stretch=1)
         top.addWidget(self.type_filter)
         top.addWidget(self.subdirs_check)
+        top.addWidget(self.group_check)
         top.addWidget(self.count_label)
         top.addWidget(self.progress)
         top.addWidget(self.rescan_btn)
@@ -166,11 +176,24 @@ class MainWindow(QMainWindow):
 
     # ---- seleção / detalhes ----
 
+    def _thumb_from_disk(self, row) -> "QPixmap | None":
+        """Thumb em 256px direto do cache em disco (a da RAM está reduzida
+        para caber na célula da grid — ampliá-la ficaria borrado)."""
+        from PySide6.QtGui import QPixmap
+
+        from assetdeck.thumbs.cache import thumb_path
+
+        p = thumb_path(self._thumbs_dir, row["content_hash"])
+        if p.exists():
+            pix = QPixmap(str(p))
+            if not pix.isNull():
+                return pix
+        return QPixmapCache.find(f"thumb:{row['content_hash']}")
+
     def _on_selection(self, current: QModelIndex, _previous: QModelIndex) -> None:
         row = self.model.row_at(current)
         if row is not None:
-            thumb = QPixmapCache.find(f"thumb:{row['content_hash']}")
-            self.details.show_asset(row, thumb)
+            self.details.show_asset(row, self._thumb_from_disk(row))
 
     def _on_data_changed(self, top_left: QModelIndex, _br, _roles) -> None:
         # Se a thumb que acabou de ficar pronta é a do asset selecionado,
@@ -182,12 +205,20 @@ class MainWindow(QMainWindow):
 
     def _open_preview(self, index: QModelIndex) -> None:
         row = self.model.row_at(index)
-        if row is not None:
-            thumb = QPixmapCache.find(f"thumb:{row['content_hash']}")
-            self.preview_popup.show_for(row, self._library_root, thumb)
+        if row is None:
+            return
+        maps = None
+        if row["asset_type"] == "pbr_set" and self.group_check.isChecked():
+            # PBR Material Viewer: botões para alternar entre os mapas do set
+            maps = assets_repo.list_files(self._conn, row["id"])
+        self.preview_popup.show_for(row, self._library_root,
+                                    self._thumb_from_disk(row), maps=maps)
 
     def _grid_menu(self, pos) -> None:
         from PySide6.QtWidgets import QMenu
+
+        if not self.group_check.isChecked():
+            return  # agrupar/desagrupar só faz sentido na visão agrupada
 
         selecionados = [
             self.model.row_at(i) for i in self.grid.selectionModel().selectedIndexes()

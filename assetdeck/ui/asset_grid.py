@@ -16,7 +16,7 @@ from PySide6.QtWidgets import QListView
 
 from assetdeck.db.repos import assets as assets_repo
 from assetdeck.thumbs.pipeline import ThumbnailPipeline
-from assetdeck.thumbs.raster import can_thumbnail
+from assetdeck.thumbs.preview import can_preview
 
 log = logging.getLogger(__name__)
 
@@ -48,6 +48,7 @@ class AssetGridModel(QAbstractListModel):
         self._asset_types: list[str] = []
         self._dir_prefix: str | None = None
         self._include_subdirs: bool = True
+        self._expand_sets: bool = False  # toggle 'agrupar' desligado (Fatia 7)
         QPixmapCache.setCacheLimit(128 * 1024)  # 128MB de thumbs em RAM
 
     # ---- dados ----
@@ -60,6 +61,13 @@ class AssetGridModel(QAbstractListModel):
         self._include_subdirs = include_subdirs
         self._requery()
 
+    def set_expand_sets(self, expand: bool) -> None:
+        """Toggle do Rafael: False = sets agrupados (1 card); True = cada mapa
+        aparece como card próprio. Só muda a VISUALIZAÇÃO, nunca o banco."""
+        if expand != self._expand_sets:
+            self._expand_sets = expand
+            self._requery()
+
     def reload(self) -> None:
         """Recarga completa (pós-varredura): refaz a consulta e o pré-aquecimento."""
         self._requery()
@@ -70,6 +78,7 @@ class AssetGridModel(QAbstractListModel):
         self._rows = assets_repo.list_for_grid(
             self._conn, search=self._search, asset_types=self._asset_types,
             dir_prefix=self._dir_prefix, include_subdirs=self._include_subdirs,
+            expand_sets=self._expand_sets,
         )
         self._row_by_asset = {r["id"]: i for i, r in enumerate(self._rows)}
         self.endResetModel()
@@ -78,11 +87,12 @@ class AssetGridModel(QAbstractListModel):
                  self._dir_prefix, self._include_subdirs)
 
     def _warmup(self) -> None:
-        """Gera em background as thumbs da biblioteca TODA (independe de filtro)."""
+        """Gera em background as thumbs da biblioteca TODA — inclusive os
+        mapas não-capa dos sets (o modo expandido precisa deles prontos)."""
         items = [
             (r["id"], self._root / r["rel_path"], r["content_hash"])
-            for r in assets_repo.list_for_grid(self._conn)
-            if r["missing_since"] is None and can_thumbnail(self._root / r["rel_path"])
+            for r in assets_repo.list_for_grid(self._conn, expand_sets=True)
+            if r["missing_since"] is None and can_preview(self._root / r["rel_path"])
         ]
         self._pipeline.warmup(items)
 
@@ -110,18 +120,24 @@ class AssetGridModel(QAbstractListModel):
 
     # ---- thumbnails ----
 
-    def _pixmap_for(self, row: sqlite3.Row) -> QPixmap:
+    def _pixmap_for(self, row) -> QPixmap:
         key = f"thumb:{row['content_hash']}"
         cached = QPixmapCache.find(key)
         if cached:
             return cached
 
         src = self._root / row["rel_path"]
-        if row["missing_since"] is None and can_thumbnail(src):
+        if row["missing_since"] is None and can_preview(src):
             path = self._pipeline.get_or_request(row["id"], src, row["content_hash"])
             if path is not None:
                 pix = QPixmap(str(path))
                 if not pix.isNull():
+                    # FIT: a célula tem ICON px; entregar 256px fazia a view
+                    # CORTAR a imagem (feedback do Rafael). Encaixa inteira.
+                    pix = pix.scaled(
+                        ICON, ICON, Qt.AspectRatioMode.KeepAspectRatio,
+                        Qt.TransformationMode.SmoothTransformation,
+                    )
                     QPixmapCache.insert(key, pix)
                     return pix
         return self._placeholder(row["asset_type"])

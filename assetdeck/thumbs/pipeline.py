@@ -8,7 +8,7 @@ from pathlib import Path
 from PySide6.QtCore import QObject, QRunnable, QThreadPool, Signal
 
 from assetdeck.thumbs.cache import thumb_path
-from assetdeck.thumbs.raster import make_thumbnail
+from assetdeck.thumbs.preview import make_any_thumbnail
 
 log = logging.getLogger(__name__)
 
@@ -28,7 +28,7 @@ class _ThumbJob(QRunnable):
 
     def run(self) -> None:
         try:
-            make_thumbnail(self._src, self._dest)
+            make_any_thumbnail(self._src, self._dest)
             self._sig.ready.emit(self._asset_id, str(self._dest))
         except Exception:
             # Uma imagem corrompida não pode derrubar o app — mas fica no log.
