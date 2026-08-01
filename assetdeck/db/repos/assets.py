@@ -65,9 +65,17 @@ def list_for_grid(
         sql += " AND a.is_dependency = 0"
 
     match = _fts_query(search)
-    if match:
-        sql += " AND a.id IN (SELECT rowid FROM assets_fts WHERE assets_fts MATCH ?)"
-        params.append(match)
+    substr_tokens = _substring_tokens(search)
+    if match or substr_tokens:
+        ramos = []
+        if match:
+            ramos.append("a.id IN (SELECT rowid FROM assets_fts WHERE assets_fts MATCH ?)")
+            params.append(match)
+        if substr_tokens:
+            sub_sql = " AND ".join("a.name LIKE ? ESCAPE '\\'" for _ in substr_tokens)
+            ramos.append(f"a.id IN (SELECT id FROM assets WHERE {sub_sql})")
+            params.extend(f"%{_like_escape(t)}%" for t in substr_tokens)
+        sql += " AND (" + " OR ".join(ramos) + ")"
     if asset_types:
         sql += f" AND a.asset_type IN ({','.join('?' * len(asset_types))})"
         params.extend(asset_types)
@@ -370,8 +378,14 @@ def rebuild_fts(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
+# Fatia 21: E/OU/NÃO viram os operadores nativos do FTS5 (AND/OR/NOT já
+# funcionam com o tokenizer de hoje — testado direto no SQLite do projeto).
+_CONECTORES = {"e": "AND", "ou": "OR", "não": "NOT", "nao": "NOT"}
+
+
 def _fts_query(search: str | None) -> str | None:
-    """Texto do usuário → consulta FTS por prefixo ('conc rus' acha 'Concreto Rústico').
+    """Texto do usuário → consulta FTS por prefixo ('conc rus' acha 'Concreto
+    Rústico'), com E/OU/NÃO virando AND/OR/NOT reais do FTS5.
 
     Tokeniza e remonta com * — assim caracteres especiais do FTS (aspas,
     dois-pontos…) nunca chegam crus à query.
@@ -383,7 +397,43 @@ def _fts_query(search: str | None) -> str | None:
     tokens = re.findall(r"\w+", search, flags=re.UNICODE)
     if not tokens:
         return None
-    return " ".join(f'"{t}"*' for t in tokens)
+    partes = [_CONECTORES.get(t.lower(), None) or f'"{t}"*' for t in tokens]
+
+    # Conector solto na ponta quebraria a sintaxe do FTS5 — descarta.
+    while partes and partes[0] in _CONECTORES.values():
+        partes.pop(0)
+    while partes and partes[-1] in _CONECTORES.values():
+        partes.pop()
+    if not partes:
+        return None
+
+    # AND implícito entre termos vizinhos sem conector — igual ao
+    # comportamento de hoje pra quem não usa E/OU/NÃO.
+    resultado = [partes[0]]
+    for anterior, atual in zip(partes, partes[1:]):
+        conectores = _CONECTORES.values()
+        if anterior not in conectores and atual not in conectores:
+            resultado.append("AND")
+        resultado.append(atual)
+    return " ".join(resultado)
+
+
+def _substring_tokens(search: str | None) -> list[str] | None:
+    """Palavras da busca, só quando a frase NÃO usa E/OU/NÃO — servem pra um
+    LIKE '%palavra%' extra em assets.name, que pega substring dentro de um
+    nome composto sem separador ('quartzite' dentro de 'StoneQuartziteTile',
+    onde o FTS por prefixo de palavra não alcança — limitação da Fatia 12).
+    Com conector, essa via fica desligada (combinar boolean + substring ao
+    mesmo tempo é escopo de uma fatia futura, não desta).
+    """
+    if not search:
+        return None
+    import re
+
+    tokens = re.findall(r"\w+", search, flags=re.UNICODE)
+    if not tokens or any(t.lower() in _CONECTORES for t in tokens):
+        return None
+    return tokens
 
 
 def _like_escape(text: str) -> str:
