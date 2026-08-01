@@ -64,7 +64,8 @@ class ScanStats:
     unchanged: int = 0
     missing: int = 0
     reappeared: int = 0
-    restored: int = 0   # metadados recuperados de sidecars .json
+    restored: int = 0      # metadados recuperados de sidecars .json
+    grouped_sets: int = 0  # sets PBR criados pelo agrupador (pós-varredura)
     ignored: int = 0
     errors: int = 0
     aborted: bool = False
@@ -74,6 +75,8 @@ class ScanStats:
         parts = [f"{self.added} novos", f"{self.unchanged} inalterados"]
         if self.restored:
             parts.append(f"{self.restored} restaurados de sidecar")
+        if self.grouped_sets:
+            parts.append(f"{self.grouped_sets} sets PBR agrupados")
         if self.updated:
             parts.append(f"{self.updated} atualizados")
         if self.missing:

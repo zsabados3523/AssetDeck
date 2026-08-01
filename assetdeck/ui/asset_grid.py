@@ -25,7 +25,7 @@ ICON = 160
 
 # Cor do placeholder por tipo (enquanto não há thumbnail)
 TYPE_COLORS = {
-    "texture": "#8d99ae", "hdri": "#5f7fbf", "cutout": "#7fae8d",
+    "texture": "#8d99ae", "pbr_set": "#5a8a5a", "hdri": "#5f7fbf", "cutout": "#7fae8d",
     "reference": "#b08968", "model": "#c9834a", "scene": "#c9834a",
     "vector": "#9d6bb0", "ies": "#b5a642", "lut": "#5fa8a0",
     "psd": "#4a90d9", "other": "#888888",
@@ -161,7 +161,8 @@ class AssetGridView(QListView):
         self.setIconSize(QSize(ICON, ICON))
         self.setWordWrap(True)
         self.setSpacing(8)
-        self.setSelectionMode(QListView.SelectionMode.SingleSelection)
+        # Multi-seleção (Ctrl/Shift) para agrupar assets à mão — Fatia 6
+        self.setSelectionMode(QListView.SelectionMode.ExtendedSelection)
         # Rolagem suave: por pixel (o padrão pula uma CÉLULA inteira de
         # 200px por passo, o que fica rápido demais — feedback do Rafael)
         self.setVerticalScrollMode(QListView.ScrollMode.ScrollPerPixel)
