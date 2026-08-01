@@ -121,6 +121,41 @@ reindexar, religar pelo menu e ver o asset original (com a mesma
 tag/nota de antes) apontando pro caminho novo, sem sobrar um asset
 fantasma duplicado na grid.
 
+### ☐ Fatia 19b — Bug: "fantasma" preso ao arrastar um asset
+Relatado pelo Rafael com print: arrastar um card na grade às vezes deixa
+uma cópia dele "presa" visualmente no lugar onde o mouse soltou, em vez de
+ele voltar pro lugar de origem (o dado no banco não muda, é só visual).
+**Suspeita já investigada, pronta pra quando entrar esta fatia:**
+`AssetGridView.dropEvent` (`ui/asset_grid.py`) cai em
+`super().dropEvent(event)` quando o drop não tem alvo válido dentro da
+própria grade — caminho morto, já que o modelo não usa
+`InternalMove` (não há reordenar por drop). É provável que esse caminho
+deixe a view num estado de repaint inconsistente. O `startDrag` customizado
+da Fatia 17b (mesmo arquivo) também nunca força `self.viewport().update()`
+depois do `drag.exec(...)`. Fix provável: trocar o fallback por
+`event.ignore()` + `self.viewport().update()`, e forçar o mesmo update ao
+final do `startDrag` customizado.
+**Deu certo quando:** arrastar um asset e soltar em espaço vazio da própria
+grade (ou em qualquer lugar sem soltar de fato) faz o card voltar limpo
+pro lugar de origem, sem nenhuma cópia grudada na tela.
+
+### ☐ Ideia registrada — mover asset para outra categoria arrastando
+Pedido do Rafael, com uma decisão em aberto que ele mesmo apontou não saber
+resolver. Esbarra na regra absoluta do CLAUDE.md: *"O app é somente-leitura
+sobre a biblioteca. Nada move, renomeia ou apaga."* Proposta para ele
+escolher quando quiser:
+- **Caminho A (já existe, zero risco):** arrastar um asset para uma **Tag**
+  ou **Collection** (Fatias 8 e 17) já É reclassificar — reversível, não
+  toca em nada no disco. Se "categoria" = "pedras" vs. "metal", isso já é
+  uma Tag hoje.
+- **Caminho B (mover o ARQUIVO físico de verdade)**, incluindo dependências
+  (ex.: mover um `.blend` junto das texturas que ele usa) — é da MESMA
+  classe de risco que a Fatia 23 (Batch rename), a única exceção prevista
+  ao somente-leitura, com pré-visualização e confirmação explícita antes de
+  tocar em qualquer arquivo. Não cabe dentro de outra fatia; seria sua
+  própria fatia dedicada, com as mesmas salvaguardas.
+**Sem "deu certo" ainda** — depende do Rafael escolher A, B, ou os dois.
+
 ### ☐ Fatia 20 — Duplicados por perceptual hash
 Mesma textura em resoluções diferentes (hash de arquivo não pega). Provável
 migration 005 para guardar o phash.
