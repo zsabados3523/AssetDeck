@@ -53,6 +53,12 @@ class ScanWorker(QObject):
                     progress=on_progress,
                     should_stop=self._stop.is_set,
                 )
+                if not stats.aborted:
+                    # Agrupamento PBR roda depois da varredura, na mesma thread
+                    from assetdeck.indexer.grouper import apply_grouping
+
+                    gstats = apply_grouping(conn, library_id)
+                    stats.grouped_sets = gstats.sets_created
                 self.finished.emit(stats)
             finally:
                 conn.close()

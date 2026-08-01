@@ -29,6 +29,7 @@ from assetdeck.ui.asset_grid import AssetGridModel, AssetGridView
 from assetdeck.ui.details_panel import DetailsPanel
 from assetdeck.sidecar import writer as sidecar_writer
 from assetdeck.ui.folder_tree import FolderTree
+from assetdeck.ui.preview_popup import PreviewPopup
 from assetdeck.ui.scan_worker import ScanController
 from assetdeck.ui.type_filter import TypeFilter
 
@@ -87,6 +88,12 @@ class MainWindow(QMainWindow):
         self.grid.setModel(self.model)
         self.grid.selectionModel().currentChanged.connect(self._on_selection)
         self.model.dataChanged.connect(self._on_data_changed)
+        # Duplo clique = preview ampliado (NÃO abre o arquivo — pedido do Rafael)
+        self.preview_popup = PreviewPopup(self)
+        self.grid.doubleClicked.connect(self._open_preview)
+        # Menu de contexto: agrupar/desagrupar à mão
+        self.grid.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.grid.customContextMenuRequested.connect(self._grid_menu)
 
         self.folders = FolderTree()
         self.folders.setMinimumWidth(180)
@@ -171,6 +178,51 @@ class MainWindow(QMainWindow):
         if top_left == self.grid.currentIndex():
             self._on_selection(top_left, QModelIndex())
 
+    # ---- preview ampliado e agrupamento manual ----
+
+    def _open_preview(self, index: QModelIndex) -> None:
+        row = self.model.row_at(index)
+        if row is not None:
+            thumb = QPixmapCache.find(f"thumb:{row['content_hash']}")
+            self.preview_popup.show_for(row, self._library_root, thumb)
+
+    def _grid_menu(self, pos) -> None:
+        from PySide6.QtWidgets import QMenu
+
+        selecionados = [
+            self.model.row_at(i) for i in self.grid.selectionModel().selectedIndexes()
+        ]
+        selecionados = [r for r in selecionados if r is not None]
+        if not selecionados:
+            return
+        menu = QMenu(self)
+        if len(selecionados) >= 2:
+            act = menu.addAction(f"Agrupar {len(selecionados)} assets como um set")
+            act.triggered.connect(lambda: self._group_selected(selecionados))
+        atual = selecionados[0]
+        if len(selecionados) == 1 and atual["files_count"] > 1:
+            act = menu.addAction(f"Desagrupar ({atual['files_count']} arquivos)")
+            act.triggered.connect(lambda: self._ungroup(atual))
+        if menu.actions():
+            menu.exec(self.grid.mapToGlobal(pos))
+
+    def _group_selected(self, rows) -> None:
+        keeper = assets_repo.group_manual(self._conn, [r["id"] for r in rows])
+        if keeper is not None:
+            sidecar_writer.write_for_asset(self._conn, self._library_root, keeper)
+            self._reload_all()
+            self.statusBar().showMessage(
+                f"{len(rows)} assets agrupados à mão (travado contra reagrupamento)"
+            )
+
+    def _ungroup(self, row) -> None:
+        n = assets_repo.ungroup(self._conn, row["id"])
+        if n:
+            self._reload_all()
+            self.statusBar().showMessage(
+                f"Set desfeito em {n} assets (travados: o agrupador não refaz)"
+            )
+
     # ---- varredura ----
 
     def start_scan(self) -> None:
@@ -192,7 +244,8 @@ class MainWindow(QMainWindow):
     def _on_finished(self, stats: ScanStats) -> None:
         self.progress.setVisible(False)
         self.rescan_btn.setEnabled(True)
-        if stats.added or stats.updated or stats.missing or stats.reappeared:
+        if (stats.added or stats.updated or stats.missing or stats.reappeared
+                or stats.restored or stats.grouped_sets):
             self._reload_all()  # árvore/tipos/grid só se algo mudou
         else:
             self.refresh_count()

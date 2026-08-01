@@ -28,7 +28,9 @@ def list_for_grid(
     - include_subdirs: False = só arquivos diretamente na pasta
     """
     sql = """SELECT a.id, a.uuid, a.name, a.asset_type, a.notes,
-                    f.rel_path, f.size_bytes, f.content_hash, f.missing_since
+                    f.rel_path, f.size_bytes, f.content_hash, f.missing_since,
+                    (SELECT COUNT(*) FROM files f2
+                     WHERE f2.asset_id = a.id AND f2.deleted_at IS NULL) AS files_count
              FROM assets a
              JOIN files f ON f.asset_id = a.id AND f.is_primary = 1
              WHERE a.deleted_at IS NULL AND f.deleted_at IS NULL"""
@@ -110,6 +112,96 @@ def get_bundle(conn: sqlite3.Connection, asset_id: int) -> dict | None:
         "files": [f["rel_path"].rsplit("/", 1)[-1] for f in files],
         "primary_rel_path": files[0]["rel_path"],
     }
+
+
+def ungroup(conn: sqlite3.Connection, asset_id: int) -> int:
+    """Desfaz um agrupamento: cada arquivo vira um asset próprio, TRAVADO
+    (group_locked=1) para o agrupador automático nunca refazer. Retorna
+    quantos assets novos nasceram."""
+    import uuid as uuid_mod
+    from datetime import datetime, timezone
+
+    from assetdeck.indexer.scanner import classify  # import tardio: evita ciclo
+    from pathlib import Path
+
+    now = datetime.now(timezone.utc).isoformat()
+    asset = conn.execute(
+        "SELECT library_id FROM assets WHERE id = ? AND deleted_at IS NULL",
+        (asset_id,),
+    ).fetchone()
+    files = conn.execute(
+        "SELECT id, rel_path, map_role FROM files "
+        "WHERE asset_id = ? AND deleted_at IS NULL",
+        (asset_id,),
+    ).fetchall()
+    if asset is None or len(files) < 2:
+        return 0
+
+    for f in files:
+        stem = f["rel_path"].rsplit("/", 1)[-1].rsplit(".", 1)[0]
+        tipo = classify(Path(f["rel_path"])) or "other"
+        cur = conn.execute(
+            """INSERT INTO assets (uuid, library_id, name, asset_type, group_locked)
+               VALUES (?, ?, ?, ?, 1)""",
+            (str(uuid_mod.uuid4()), asset["library_id"], stem, tipo),
+        )
+        conn.execute(
+            "UPDATE files SET asset_id = ?, is_primary = 1, updated_at = ? WHERE id = ?",
+            (cur.lastrowid, now, f["id"]),
+        )
+    conn.execute(
+        "UPDATE assets SET deleted_at = ?, updated_at = ? WHERE id = ?",
+        (now, now, asset_id),
+    )
+    conn.commit()
+    rebuild_fts(conn)
+    return len(files)
+
+
+def group_manual(conn: sqlite3.Connection, asset_ids: list[int]) -> int | None:
+    """Funde 2+ assets num set PBR travado (correção manual do Rafael).
+    Retorna o id do asset resultante, ou None se não havia o que fundir."""
+    from datetime import datetime, timezone
+
+    if len(asset_ids) < 2:
+        return None
+    now = datetime.now(timezone.utc).isoformat()
+    marks = ",".join("?" * len(asset_ids))
+    files = conn.execute(
+        f"""SELECT f.id, f.asset_id, f.map_role, a.notes
+            FROM files f JOIN assets a ON a.id = f.asset_id
+            WHERE f.asset_id IN ({marks})
+              AND f.deleted_at IS NULL AND a.deleted_at IS NULL""",
+        asset_ids,
+    ).fetchall()
+    if len(files) < 2:
+        return None
+
+    # Capa: o basecolor se houver; senão o primeiro arquivo
+    principal = next((f for f in files if f["map_role"] == "basecolor"), files[0])
+    keeper_id = principal["asset_id"]
+
+    notas = list(dict.fromkeys(f["notes"] for f in files if f["notes"]))
+    conn.execute(
+        """UPDATE assets SET asset_type = 'pbr_set', group_locked = 1,
+                             notes = COALESCE(?, notes), updated_at = ?
+           WHERE id = ?""",
+        ("\n".join(notas) if notas else None, now, keeper_id),
+    )
+    for f in files:
+        conn.execute(
+            "UPDATE files SET asset_id = ?, is_primary = ?, updated_at = ? WHERE id = ?",
+            (keeper_id, 1 if f["id"] == principal["id"] else 0, now, f["id"]),
+        )
+    for aid in asset_ids:
+        if aid != keeper_id:
+            conn.execute(
+                "UPDATE assets SET deleted_at = ?, updated_at = ? WHERE id = ?",
+                (now, now, aid),
+            )
+    conn.commit()
+    rebuild_fts(conn)
+    return keeper_id
 
 
 def uuid_exists(conn: sqlite3.Connection, uuid: str) -> bool:

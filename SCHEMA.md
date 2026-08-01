@@ -1,6 +1,11 @@
 # SCHEMA.md — Modelo de dados do AssetDeck (fonte da verdade)
 
-**Versão do schema: 1** (ainda não aplicada — nasce como `migrations/001_initial.sql` na Fatia 1)
+**Versão do schema: 2**
+
+| Migration | O que fez |
+|---|---|
+| 001_initial.sql | Schema v1 completo (Fatia 1) |
+| 002_group_locked.sql | `assets.group_locked` — trava de agrupamento corrigido à mão (Fatia 6) |
 
 ## Regra de ouro
 Toda mudança aqui = **nova migration** (nunca editar uma antiga) + **avisar o
@@ -58,6 +63,7 @@ coisa, não a um arquivo.
 | rating | INTEGER NULL, 1–5 | NULL = sem nota (diferente de nota zero) |
 | starred | INTEGER NOT NULL DEFAULT 0 | favorito |
 | notes | TEXT | anotações livres |
+| group_locked | INTEGER NOT NULL DEFAULT 0 | 1 = agrupamento corrigido à mão; o agrupador automático não mexe mais (migration 002) |
 | created_at / updated_at / deleted_at | TEXT | |
 
 ### `files` — os arquivos físicos
