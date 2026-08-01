@@ -27,6 +27,7 @@ from assetdeck.db.repos import collections as collections_repo
 from assetdeck.db.repos import previews as previews_repo
 from assetdeck.db.repos import smart_collections as smart_collections_repo
 from assetdeck.db.repos import tags as tags_repo
+from assetdeck.indexer import relocator
 from assetdeck.indexer.scanner import ScanStats
 from assetdeck.thumbs.pipeline import ThumbnailPipeline
 from assetdeck.ui.asset_grid import AssetGridModel, AssetGridView
@@ -35,6 +36,7 @@ from assetdeck.ui.details_panel import DetailsPanel
 from assetdeck.sidecar import writer as sidecar_writer
 from assetdeck.ui.folder_tree import FolderTree
 from assetdeck.ui.preview_popup import PreviewPopup
+from assetdeck.ui.relocate_dialog import RelocateDialog
 from assetdeck.ui.scan_worker import ScanController
 from assetdeck.ui.smart_collection_panel import SmartCollectionPanel
 from assetdeck.ui.tag_dialogs import QuickTagDialog
@@ -218,6 +220,7 @@ class MainWindow(QMainWindow):
         self._tag_clipboard: list[int] | None = None
 
         self._setup_bridge()  # ponte com o Blender (F2)
+        self._setup_library_menu()  # relocalizar assets perdidos (Fatia 19)
 
         self.statusBar().showMessage(f"v{__version__} · banco: {db_path}")
         self._reload_all()
@@ -346,6 +349,44 @@ class MainWindow(QMainWindow):
             collections_repo.remove_item(self._conn, collection_id, aid)
         self._apply_filters()
         self.statusBar().showMessage(f"{len(asset_ids)} asset(s) removidos da coleção")
+
+    # ---- relocalizar assets perdidos (Fatia 19) ----
+
+    def _setup_library_menu(self) -> None:
+        menu = self.menuBar().addMenu("Biblioteca")
+        self.relocate_action = menu.addAction(
+            "Relocalizar assets perdidos…", self._relocate_lost_assets
+        )
+
+    def _relocate_lost_assets(self) -> None:
+        from PySide6.QtWidgets import QMessageBox
+
+        from assetdeck.db.repos import libraries as libraries_repo
+
+        lib_id = libraries_repo.get_or_create(self._conn, self._library_root)
+        candidatos = relocator.find_candidates(self._conn, lib_id)
+        if not candidatos:
+            QMessageBox.information(
+                self, "Nada para religar",
+                "Nenhum arquivo sumido bate com um arquivo encontrado em outro "
+                "lugar da biblioteca (mesmo conteúdo).",
+            )
+            return
+
+        dlg = RelocateDialog(candidatos, self)
+        if not dlg.exec():
+            return
+
+        pares = dlg.selected_pairs()
+        religados = 0
+        for missing_file_id, found_file_id in pares:
+            keeper_id = relocator.relocate(self._conn, missing_file_id, found_file_id)
+            if keeper_id is not None:
+                sidecar_writer.write_for_asset(self._conn, self._library_root, keeper_id)
+                religados += 1
+
+        self._reload_all()
+        self.statusBar().showMessage(f"{religados} asset(s) religados ao novo caminho")
 
     # ---- coleções inteligentes / buscas salvas (Fatia 18) ----
 
