@@ -93,7 +93,13 @@ class PreviewPopup(QDialog):
             self.image_label.setText("(sem preview)")
 
         self._build_maps_bar(maps)
-        self._load(library_root / row["rel_path"])
+        alvo = library_root / row["rel_path"]
+        cover = dict(row).get("cover_path")  # funciona para dict e sqlite3.Row
+        if cover and not can_preview(alvo):
+            # Asset sem preview visual (.blend, .pdf…) mas com capa escolhida
+            # pelo usuário: o popup mostra a capa em resolução completa
+            alvo = Path(cover)
+        self._load(alvo)
         self.show()
         self.raise_()
         self.activateWindow()
