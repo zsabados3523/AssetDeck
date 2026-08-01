@@ -64,7 +64,9 @@ class MainWindow(QMainWindow):
 
         # --- barra superior: busca + filtros ---
         self.search_box = QLineEdit()
-        self.search_box.setPlaceholderText("Buscar por nome…  (ex.: concreto, wood 4k)")
+        self.search_box.setPlaceholderText(
+            "Buscar por nome…  (ex.: concreto, wood 4k, madeira E rústico, pedra OU metal)"
+        )
         self.search_box.setClearButtonEnabled(True)
         self._search_debounce = QTimer(self)
         self._search_debounce.setSingleShot(True)

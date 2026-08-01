@@ -31,6 +31,8 @@ def lib(tmp_path, conn):
     (root / "Texturas" / "na_raiz_texturas.jpg").write_bytes(b"d" * 50)
     (root / "HDRIs" / "studio_small.hdr").write_bytes(b"e" * 50)
     (root / "solto_na_raiz.png").write_bytes(b"f" * 50)
+    # nome composto sem separador — o caso exato da limitação da Fatia 12
+    (root / "Texturas" / "StoneQuartziteTile_2K.jpg").write_bytes(b"g" * 50)
     lib_id = libraries_repo.get_or_create(conn, root)
     scan_library(conn, lib_id, root)  # já reconstrói o FTS
     return root
@@ -41,7 +43,7 @@ def _names(rows):
 
 
 def test_sem_filtro_traz_tudo(conn, lib):
-    assert len(assets_repo.list_for_grid(conn)) == 6
+    assert len(assets_repo.list_for_grid(conn)) == 7
 
 
 def test_busca_por_prefixo(conn, lib):
@@ -60,6 +62,45 @@ def test_busca_multi_palavra_e_AND(conn, lib):
     assert assets_repo.list_for_grid(conn, search="concreto oak") == []
 
 
+def test_busca_com_conector_e_explicito(conn, lib):
+    assert _names(assets_repo.list_for_grid(conn, search="concreto E 4k")) \
+        == ["Concreto Rústico 4K"]
+    assert assets_repo.list_for_grid(conn, search="concreto E oak") == []
+
+
+def test_busca_com_conector_ou(conn, lib):
+    # "concreto" (com 'o') não bate com "concrete" (com 'e') — só o exato
+    nomes = _names(assets_repo.list_for_grid(conn, search="concreto OU oak"))
+    assert nomes == ["Concreto Rústico 4K", "Wood Oak"]
+
+
+def test_busca_com_conector_nao(conn, lib):
+    # "raiz" bate em na_raiz_texturas E solto_na_raiz; NÃO solto exclui o 2º
+    nomes = _names(assets_repo.list_for_grid(conn, search="raiz NÃO solto"))
+    assert nomes == ["na_raiz_texturas"]
+    # sem acento no "não" também funciona
+    nomes = _names(assets_repo.list_for_grid(conn, search="raiz nao solto"))
+    assert nomes == ["na_raiz_texturas"]
+
+
+def test_busca_acha_substring_em_nome_composto(conn, lib):
+    """O critério da fatia — a limitação registrada na Fatia 12."""
+    nomes = _names(assets_repo.list_for_grid(conn, search="quartzite"))
+    assert nomes == ["StoneQuartziteTile_2K"]
+
+
+def test_substring_nao_ativa_com_conector(conn, lib):
+    # Com E/OU/NÃO a via de substring fica desligada (escopo desta fatia);
+    # "stone" sozinho (sem conector) já acharia via substring, mas aqui
+    # testamos que um conector não quebra nem gera resultado incorreto.
+    assets_repo.list_for_grid(conn, search="stone E xyz123")  # não pode explodir
+
+
+def test_conector_solto_nao_quebra_a_busca(conn, lib):
+    for maldade in ["E", "OU", "NÃO", "E OU NÃO", "  e  "]:
+        assets_repo.list_for_grid(conn, search=maldade)  # não pode levantar
+
+
 def test_busca_com_caracteres_especiais_nao_explode(conn, lib):
     # Aspas, operadores FTS e curingas não podem virar erro de sintaxe
     for maldade in ['"', "AND OR NOT", "conc*", "a:b", "(x)", "   "]:
@@ -74,19 +115,19 @@ def test_filtro_por_tipo(conn, lib):
 def test_filtro_multi_tipo_em_checklist(conn, lib):
     # Sugestão do Rafael: marcar 2+ tipos ao mesmo tempo
     rows = assets_repo.list_for_grid(conn, asset_types=["hdri", "texture"])
-    assert len(rows) == 6  # todos, já que a lib só tem esses dois tipos
+    assert len(rows) == 7  # todos, já que a lib só tem esses dois tipos
     rows = assets_repo.list_for_grid(conn, asset_types=["hdri", "model"])
     assert _names(rows) == ["studio_small"]  # model não existe → só o hdri
 
 
 def test_filtro_por_pasta_com_subpastas(conn, lib):
     rows = assets_repo.list_for_grid(conn, dir_prefix="Texturas", include_subdirs=True)
-    assert len(rows) == 4  # Concreto/2 + Madeira/1 + na_raiz_texturas
+    assert len(rows) == 5  # Concreto/2 + Madeira/1 + na_raiz_texturas + StoneQuartziteTile_2K
 
 
 def test_filtro_por_pasta_sem_subpastas(conn, lib):
     rows = assets_repo.list_for_grid(conn, dir_prefix="Texturas", include_subdirs=False)
-    assert _names(rows) == ["na_raiz_texturas"]
+    assert _names(rows) == ["StoneQuartziteTile_2K", "na_raiz_texturas"]
 
 
 def test_raiz_sem_subpastas_mostra_so_arquivos_soltos(conn, lib):
