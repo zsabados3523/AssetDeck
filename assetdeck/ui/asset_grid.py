@@ -21,19 +21,22 @@ MIME_ASSETS = "application/x-assetdeck-asset-ids"
 from assetdeck.db.repos import assets as assets_repo
 from assetdeck.thumbs.pipeline import ThumbnailPipeline
 from assetdeck.thumbs.preview import can_preview
+from assetdeck.ui import theme
 
 log = logging.getLogger(__name__)
 
 CELL = QSize(176, 200)
 ICON = 160
 
-# Cor do placeholder por tipo (enquanto não há thumbnail)
-TYPE_COLORS = {
-    "texture": "#8d99ae", "pbr_set": "#5a8a5a", "hdri": "#5f7fbf", "cutout": "#7fae8d",
-    "reference": "#b08968", "model": "#c9834a", "scene": "#c9834a",
-    "vector": "#9d6bb0", "ies": "#b5a642", "lut": "#5fa8a0",
-    "psd": "#4a90d9", "other": "#888888",
-}
+# Papéis extras que o AssetCardDelegate (Fatia 27) lê para desenhar o card.
+# Antes o "★ " e o "[oculto] " eram prefixo de string no DisplayRole — além de
+# feio, isso quebrava a busca-por-digitação do QListView. Agora DisplayRole
+# devolve só o nome, e cada estado vira um papel próprio.
+STARRED_ROLE = Qt.ItemDataRole.UserRole + 1
+HIDDEN_ROLE = Qt.ItemDataRole.UserRole + 2
+TYPE_ROLE = Qt.ItemDataRole.UserRole + 3
+EXT_ROLE = Qt.ItemDataRole.UserRole + 4       # ".FBX", ".EXR"... para o chip
+HAS_THUMB_ROLE = Qt.ItemDataRole.UserRole + 5  # False = decoração é placeholder
 
 
 class AssetGridModel(QAbstractListModel):
@@ -47,6 +50,9 @@ class AssetGridModel(QAbstractListModel):
         self._rows: list[sqlite3.Row] = []
         self._row_by_asset: dict[int, int] = {}
         self._placeholders: dict[str, QPixmap] = {}
+        # Populado por _pixmap_for a cada DecorationRole; o delegate lê logo
+        # depois via HAS_THUMB_ROLE — mesma chamada de paint, sem corrida.
+        self._is_placeholder: dict[int, bool] = {}
         # Filtros ativos (Fatia 4; tipos viraram lista na Fatia 5)
         self._search: str | None = None
         self._asset_types: list[str] = []
@@ -145,12 +151,23 @@ class AssetGridModel(QAbstractListModel):
         if row is None:
             return None
         if role == Qt.ItemDataRole.DisplayRole:
-            nome = f"★ {row['name']}" if row["starred"] else row["name"]
-            return f"[oculto] {nome}" if row.get("hidden") else nome
+            return row["name"]
         if role == Qt.ItemDataRole.DecorationRole:
             return self._pixmap_for(row)
         if role == Qt.ItemDataRole.ToolTipRole:
             return row["rel_path"]
+        if role == STARRED_ROLE:
+            return bool(row["starred"])
+        if role == HIDDEN_ROLE:
+            return bool(row.get("hidden"))
+        if role == TYPE_ROLE:
+            return row["asset_type"]
+        if role == EXT_ROLE:
+            return Path(row["rel_path"]).suffix.upper()
+        if role == HAS_THUMB_ROLE:
+            # A pintura sempre pede DecorationRole antes (é o delegate quem
+            # decide a ordem), então esta chave já está populada.
+            return not self._is_placeholder.get(row["id"], True)
         return None
 
     def flags(self, index: QModelIndex):
@@ -199,9 +216,13 @@ class AssetGridModel(QAbstractListModel):
             src = self._root / row["rel_path"]
             key_hash = row["content_hash"]
 
-        key = f"thumb:{key_hash}"
+        # Bug pego na Fatia 27: a chave não incluía ICON. Se o tamanho do
+        # ícone mudasse, o QPixmapCache servia pixmaps do tamanho velho pelo
+        # resto do processo.
+        key = f"thumb:{key_hash}:{ICON}"
         cached = QPixmapCache.find(key)
         if cached:
+            self._is_placeholder[row["id"]] = False
             return cached
 
         if (cover or row["missing_since"] is None) and can_preview(src):
@@ -216,7 +237,9 @@ class AssetGridModel(QAbstractListModel):
                         Qt.TransformationMode.SmoothTransformation,
                     )
                     QPixmapCache.insert(key, pix)
+                    self._is_placeholder[row["id"]] = False
                     return pix
+        self._is_placeholder[row["id"]] = True
         return self._placeholder(row["asset_type"])
 
     def _on_thumb_ready(self, asset_id: int, _path: str) -> None:
@@ -226,18 +249,13 @@ class AssetGridModel(QAbstractListModel):
             self.dataChanged.emit(idx, idx, [Qt.ItemDataRole.DecorationRole])
 
     def _placeholder(self, asset_type: str) -> QPixmap:
+        """Pastilha lisa na cor única de "sem miniatura" (decisão do Rafael:
+        nada de cor por tipo). O reconhecimento do tipo passa a ser o chip de
+        extensão que o AssetCardDelegate desenha por cima (Fatia 27)."""
         pix = self._placeholders.get(asset_type)
         if pix is None:
             pix = QPixmap(ICON, ICON)
-            pix.fill(QColor(TYPE_COLORS.get(asset_type, "#888888")))
-            painter = QPainter(pix)
-            painter.setPen(QColor("white"))
-            font = painter.font()
-            font.setPointSize(13)
-            font.setBold(True)
-            painter.setFont(font)
-            painter.drawText(pix.rect(), Qt.AlignmentFlag.AlignCenter, asset_type.upper())
-            painter.end()
+            pix.fill(QColor(theme.TYPE_TINT))
             self._placeholders[asset_type] = pix
         return pix
 
@@ -311,6 +329,11 @@ class AssetGridView(QListView):
         self.setIconSize(QSize(ICON, ICON))
         self.setWordWrap(True)
         self.setSpacing(8)
+        self.setMouseTracking(True)  # hover do card (Fatia 27)
+        # Import tardio: evita ciclo (o delegate importa CELL/papéis daqui).
+        from assetdeck.ui.asset_card_delegate import AssetCardDelegate
+
+        self.setItemDelegate(AssetCardDelegate(self))
         # Multi-seleção (Ctrl/Shift) para agrupar assets à mão — Fatia 6
         self.setSelectionMode(QListView.SelectionMode.ExtendedSelection)
         # Rolagem suave: por pixel (o padrão pula uma CÉLULA inteira de
