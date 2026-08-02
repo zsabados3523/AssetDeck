@@ -84,6 +84,7 @@ class AssetGridModel(QAbstractListModel):
         # Filtros ativos (Fatia 4; tipos viraram lista na Fatia 5)
         self._search: str | None = None
         self._asset_types: list[str] = []
+        self._category_filters: list[dict] = []  # barra de categorias (Fatia 31)
         self._dir_prefix: str | None = None
         self._include_subdirs: bool = True
         self._expand_sets: bool = False  # toggle 'agrupar' desligado (Fatia 7)
@@ -105,9 +106,11 @@ class AssetGridModel(QAbstractListModel):
                     min_resolution: int | None = None,
                     include_hidden: bool = False,
                     include_dependencies: bool = True,
-                    collection_id: int | None = None) -> None:
+                    collection_id: int | None = None,
+                    category_filters: list[dict] | None = None) -> None:
         self._search = search or None
         self._asset_types = asset_types or []
+        self._category_filters = category_filters or []
         self._dir_prefix = dir_prefix or None
         self._include_subdirs = include_subdirs
         self._tag_id = tag_id
@@ -155,6 +158,7 @@ class AssetGridModel(QAbstractListModel):
             include_hidden=self._include_hidden,
             include_dependencies=self._include_dependencies,
             collection_id=self._collection_id,
+            category_filters=self._category_filters,
         )
         self._row_by_asset = {r["id"]: i for i, r in enumerate(self._rows)}
         self.endResetModel()

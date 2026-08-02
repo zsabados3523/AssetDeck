@@ -387,11 +387,50 @@ sequência, a confirmar antes de começar cada fatia (uma por vez, como
 sempre). Nenhuma tem direção técnica definida ainda — isso é decidido na
 hora de fatiar cada uma.
 
-### ☐ Fatia 31 — Filtro por extensão dentro do tipo de asset
-Hoje o filtro é só por `asset_type` (Modelos, Texturas...). Pedido do
-Rafael: dentro de "Modelos 3D", poder restringir por extensão (só `.fbx`,
-só `.obj`, ou os dois) — generalizar para todos os `asset_type` que têm
-mais de uma extensão possível.
+### ☑ Fatia 31 — Barra de categorias com filtro por extensão
+
+**Primeira tentativa reprovada pelo Rafael na tela** (commit `5e51022`): um
+`TypeFilter` só, botão de ícone sem rótulo, com todos os tipos crus do banco
+(`pbr_set`, `ies`, `lut`, `other`) e extensões indentadas espremidos num
+popup — "não consigo ver exatamente qual opção filtrar". Além disso o filtro
+de extensão só existia pra tipo com 2+ extensões, e `extensions` era global
+(marcar `.fbx` em Modelos restringia Imagens a `.fbx` também). Refeita
+inteira; `ui/type_filter.py` e seu teste foram deletados.
+
+**Versão final, estilo Connecter:** fileira de 6 botões
+(`ui/category_bar.py`) na linha do breadcrumb, um por categoria, com ícone
+próprio, rótulo legível e contador — `MenuButtonPopup`: o corpo liga/desliga
+a categoria, a setinha abre o checklist de extensões *daquela* categoria com
+a contagem de cada uma.
+
+- `ui/categories.py` — mapa fixo de UI (não toca no banco) agrupando os 12
+  `asset_type` do schema em Modelos · Materiais · Imagens · HDRIs · Vetores ·
+  Documentos. Teste trava que todo tipo do schema cai em exatamente uma
+  categoria (tipo novo no schema não fica órfão da barra).
+- 6 ícones SVG novos (`cat-*.svg`), mesmo estilo dos 8 existentes;
+  monocromáticos — cor só no estado ativo, via `QToolButton:checked` que o
+  tema já tem, sem QSS novo (decisão do Rafael, mantém a regra da F4).
+- `assets_repo`: `_build_where` extraído de `list_for_grid` para a grade e o
+  contador responderem aos mesmos filtros (duplicar isso é como o número sai
+  de sincronia com a tela). Parâmetro `extensions` (global, da 1ª tentativa)
+  substituído por `category_filters` — OR entre categorias, AND entre tipo e
+  extensão dentro de cada uma, que é o que corrige o vazamento.
+  `count_by_category` respeita os filtros ativos MENOS o de categoria (senão
+  clicar numa zeraria o contador das outras e o número perderia a função de
+  prever o resultado do clique); `extension_counts` substitui
+  `distinct_extensions` e já devolve a contagem por extensão.
+- `asset_types` cru continua aceito em `list_for_grid`: Smart Collection
+  salva antes desta fatia usa esse formato, e `_restore_filters` remapeia
+  pros botões via `set_selection_from_types`.
+
+**Deu certo quando** (verificado com a `MainWindow` real contra a testlib,
+não só teste offscreen): barra mostra `Modelos 85 · Materiais 3 · Imagens 11
+· HDRIs 7 · Vetores 14 · Documentos 7`; ligar Modelos → 85; marcar `.blend`
+→ segue 85; ligar Imagens junto → 96 (a extensão de Modelos NÃO restringe
+Imagens); buscar "wood" com tudo desligado → contadores caem pra refletir a
+busca. Barra tem 681px e cabe sem espremer o breadcrumb até 1100px de
+janela. 329 testes verdes (`tests/test_category_bar.py` novo no lugar do
+`test_type_filter.py`).
 
 ### ☐ Fatia 32 — Navegação de pastas com histórico
 Controles tipo navegador (voltar / avançar) na área de visualização de
