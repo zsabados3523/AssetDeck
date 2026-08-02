@@ -11,7 +11,7 @@ Rafael (650GB, ~72 mil arquivos, sem erros graves — ver sessão de
 apontar para a testlib para a próxima fase de desenvolvimento.
 
 Próxima fase: **F5 — v2.0**, roadmap fechado com o Rafael em 2026-08-02
-(13 fatias, 31 a 43 — ver seção própria abaixo). Ainda sem fatia iniciada.
+(14 fatias, 31 a 44 — ver seção própria abaixo). Começando pela Fatia 31.
 
 ## Estado atual (2026-08-02)
 
@@ -453,6 +453,26 @@ adicionarem telas/controles novos (menu, navegação de pastas, visualizador
 de HDRI...), passar o tema Craft por cima de tudo de uma vez — evita
 retocar duas vezes. Absorve também a Fatia 30 (Acabamento) que ficou
 pendente da F4.
+
+### ☐ Fatia 44 — Bug: preview customizado não aceita imagem externa via drag-and-drop
+Relatado pelo Rafael (2026-08-02): arrastar um `.png`/`.jpeg` do
+gerenciador de arquivos do sistema para cima de um asset na grade não
+faz nada — devia definir a imagem como capa customizada (Fatia 10).
+
+**Investigado sem reproduzir ainda** (ver `assetdeck/ui/asset_grid.py`):
+`_dropped_image` (456-469), `dropEvent` (471-497), `dragEnterEvent`/
+`dragMoveEvent` (499-511) diferenciam corretamente drop externo
+(`hasUrls()`) de drop interno (`MIME_ASSETS`, Fatia 10b) e emitem
+`image_dropped` certinho num teste direto com `QDropEvent` sintético
+(offscreen). Os handlers em `main_window.py` (`_on_image_dropped`,
+981-994) também estão corretos. **Hipótese principal: integração XDND do
+SO** (X11/Wayland ↔ gerenciador de arquivos), fora do que dá pra testar
+headless — não é claramente um bug de lógica Python.
+**Próximo passo ao fatiar:** reproduzir na tela do Rafael com log
+temporário em `dragEnterEvent`/`dropEvent` pra confirmar se o evento
+chega no app; testar também com `QT_QPA_PLATFORM=xcb` (descarta
+Wayland-specific). Cobertura de teste também falta: nenhum teste hoje
+simula um `QDropEvent` com `hasUrls()` real contra `AssetGridView`.
 
 ---
 
