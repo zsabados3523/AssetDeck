@@ -30,13 +30,13 @@ def _sem_comentarios(qss: str) -> str:
     theme.Variant(separation="sutil", radius="marcante"),
     theme.Variant(separation="forte", font="sistema"),
 ])
-def test_qss_nao_deixa_token_sem_substituir(variant):
+def test_qss_nao_deixa_token_sem_substituir(qapp, variant):
     regras = _sem_comentarios(theme.build_qss(variant))
     assert "$" not in regras, "sobrou um token no QSS gerado"
     assert regras.count("{") == regras.count("}")
 
 
-def test_token_inexistente_no_qss_explode(tmp_path, monkeypatch):
+def test_token_inexistente_no_qss_explode(qapp, tmp_path, monkeypatch):
     """Token errado tem de falhar alto, não vazar '$nome' para dentro do QSS."""
     falso = tmp_path / "theme.qss"
     falso.write_text("QWidget { color: $cor_que_nao_existe; }", encoding="utf-8")
@@ -45,19 +45,19 @@ def test_token_inexistente_no_qss_explode(tmp_path, monkeypatch):
         theme.build_qss()
 
 
-def test_qss_ausente_da_erro_claro(tmp_path, monkeypatch):
+def test_qss_ausente_da_erro_claro(qapp, tmp_path, monkeypatch):
     monkeypatch.setattr(theme, "QSS_FILE", tmp_path / "nao_existe.qss")
     with pytest.raises(FileNotFoundError):
         theme.build_qss()
 
 
-def test_qss_nao_estiliza_item_da_grade():
+def test_qss_nao_estiliza_item_da_grade(qapp):
     """Regra de performance: `QListView::item` joga a pintura da grade para o
     QStyleSheetStyle item a item e mata a rolagem com centenas de assets."""
     assert "QListView::item" not in _sem_comentarios(theme.build_qss())
 
 
-def test_todo_url_do_qss_aponta_para_arquivo_existente():
+def test_todo_url_do_qss_aponta_para_arquivo_existente(qapp):
     for variant in (theme.Variant(background="liso"), theme.Variant(background="grao")):
         qss = theme.build_qss(variant)
         for caminho in re.findall(r"url\(([^)]+)\)", qss):

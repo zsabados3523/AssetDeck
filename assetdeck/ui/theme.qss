@@ -184,8 +184,7 @@ QCheckBox:disabled, QRadioButton:disabled {
  * Com a paleta clara, o indicador que o Fusion desenha usa a cor de botão —
  * quase branco sobre quase branco — e a caixa DESMARCADA fica invisível na
  * tela. Aqui o estado é legível pelo preenchimento: cheio de cinza escuro =
- * marcado, vazio com borda = desmarcado. O "✓" branco por dentro entra na
- * Fatia 26, junto com o check.svg. */
+ * marcado, vazio com borda = desmarcado. */
 QCheckBox::indicator, QRadioButton::indicator {
     width: 15px;
     height: 15px;
@@ -205,7 +204,15 @@ QCheckBox::indicator:hover, QRadioButton::indicator:hover {
     border: 1px solid $focus;
 }
 
-QCheckBox::indicator:checked, QRadioButton::indicator:checked {
+QCheckBox::indicator:checked {
+    background-color: $accent;
+    border: 1px solid $accent;
+    image: url($check_icon);
+}
+
+/* Radio marcado é um ponto sólido, não um "✓" — a checkmark cairia estranho
+ * dentro de um círculo. */
+QRadioButton::indicator:checked {
     background-color: $accent;
     border: 1px solid $accent;
 }
@@ -229,6 +236,17 @@ QComboBox:hover {
 
 QComboBox:focus {
     border: 1px solid $focus;
+}
+
+QComboBox::drop-down {
+    border: none;
+    width: 22px;
+}
+
+QComboBox::down-arrow {
+    image: url($chevron_icon);
+    width: 11px;
+    height: 11px;
 }
 
 /* O popup do combo é uma JANELA separada: não herda o fundo do card e

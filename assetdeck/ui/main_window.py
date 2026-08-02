@@ -45,7 +45,7 @@ from assetdeck.ui.property_defs_dialog import PropertyDefsDialog
 from assetdeck.ui.relocate_dialog import RelocateDialog
 from assetdeck.ui.scan_worker import ScanController
 from assetdeck.ui.smart_collection_panel import SmartCollectionPanel
-from assetdeck.ui import theme
+from assetdeck.ui import icons, theme
 from assetdeck.ui.tag_dialogs import QuickTagDialog
 from assetdeck.ui.tag_tree import TagTree
 from assetdeck.ui.type_filter import TypeFilter
@@ -73,6 +73,10 @@ class MainWindow(QMainWindow):
             "Buscar por nome…  (ex.: concreto, wood 4k, madeira E rústico, pedra OU metal)"
         )
         self.search_box.setClearButtonEnabled(True)
+        self.search_box.addAction(
+            icons.icon("search", theme.TEXT_MUTED),
+            QLineEdit.ActionPosition.LeadingPosition,
+        )
         self._search_debounce = QTimer(self)
         self._search_debounce.setSingleShot(True)
         self._search_debounce.setInterval(250)  # espera parar de digitar
@@ -99,13 +103,17 @@ class MainWindow(QMainWindow):
         # Filtros da Fatia 9: nota mínima, favoritos, resolução mínima
         from PySide6.QtWidgets import QComboBox
 
+        # Ícone, não texto: nenhuma fonte da máquina tem o glifo ★ (medido com
+        # QRawFont na Fatia 24) — o Qt caía numa fonte substituta e saía torto.
+        star_icon = icons.icon("star-filled", theme.ACCENT)
+
         self.rating_combo = QComboBox()
         self.rating_combo.addItem("Nota: todas", None)
         for n in range(1, 6):
-            self.rating_combo.addItem("★" * n + f" ≥ {n}", n)
+            self.rating_combo.addItem(star_icon, f"≥ {n}", n)
         self.rating_combo.currentIndexChanged.connect(lambda _i: self._apply_filters())
 
-        self.fav_check = QCheckBox("Só ★")
+        self.fav_check = QCheckBox("Só favoritos")
         self.fav_check.setToolTip("Mostrar só favoritos")
         self.fav_check.toggled.connect(lambda _c: self._apply_filters())
 
@@ -136,6 +144,7 @@ class MainWindow(QMainWindow):
         self.progress.setVisible(False)
         self.progress.setMaximumWidth(280)
         self.rescan_btn = QPushButton("Reindexar")
+        self.rescan_btn.setIcon(icons.icon("refresh", theme.TEXT))
         self.rescan_btn.clicked.connect(self.start_scan)
 
         top = QHBoxLayout()
