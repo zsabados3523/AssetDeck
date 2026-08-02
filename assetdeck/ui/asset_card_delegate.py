@@ -19,17 +19,20 @@ from PySide6.QtWidgets import QStyle, QStyledItemDelegate
 
 from assetdeck.ui import icons, theme
 from assetdeck.ui.asset_grid import (
+    CARD_GAP,
+    CARD_MARGIN,
+    CARD_PAD,
     CELL,
     EXT_ROLE,
     HAS_THUMB_ROLE,
     HIDDEN_ROLE,
+    MAX_ICON,
+    MIN_ICON,
+    NAME_HEIGHT,
     STARRED_ROLE,
+    cell_for_icon,
 )
 
-_CARD_MARGIN = 3       # respiro entre células, além do spacing(8) da view
-_PAD = 9                # margem interna do card
-_NAME_HEIGHT = 34       # altura reservada para até 2 linhas de nome
-_GAP = 6                # entre a miniatura e o nome
 _BADGE = 20              # lado do selo (estrela / oculto)
 _RADIUS = theme.RADII[theme.DEFAULT.radius][1]     # 8px — o mesmo do resto do tema
 _BADGE_BG = QColor(0, 0, 0, 140)   # fundo dos selos sobre a miniatura
@@ -40,11 +43,11 @@ class AssetCardDelegate(QStyledItemDelegate):
         super().__init__(parent)
 
         self._font_name = QFont()
-        self._font_name.setPointSize(9)
+        self._font_name.setPixelSize(12)  # px, não pt: mais previsível entre telas
         self._fm_name = QFontMetrics(self._font_name)
 
         self._font_chip = QFont()
-        self._font_chip.setPointSize(7)
+        self._font_chip.setPixelSize(10)
         self._font_chip.setBold(True)
         self._fm_chip = QFontMetrics(self._font_chip)
 
@@ -60,6 +63,8 @@ class AssetCardDelegate(QStyledItemDelegate):
         self._icon_star = icons.pixmap("star-filled", "#FFFFFF", 12)
         self._icon_hidden = icons.pixmap("eye-off", "#FFFFFF", 12)
 
+        self._cell = CELL  # tamanho devolvido por sizeHint(); ver set_icon_size
+
     @staticmethod
     def _qcolor(rgba: tuple[int, int, int, float]) -> QColor:
         r, g, b, a = rgba
@@ -67,17 +72,22 @@ class AssetCardDelegate(QStyledItemDelegate):
         c.setAlphaF(a)
         return c
 
+    def set_icon_size(self, px: int) -> None:
+        """Chamado pela AssetGridView quando o slider de tamanho muda."""
+        px = max(MIN_ICON, min(MAX_ICON, px))
+        self._cell = cell_for_icon(px)
+
     # ---- Qt ----
 
     def sizeHint(self, option, index) -> QSize:  # noqa: N802
-        return CELL
+        return self._cell
 
     def paint(self, painter: QPainter, option, index) -> None:  # noqa: N802
         painter.save()
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
         card_rect = option.rect.adjusted(
-            _CARD_MARGIN, _CARD_MARGIN, -_CARD_MARGIN, -_CARD_MARGIN
+            CARD_MARGIN, CARD_MARGIN, -CARD_MARGIN, -CARD_MARGIN
         )
         selected = bool(option.state & QStyle.StateFlag.State_Selected)
         hover = bool(option.state & QStyle.StateFlag.State_MouseOver)
@@ -90,16 +100,16 @@ class AssetCardDelegate(QStyledItemDelegate):
             painter.setPen(self._pen_border)
         painter.drawRoundedRect(QRectF(card_rect), _RADIUS, _RADIUS)
 
-        thumb_rect = QRect(
-            card_rect.x() + _PAD, card_rect.y() + _PAD,
-            card_rect.width() - 2 * _PAD,
-            card_rect.height() - 2 * _PAD - _NAME_HEIGHT - _GAP,
-        )
+        # Miniatura sempre QUADRADA (pedido do Rafael: "sem achatar nada") —
+        # o lado vem da LARGURA do card, que é o que cell_for_icon() garante
+        # bater exatamente com o tamanho que o modelo escalou a imagem para.
+        lado = card_rect.width() - 2 * CARD_PAD
+        thumb_rect = QRect(card_rect.x() + CARD_PAD, card_rect.y() + CARD_PAD, lado, lado)
         self._paint_thumb(painter, index, thumb_rect)
 
         name_rect = QRect(
-            card_rect.x() + _PAD, thumb_rect.bottom() + _GAP,
-            card_rect.width() - 2 * _PAD, _NAME_HEIGHT,
+            card_rect.x() + CARD_PAD, thumb_rect.bottom() + CARD_GAP,
+            card_rect.width() - 2 * CARD_PAD, NAME_HEIGHT,
         )
         self._paint_name(painter, index, name_rect)
 
@@ -117,6 +127,14 @@ class AssetCardDelegate(QStyledItemDelegate):
         has_thumb = bool(index.data(HAS_THUMB_ROLE))
 
         if has_thumb and pix is not None and not pix.isNull():
+            # Rede de segurança: o modelo já escala para caber, mas se algum
+            # dia sair de sincronia (ex.: o slider muda no meio de um paint),
+            # NUNCA deixa a imagem vazar por cima do nome — encolhe aqui.
+            if pix.width() > rect.width() or pix.height() > rect.height():
+                pix = pix.scaled(
+                    rect.size(), Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation,
+                )
             x = rect.x() + (rect.width() - pix.width()) // 2
             y = rect.y() + (rect.height() - pix.height()) // 2
             painter.drawPixmap(x, y, pix)
@@ -158,11 +176,14 @@ class AssetCardDelegate(QStyledItemDelegate):
         painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, texto)
 
     def _paint_name(self, painter: QPainter, index, rect: QRect) -> None:
+        """Nome em até 2 linhas, CENTRALIZADO no espaço reservado — pedido do
+        Rafael: um nome curto de 1 linha não deve ficar colado no topo com o
+        resto do espaço vazio embaixo."""
         nome = index.data(Qt.ItemDataRole.DisplayRole) or ""
         painter.setFont(self._font_name)
         painter.setPen(self._pen_name)
         painter.setClipRect(rect)  # nunca vaza pra baixo do card em nomes longos
         painter.drawText(
-            rect, Qt.AlignmentFlag.AlignHCenter | Qt.TextFlag.TextWordWrap, nome
+            rect, Qt.AlignmentFlag.AlignCenter | Qt.TextFlag.TextWordWrap, nome
         )
         painter.setClipping(False)

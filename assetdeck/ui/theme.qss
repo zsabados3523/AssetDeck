@@ -222,6 +222,43 @@ QCheckBox::indicator:disabled, QRadioButton::indicator:disabled {
     background-color: $bg_tint;
 }
 
+/* O MESMO indicador, mas para os checkboxes DENTRO de árvores/listas (tags do
+ * painel de detalhes, TagTree lateral). É um subcontrole diferente de
+ * QCheckBox::indicator — sem esta regra ele cai no desenho genérico do
+ * QStyleSheetStyle assim que QUALQUER stylesheet está ativo, que sai um
+ * quadrado preto sólido, marcado ou não (bug relatado pelo Rafael, visto na
+ * tela: tags_tree do painel de detalhes). */
+QTreeView::indicator, QListView::indicator {
+    width: 15px;
+    height: 15px;
+    border: 1px solid $border_strong;
+    background-color: #FFFFFF;
+    border-radius: 4px;
+}
+
+QTreeView::indicator:checked, QListView::indicator:checked {
+    background-color: $accent;
+    border: 1px solid $accent;
+    image: url($check_icon);
+}
+
+QTreeView::indicator:disabled, QListView::indicator:disabled {
+    border: 1px solid $border;
+    background-color: $bg_tint;
+}
+
+/* Barra de filtros (Fatia 28): mesmos controles, padding menor — pedido do
+ * Rafael para enxutar a altura sem esconder nenhum filtro. objectName
+ * próprio pra não afetar botão/combo em nenhum outro lugar do app. */
+#filterBar QToolButton, #filterBar QComboBox {
+    padding: 3px 8px;
+}
+
+#filterBar QCheckBox {
+    padding: 0;
+    spacing: 5px;
+}
+
 QComboBox {
     background-color: $surface;
     border: 1px solid $border;

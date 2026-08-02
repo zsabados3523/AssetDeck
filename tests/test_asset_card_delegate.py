@@ -146,3 +146,39 @@ def test_paint_nao_quebra_para_nenhuma_combinacao_de_estado(grid, qapp):
             delegate.paint(painter, option, idx)  # não pode levantar exceção
     finally:
         painter.end()
+
+
+def test_set_icon_size_mantem_view_modelo_e_delegate_sincronizados(grid):
+    """Slider de tamanho (Fatia 28): os três têm de mudar JUNTOS — foi
+    exatamente a falta dessa sincronia que fazia a miniatura vazar por cima
+    do nome."""
+    view, modelo, _conn = grid
+    view.set_icon_size(220)
+
+    esperado = asset_grid.cell_for_icon(220)
+    assert modelo._icon_px == 220
+    assert view.itemDelegate()._cell == esperado
+    assert view.iconSize().width() == 220
+    assert view.gridSize() == esperado
+
+
+def test_set_icon_size_respeita_os_limites(grid):
+    view, _modelo, _conn = grid
+    view.set_icon_size(9999)
+    assert view.iconSize().width() == asset_grid.MAX_ICON
+    view.set_icon_size(1)
+    assert view.iconSize().width() == asset_grid.MIN_ICON
+
+
+@pytest.mark.parametrize("px", [asset_grid.MIN_ICON, 160, asset_grid.MAX_ICON])
+def test_pixmap_nunca_ultrapassa_o_tamanho_pedido(grid, px):
+    """Regressão do bug relatado pelo Rafael: miniaturas vazando por cima do
+    texto. A miniatura escalada pelo modelo tem de caber no quadrado que o
+    delegate desenha, em qualquer tamanho do slider."""
+    view, modelo, _conn = grid
+    view.set_icon_size(px)
+    for row in range(modelo.rowCount()):
+        pix = modelo.data(modelo.index(row), Qt.ItemDataRole.DecorationRole)
+        if pix is not None and not pix.isNull():
+            assert pix.width() <= px
+            assert pix.height() <= px
