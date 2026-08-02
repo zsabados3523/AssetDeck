@@ -542,6 +542,12 @@ com horizonte reto e sem costura na emenda 360°; alternar pra Esfera
 mostra a bola refletindo o ambiente; girar mantém a bola centrada.
 542 testes verdes.
 
+**Ajuste pós-tela (2026-08-02):** o Rafael usou e apontou que o eixo
+VERTICAL estava invertido — arrastar para cima empurrava a vista para o
+alto em vez de puxar a imagem para cima. Corrigido; os dois eixos têm
+sinais diferentes de propósito agora (o horizontal ele aprovou como
+estava). Teste atualizado para travar o sentido novo.
+
 **Candidato barato se o Rafael sentir falta ao usar:** controle de
 exposição (oferecido e não escolhido) — com esta arquitetura é um
 `uniform` de uma linha, mas exige trocar a textura de 8-bit para float32.
@@ -620,6 +626,18 @@ temporário em `dragEnterEvent`/`dropEvent` pra confirmar se o evento
 chega no app; testar também com `QT_QPA_PLATFORM=xcb` (descarta
 Wayland-specific). Cobertura de teste também falta: nenhum teste hoje
 simula um `QDropEvent` com `hasUrls()` real contra `AssetGridView`.
+
+### ☐ Fatia 46 — Teste da ponte falha com o app aberto
+`tests/test_main_window.py::test_ponte_e_render_ficam_prontos` afirma que
+a ponte do Blender está escutando, mas ela usa a porta FIXA 45017
+(`config.DEFAULTS["bridge_port"]`). Com o AssetDeck de verdade aberto na
+máquina, a porta já está tomada e o teste falha — aconteceu duas vezes
+durante o desenvolvimento, e nas duas o "erro" era só o app do Rafael
+rodando.
+
+Não é regressão de código, é teste sem isolamento. Correção: o teste
+pedir porta 0 (o SO escolhe uma livre) ou pular explicitamente quando a
+porta estiver ocupada — nunca afrouxar a asserção.
 
 ### ☐ Fatia 45 — Cor e ícone de tag não sobrevivem ao sidecar
 Achado ao fatiar a 33. O sidecar grava tags como lista plana de caminhos

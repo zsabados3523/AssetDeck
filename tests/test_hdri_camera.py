@@ -28,12 +28,15 @@ def test_arrastar_pra_direita_gira_a_vista():
     assert cam.pitch == 0.0
 
 
-def test_arrastar_pra_cima_e_pra_baixo_mexe_no_pitch():
+def test_arrastar_pra_cima_leva_a_imagem_pra_cima():
+    """Sentido conferido pelo Rafael na tela: o eixo vertical estava
+    invertido na primeira versão. Arrastar para cima (dy negativo) puxa o
+    céu para perto, ou seja, a câmera baixa."""
     cam = HdriCamera()
     cam.drag(0, -40)
-    assert cam.pitch == pytest.approx(10.0)
-    cam.drag(0, 80)
     assert cam.pitch == pytest.approx(-10.0)
+    cam.drag(0, 80)
+    assert cam.pitch == pytest.approx(10.0)
 
 
 def test_pitch_trava_antes_dos_polos():
@@ -41,9 +44,9 @@ def test_pitch_trava_antes_dos_polos():
     vista dá um salto."""
     cam = HdriCamera()
     cam.drag(0, -100000)
-    assert cam.pitch == PITCH_MAX
-    cam.drag(0, 200000)
     assert cam.pitch == -PITCH_MAX
+    cam.drag(0, 200000)
+    assert cam.pitch == PITCH_MAX
 
 
 def test_yaw_da_a_volta_sem_acumular():

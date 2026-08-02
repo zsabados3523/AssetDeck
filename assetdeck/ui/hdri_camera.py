@@ -28,10 +28,15 @@ class HdriCamera:
         self.pitch = pitch
 
     def drag(self, dx: float, dy: float) -> None:
-        """Arrasto do mouse em pixels. Arrastar para a direita traz o que
-        está à direita para o centro — o mesmo sentido de arrastar um mapa."""
+        """Arrasto do mouse em pixels.
+
+        Horizontal segue o sentido de "girar a câmera". No vertical o
+        Rafael testou na tela e achou invertido: arrastar para cima tem de
+        levar a imagem para cima (você puxa o céu para perto), não empurrar
+        a vista para o alto. Daí o sinal diferente entre os dois eixos.
+        """
         self.yaw = _wrap(self.yaw - dx * GRAUS_POR_PIXEL)
-        self.pitch = _clamp(self.pitch - dy * GRAUS_POR_PIXEL, -PITCH_MAX, PITCH_MAX)
+        self.pitch = _clamp(self.pitch + dy * GRAUS_POR_PIXEL, -PITCH_MAX, PITCH_MAX)
 
     def reset(self) -> None:
         self.yaw = 0.0
