@@ -234,3 +234,51 @@ def test_reload_grid_funciona_com_lista_vazia(janela):
 
 def test_batch_rename_selected_existe(janela):
     assert hasattr(janela, "_batch_rename_selected")
+
+
+def _asset_id(conn, nome: str) -> int:
+    row = conn.execute(
+        "SELECT id FROM assets WHERE name = ? AND deleted_at IS NULL", (nome,)
+    ).fetchone()
+    assert row is not None, f"asset '{nome}' não foi indexado"
+    return row["id"]
+
+
+def test_preview_manual_vale_para_asset_sem_miniatura_nativa(janela):
+    """Fatia 28d: a restrição de tipo (só 'model'/'scene') virou uma
+    restrição de CONTEÚDO — vale pra qualquer asset sem preview de verdade
+    (.ies, .psd, .cube… e, antes disso, .blend/.fbx)."""
+    from assetdeck import config
+    from assetdeck.db.repos import libraries as libraries_repo
+    from assetdeck.indexer.scanner import scan_library
+
+    # Preferência "ask" (padrão) abre um QMessageBox.exec() MODAL — trava a
+    # suíte esperando um clique que nunca vem. "never" evita a pergunta.
+    cfg = config.load_config()
+    cfg["hide_preview_source"] = "never"
+    config.save_config(cfg)
+
+    root = janela._library_root
+    (root / "spot.ies").write_bytes(b"IES:LM-63-2002" + b"\x00" * 20)
+    lib_id = libraries_repo.get_or_create(janela._conn, root)
+    scan_library(janela._conn, lib_id, root)
+    janela.model.reload()
+
+    ies_id = _asset_id(janela._conn, "spot")
+    jpg_id = _asset_id(janela._conn, "textura")
+
+    janela._on_asset_preview_dropped(ies_id, [jpg_id])
+
+    linha = janela.model.row_at(janela.model.index_of_asset(ies_id))
+    assert linha["cover_path"], "o .ies devia ter ganhado a capa manual"
+
+
+def test_preview_manual_recusa_asset_que_ja_tem_miniatura_de_verdade(janela):
+    """Um .jpg já tem preview nativo — não faz sentido sobrepor com um
+    preview manual, então o drop é ignorado (com aviso no rodapé)."""
+    jpg_id = _asset_id(janela._conn, "textura")
+
+    janela._on_asset_preview_dropped(jpg_id, [jpg_id])
+
+    linha = janela.model.row_at(janela.model.index_of_asset(jpg_id))
+    assert not linha["cover_path"]

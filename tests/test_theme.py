@@ -244,6 +244,31 @@ def test_o_canto_do_card_e_arredondado(sonda):
     assert _pixel(img, 50, 150) != theme.BG.upper()
 
 
+def test_scroll_area_do_painel_de_detalhes_nao_cobre_os_cantos(qapp):
+    """Bug visto na tela: o painel de detalhes (que é ele mesmo um #card,
+    Fatia 25) rola o conteúdo por dentro desde a Fatia 28c — mas o viewport
+    de uma QScrollArea preenche o PRÓPRIO fundo por padrão (branco opaco),
+    cobrindo os cantos arredondados do #card por baixo. O painel inteiro
+    parecia quadrado.
+
+    Não dá pra provar isto por pixel de forma confiável neste ambiente (o
+    tema é branco sobre branco por design — "Craft style" — e o
+    QGraphicsDropShadowEffect não renderiza sob QT_QPA_PLATFORM=offscreen).
+    A prova aqui é de configuração: o viewport não pode se autopreencher.
+    """
+    from pathlib import Path
+
+    from PySide6.QtWidgets import QFrame, QScrollArea
+
+    from assetdeck.ui.details_panel import DetailsPanel
+
+    dp = DetailsPanel(Path("/tmp"))
+    scroll = dp.findChild(QScrollArea)
+    assert scroll is not None, "o painel de detalhes precisa rolar por dentro"
+    assert scroll.frameShape() == QFrame.Shape.NoFrame
+    assert scroll.viewport().autoFillBackground() is False
+
+
 def test_separacao_controla_o_quanto_a_linha_aparece(sonda):
     """Os três níveis do seletor "Separação" têm de diferir na tela."""
     lidos = []
@@ -272,12 +297,18 @@ def tema_isolado(qapp):
     qapp.setFont(fonte)
 
 
-def test_mascara_de_cantos_nao_quebra_menu_nem_dialogo(tema_isolado):
+def test_mascara_de_cantos_nao_quebra_menu_e_dialogo_fica_quadrado(tema_isolado):
     """`install_popup_corner_mask` (aplicado por `apply_theme`) não pode
-    lançar exceção ao mostrar um QMenu/QDialog — e o QSS continua sendo
-    pintado por baixo da máscara (o offscreen recusa `setMask()` de verdade,
-    então isto é o que dá pra provar automatizado; o corte em si só é
-    verificável na tela real, ver REDESIGN.md)."""
+    lançar exceção ao mostrar um QMenu — e o QSS continua sendo pintado por
+    baixo da máscara (o offscreen recusa `setMask()` de verdade, então isto
+    é o que dá pra provar automatizado; o corte em si só é verificável na
+    tela real).
+
+    QDialog é testado aqui também, mas para o oposto: ele NÃO pode ter
+    `border-radius` nem entrar na máscara. Foi tentado e revertido — um
+    QDialog ganha barra de título nativa do gerenciador de janelas, e
+    cortar cantos por baixo dela deixava uma costura feia (visto na tela
+    pelo Rafael)."""
     from PySide6.QtGui import QColor
     from PySide6.QtWidgets import QDialog, QMenu
 
@@ -296,6 +327,13 @@ def test_mascara_de_cantos_nao_quebra_menu_nem_dialogo(tema_isolado):
     menu.popup(dialogo.mapToGlobal(dialogo.rect().center()))
     tema_isolado.processEvents()
     menu.close()  # não travou, não lançou exceção
+
+
+def test_qdialog_nao_arredonda(tema_isolado):
+    theme.apply_theme(tema_isolado)
+    qss_dialog = [b for b in theme.build_qss().split("}") if "QDialog {" in b][0]
+    assert "border-radius" not in qss_dialog
+    assert "border:" not in qss_dialog
 
 
 def test_apply_theme_configura_o_app(tema_isolado):

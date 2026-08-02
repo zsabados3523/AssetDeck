@@ -197,7 +197,15 @@ class DetailsPanel(QWidget):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
+        # O viewport da QScrollArea preenche o próprio fundo (palette Base,
+        # branco opaco) por padrão — cobre os cantos arredondados do #card
+        # por baixo dele (bug visto na tela: o painel de detalhes inteiro
+        # parecia quadrado). QSS não alcança o viewport de forma confiável
+        # (é um QWidget anônimo, sem objectName, criado pelo próprio Qt);
+        # a saída certa é desligar o preenchimento automático direto aqui.
+        scroll.viewport().setAutoFillBackground(False)
         scroll.setWidget(content)
+        content.setAutoFillBackground(False)
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(14, 12, 14, 14)

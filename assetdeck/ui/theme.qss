@@ -27,14 +27,14 @@ QMainWindow {
     background-color: $bg;
 }
 
-/* Diálogo é uma janela PRÓPRIA, sem barra de título do gerenciador de
- * janelas (ao contrário da janela principal) — cantos arredondados fazem
- * sentido aqui. O corte de verdade da janela (pra não sobrar quina quadrada
- * atrás do arredondado do QSS) é `install_popup_corner_mask()` em theme.py. */
+/* QDialog NÃO arredonda (tentado e revertido — ver theme.py). Ao contrário
+ * de QMenu, um QDialog normal GANHA barra de título nativa do gerenciador de
+ * janelas (minimizar/maximizar/fechar) — cortar cantos por baixo dela deixa
+ * uma costura feia onde o retângulo quadrado da barra encontra o corpo
+ * arredondado (visto na tela pelo Rafael). QMenu não tem esse problema (é
+ * uma janela popup sem decoração nenhuma), então continua arredondado. */
 QDialog {
     background-color: $bg;
-    border: 1px solid $hairline;
-    border-radius: $radius_panel;
 }
 
 /* Superfície de fundo da janela. É o widget central que recebe o fundo, e não
@@ -62,6 +62,15 @@ QFrame#cardFlat {
     background-color: $surface;
     border: 1px solid $border;
     border-radius: $radius_card;
+}
+
+/* QScrollArea em si (moldura/fundo do viewport é responsabilidade do Python
+ * — ver `scroll.viewport().setAutoFillBackground(False)` em details_panel.py;
+ * o seletor `QScrollArea > QWidget` do QSS NÃO alcança o viewport de forma
+ * confiável, então não dá pra resolver só daqui). */
+QScrollArea {
+    background: transparent;
+    border: none;
 }
 
 /* ---------------------------------------------------------------- texto -- */
@@ -184,6 +193,17 @@ QCheckBox, QRadioButton {
     color: $text;
     spacing: 7px;
     padding: 2px 0;
+}
+
+/* Barra de busca (Fatia 28d): controles mais baixos SÓ aqui — pedido do
+ * Rafael de enxutar verticalmente. objectName próprio, não afeta o resto
+ * do app. */
+#searchBar QLineEdit, #searchBar QPushButton {
+    padding: 4px 10px;
+}
+
+#searchBar QCheckBox {
+    padding: 0;
 }
 
 QCheckBox:disabled, QRadioButton:disabled {
@@ -466,12 +486,12 @@ QSlider::sub-page:horizontal {
 }
 
 QSlider::handle:horizontal {
-    width: 14px;
-    height: 14px;
-    margin: -5px 0;
+    width: 16px;
+    height: 16px;
+    margin: -6px 0;
     background: #FFFFFF;
     border: 1px solid $border_strong;
-    border-radius: 7px;
+    border-radius: 8px;
 }
 
 QSlider::handle:horizontal:hover {
@@ -486,9 +506,13 @@ QSplitter::handle:hover {
     background-color: $selection;
 }
 
+/* Compacto de propósito (pedido do Rafael): é uma linha de status, não
+ * precisa da altura padrão do Fusion. */
 QStatusBar {
     background: transparent;
     color: $text_muted;
+    padding: 1px 10px;
+    font-size: $font_size_small;
 }
 
 QStatusBar::item {

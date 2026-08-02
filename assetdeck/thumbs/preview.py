@@ -16,23 +16,29 @@ from assetdeck.thumbs.raster import (
     normalize_mode,
     open_image,
 )
+from assetdeck.thumbs.vector import can_vector, make_vector_thumbnail, render_vector
 
 
 def can_preview(path: Path) -> bool:
     """Este arquivo pode virar thumbnail/preview visual?"""
-    return can_thumbnail(path) or can_hdr(path)
+    return can_thumbnail(path) or can_hdr(path) or can_vector(path)
 
 
 def make_any_thumbnail(src: Path, dest: Path, size: int = 256) -> None:
     if can_hdr(src):
         make_hdr_thumbnail(src, dest, size)
+    elif can_vector(src):
+        make_vector_thumbnail(src, dest, size)
     else:
         make_thumbnail(src, dest, size)
 
 
 def load_full_image(path: Path) -> Image.Image:
-    """Imagem em resolução completa para o popup (HDR já tonemapado)."""
+    """Imagem em resolução completa para o popup (HDR já tonemapado, SVG
+    rasterizado maior)."""
     if can_hdr(path):
         return load_tonemapped(path)
+    if can_vector(path):
+        return render_vector(path, size=1600)
     img = normalize_mode(open_image(path))
     return img
