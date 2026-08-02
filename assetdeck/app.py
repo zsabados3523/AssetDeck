@@ -118,7 +118,13 @@ def run(argv: list[str]) -> int:
     # Import tardio: os testes de banco/backup/scanner rodam sem Qt carregado.
     from PySide6.QtWidgets import QApplication
 
+    from assetdeck.ui.hdri_viewer import ensure_gl_format
     from assetdeck.ui.main_window import MainWindow
+
+    # Tem de vir ANTES do QApplication: o visualizador de HDRI (Fatia 34)
+    # usa shaders #version 330, que não compilam num contexto de
+    # compatibilidade antigo — e o formato padrão é imutável depois.
+    ensure_gl_format()
 
     app = QApplication(sys.argv[:1])
 

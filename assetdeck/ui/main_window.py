@@ -33,6 +33,7 @@ from assetdeck.db.repos import tags as tags_repo
 from assetdeck.indexer import duplicates as duplicates_finder
 from assetdeck.indexer import relocator
 from assetdeck.indexer.scanner import ScanStats
+from assetdeck.thumbs.hdr import can_hdr
 from assetdeck.thumbs.pipeline import ThumbnailPipeline
 from assetdeck.ui import asset_grid
 from assetdeck.ui.asset_grid import AssetGridModel, AssetGridView
@@ -830,12 +831,26 @@ class MainWindow(QMainWindow):
         row = self.model.row_at(index)
         if row is None:
             return
+        caminho = Path(self._library_root) / row["rel_path"]
+        if can_hdr(caminho):
+            # HDRI achatado num QLabel não deixa avaliar a luz (Fatia 34).
+            self._hdri_viewer().show_for(caminho)
+            return
         maps = None
         if row["asset_type"] == "pbr_set" and self.group_check.isChecked():
             # PBR Material Viewer: botões para alternar entre os mapas do set
             maps = assets_repo.list_files(self._conn, row["id"])
         self.preview_popup.show_for(row, self._library_root,
                                     self._thumb_from_disk(row), maps=maps)
+
+    def _hdri_viewer(self):
+        """Criado sob demanda: o contexto OpenGL só é montado se o Rafael
+        realmente abrir um HDRI — quem nunca abre não paga nada."""
+        if getattr(self, "_hdri_win", None) is None:
+            from assetdeck.ui.hdri_viewer import HdriViewer
+
+            self._hdri_win = HdriViewer(self)
+        return self._hdri_win
 
     def _grid_menu(self, pos) -> None:
         from PySide6.QtWidgets import QMenu
