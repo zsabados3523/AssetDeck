@@ -317,7 +317,10 @@ class MainWindow(QMainWindow):
         self.tags.reload(self._conn)
         self.collections.reload(self._conn)
         self.smart_collections.reload(self._conn)
-        self.type_filter.reload(assets_repo.distinct_types(self._conn))
+        tipos = assets_repo.distinct_types(self._conn)
+        ext_por_tipo = {t: assets_repo.distinct_extensions(self._conn, asset_type=t)
+                        for t in tipos}
+        self.type_filter.reload(tipos, ext_por_tipo)
         self.model.reload()
         self._apply_filters()
 
@@ -330,6 +333,7 @@ class MainWindow(QMainWindow):
         return dict(
             search=self.search_box.text().strip(),
             asset_types=self.type_filter.selected(),
+            extensions=self.type_filter.selected_extensions(),
             dir_prefix=dir_prefix,
             # "Incluir subpastas" saiu da UI (pedido do Rafael, Fatia 28c —
             # ele não via caso de uso pra desligar). Sempre True agora.
@@ -569,6 +573,7 @@ class MainWindow(QMainWindow):
         Fatia 28c) é ignorado — o toggle saiu da UI, agora é sempre True."""
         self.search_box.setText(query.get("search") or "")
         self.type_filter.set_selected(query.get("asset_types") or [])
+        self.type_filter.set_selected_extensions(query.get("extensions") or [])
         self.rating_filter.set_value(query.get("min_rating"))
         self.fav_check.setChecked(bool(query.get("starred_only")))
         self.res_filter.set_value(query.get("min_resolution"))
