@@ -271,7 +271,11 @@ class MainWindow(QMainWindow):
         splitter.setStretchFactor(2, 0)
         splitter.setSizes([240, 740, 300])
 
+        # objectName próprio: controles mais baixos SÓ nesta fileira (padding
+        # menor), sem afetar botão/campo em nenhum outro lugar do app —
+        # pedido do Rafael de enxutar a barra de busca verticalmente.
         top_widget = QWidget()
+        top_widget.setObjectName("searchBar")
         top_widget.setLayout(top)
         top_card = theme.make_card(top_widget)
 
@@ -298,6 +302,9 @@ class MainWindow(QMainWindow):
         # QLabel solto na barra de filtros, junto de mais 10 widgets.
         self.footer_count = QLabel()
         self.statusBar().addPermanentWidget(self.footer_count)
+        # É uma linha de status, não precisa da altura padrão do Fusion
+        # (pedido do Rafael de enxutar o rodapé).
+        self.statusBar().setMaximumHeight(24)
 
         self.statusBar().showMessage(f"v{__version__} · banco: {db_path}")
         self._reload_all()
@@ -987,16 +994,28 @@ class MainWindow(QMainWindow):
                                      "seu arquivo original não é tocado)")
 
     def _on_asset_preview_dropped(self, target_id: int, source_ids: list) -> None:
-        """Asset de imagem arrastado de dentro da grid sobre um model (Fatia 10b)."""
+        """Asset de imagem arrastado de dentro da grid sobre outro asset
+        (Fatia 10b — inicialmente só modelos; pedido do Rafael para valer em
+        qualquer tipo sem preview de verdade: .ies, .psd, .cube, .dwg…).
+
+        A regra não é mais por TIPO fixo — é por o alvo já ter ou não uma
+        miniatura de verdade (`can_preview` no arquivo dele). Um .blend nunca
+        tem; um .ies/.psd/.cube também não; um .svg agora tem (Fatia 28d), e
+        um .jpg sempre teve — esses continuam de fora, a capa automática já
+        é a imagem real."""
         from assetdeck import config
         from assetdeck.thumbs.preview import can_preview
 
         alvo = self._conn.execute(
             "SELECT name, asset_type FROM assets WHERE id = ?", (target_id,)
         ).fetchone()
-        if alvo is None or alvo["asset_type"] not in ("model", "scene"):
+        if alvo is None:
+            return
+        alvo_path = assets_repo.primary_abs_path(self._conn, target_id, self._library_root)
+        if alvo_path is not None and can_preview(alvo_path):
             self.statusBar().showMessage(
-                "Previews internos só podem ser aplicados a MODELOS (.blend/.fbx/.obj…)"
+                f"'{alvo['name']}' já tem uma miniatura de verdade — "
+                "preview manual só vale para assets sem preview nativo"
             )
             return
 

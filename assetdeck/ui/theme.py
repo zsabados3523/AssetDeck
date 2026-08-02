@@ -461,7 +461,7 @@ def apply_theme(app, variant: Variant = DEFAULT) -> None:
 
 
 class _PopupCornerMask:
-    """Recorta QMenu/QDialog num retângulo arredondado de verdade.
+    """Recorta QMenu num retângulo arredondado de verdade.
 
     `WA_TranslucentBackground` foi testado e DESCARTADO: com ele ativo, o
     `background-color` do QSS simplesmente parou de ser pintado (sonda
@@ -471,26 +471,25 @@ class _PopupCornerMask:
     arredondado não depende de compositor (usa a X-Shape extension) e,
     testado, manteve o fundo do QSS pintado normalmente.
 
-    Não mexe em `QFileDialog`/`QColorDialog` — são diálogos nativos
-    complexos, arredondar a janela deles é mais risco que ganho.
+    Só QMenu — QDialog foi tentado e revertido (ver comentário do QDialog
+    no theme.qss): ele ganha barra de título nativa do gerenciador de
+    janelas, e cortar cantos por baixo dela deixa uma costura feia onde o
+    retângulo da barra encontra o corpo arredondado (visto na tela pelo
+    Rafael). QMenu é uma janela popup sem decoração nenhuma — sem esse
+    problema.
     """
 
-    def __init__(self, radius_dialog: int, radius_menu: int) -> None:
-        self._radius_dialog = radius_dialog
+    def __init__(self, radius_menu: int) -> None:
         self._radius_menu = radius_menu
 
     def __call__(self, obj, event) -> bool:
         from PySide6.QtCore import QEvent
-        from PySide6.QtWidgets import QColorDialog, QDialog, QFileDialog, QMenu
+        from PySide6.QtWidgets import QMenu
 
         if event.type() not in (QEvent.Type.Show, QEvent.Type.Resize):
             return False
-        if isinstance(obj, (QFileDialog, QColorDialog)):
-            return False
         if isinstance(obj, QMenu):
             self._mask(obj, self._radius_menu)
-        elif isinstance(obj, QDialog):
-            self._mask(obj, self._radius_dialog)
         return False
 
     @staticmethod
@@ -519,8 +518,8 @@ _popup_filter_ref = None  # installEventFilter não segura referência sozinho
 
 def install_popup_corner_mask(app, variant: Variant = DEFAULT) -> None:
     """Instala (ou REINSTALA, se o tema for reaplicado) o recorte de cantos
-    de QMenu/QDialog. Ver `_PopupCornerMask` para o porquê de `setMask()`
-    em vez de `WA_TranslucentBackground`.
+    de QMenu. Ver `_PopupCornerMask` para o porquê de `setMask()` em vez de
+    `WA_TranslucentBackground`, e para o porquê de NÃO incluir QDialog.
 
     Bug pego rodando a suíte inteira: `apply_theme()` é chamado várias vezes
     em sequência em teste (`test_todas_as_variantes_aplicam_sem_erro` chama
@@ -538,8 +537,8 @@ def install_popup_corner_mask(app, variant: Variant = DEFAULT) -> None:
         _popup_filter_ref.deleteLater()
         _popup_filter_ref = None
 
-    raio_painel, raio_card, _raio_controle = RADII[variant.radius]
-    mask = _PopupCornerMask(radius_dialog=raio_painel, radius_menu=raio_card)
+    _raio_painel, raio_card, _raio_controle = RADII[variant.radius]
+    mask = _PopupCornerMask(radius_menu=raio_card)
 
     class _Filter(QObject):
         def eventFilter(self, obj, event) -> bool:  # noqa: N802
