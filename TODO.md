@@ -432,9 +432,39 @@ busca. Barra tem 681px e cabe sem espremer o breadcrumb até 1100px de
 janela. 329 testes verdes (`tests/test_category_bar.py` novo no lugar do
 `test_type_filter.py`).
 
-### ☐ Fatia 32 — Navegação de pastas com histórico
-Controles tipo navegador (voltar / avançar) na área de visualização de
-assets, além da árvore de pastas atual.
+### ☑ Fatia 32 — Navegação de pastas com histórico
+Voltar · Avançar · Subir um nível na linha do breadcrumb (3 ícones novos),
+com `Alt+←`/`Alt+→`/`Alt+↑` e os botões laterais do mouse.
+
+- `ui/nav_history.py` — pilha de navegação **sem Qt** (não havia nada de
+  histórico/undo no projeto): `push` descarta o "futuro" ao navegar do
+  meio, como um navegador; `back`/`forward` levantam `IndexError` fora dos
+  limites em vez de falhar quieto.
+- **Correção estrutural:** a pasta atual era derivada de
+  `folders.currentItem()` e mudava por DOIS caminhos independentes
+  (`_on_dir_selected` e `_restore_filters`). Centralizados num
+  `_go_to_dir(prefix, record=True)` — histórico furado era questão de
+  tempo. Smart Collection entra no histórico (decisão do Rafael).
+- `folder_tree.select()` agora devolve `bool` e expande os ancestrais.
+  Antes falhava em silêncio com pasta inexistente (deixando o breadcrumb
+  mentindo) e podia selecionar dentro de um nó fechado.
+- **Bug antigo corrigido de quebra:** `_reload_all` jogava pra raiz no fim
+  de cada varredura e não atualizava o breadcrumb — agora a pasta é
+  preservada, ou cai na raiz se sumiu do disco.
+- Breadcrumb passou a encurtar pela ESQUERDA (`ElideLeft` + tooltip com o
+  caminho inteiro): os 3 botões novos comeram ~90px da linha e o título
+  ficava cortado no fim, escondendo justamente a pasta atual. Só encurta
+  abaixo de ~1366px de janela.
+- `tests/test_icons.py` agora varre a pasta de ícones em vez da lista fixa
+  (que já tinha ficado desatualizada duas vezes): 21 → 58 casos.
+
+**Deu certo quando** (verificado com a `MainWindow` real contra a testlib):
+entrar em `01 - MODELOS` (127→77), depois em `Vegetação` (→75), Voltar
+duas vezes, Avançar, Subir; botões habilitam/desabilitam certo a cada
+passo; reindexar dentro de `03 - TEXTURAS` continua em `03 - TEXTURAS`;
+pasta inexistente cai na raiz. 388 testes verdes (`test_nav_history.py`,
+`test_folder_tree.py` — a `FolderTree` não tinha cobertura nenhuma — e
+`test_navegacao_pastas.py`, todos novos).
 
 ### ☐ Fatia 33 — Ícones pré-definidos para tags
 Conjunto de ícones prontos (preset) que o Rafael pode escolher ao criar ou
