@@ -1,5 +1,18 @@
 # TODO.md — Roadmap e estado atual
 
+## Marco: Alpha 1.0 (2026-08-02)
+
+Estado atual marcado como **Alpha 1.0** — tag Git anotada `alpha-1.0` sobre
+o commit `d6f7135` da `main`. F0-F4 completos, tema Craft aplicado,
+executável no menu do Zorin, bugs de tags recriadas e ícone do app
+corrigidos nesta sessão. Testado uma vez contra a biblioteca real do
+Rafael (650GB, ~72 mil arquivos, sem erros graves — ver sessão de
+2026-08-02) e depois desanexada de novo a pedido dele; app voltou a
+apontar para a testlib para a próxima fase de desenvolvimento.
+
+Próxima fase: levantamento de bugs/funcionalidades em andamento com o
+Rafael, roadmap detalhado a ser montado a partir dessa lista.
+
 ## Estado atual (2026-08-02)
 
 **F0, F1, F2 e F3 completos.** **F4 (redesign visual) completo e mergeado
@@ -7,15 +20,16 @@ na `main`**, confirmado pelo Rafael na tela.
 
 | | |
 |---|---|
-| Testes | 303 verdes (`pytest -q`) |
+| Testes | 308 verdes (`pytest -q`) |
 | Schema | migrations 001–005 aplicadas (ver SCHEMA.md) |
 | Biblioteca de trabalho | testlib: 750 arquivos → 391 assets → **127 visíveis** (dependências ocultas) |
 | Add-on do Blender | v0.4.0, Blender 5.2 Flatpak |
 | Tema visual | claro estilo Craft, monocromático — ver F4 abaixo |
 
 Próximo item já com direção definida: **executável / entrada no menu de
-aplicativos do Zorin** (F4, mais abaixo). O resto da F4 ainda não tem
-direção (auto-tagging, checagem seamless, etc.) — decisão do Rafael.
+aplicativos do Zorin** (F4, mais abaixo, ✅ concluído). O resto da F4 ainda
+não tem direção (auto-tagging, checagem seamless, etc.) — decisão do
+Rafael, agora em levantamento para o roadmap pós-Alpha 1.0.
 
 ## Como ler este arquivo
 Uma fatia por vez, em branch própria. Cada fatia termina com: pytest verde,
