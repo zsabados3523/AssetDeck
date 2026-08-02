@@ -1,22 +1,21 @@
 # TODO.md — Roadmap e estado atual
 
-## Estado atual (2026-08-01)
+## Estado atual (2026-08-02)
 
-**F0, F1 e F2 completos.** 16 fatias entregues e validadas pelo Rafael na
-tela dele.
+**F0, F1, F2 e F3 completos.** **F4 (redesign visual) completo e mergeado
+na `main`**, confirmado pelo Rafael na tela.
 
 | | |
 |---|---|
-| Testes | 215 verdes (`pytest -q`) |
+| Testes | 303 verdes (`pytest -q`) |
 | Schema | migrations 001–005 aplicadas (ver SCHEMA.md) |
 | Biblioteca de trabalho | testlib: 750 arquivos → 391 assets → **127 visíveis** (dependências ocultas) |
 | Add-on do Blender | v0.4.0, Blender 5.2 Flatpak |
+| Tema visual | claro estilo Craft, monocromático — ver F4 abaixo |
 
-**F3 completa** (Fatias 17–23 + fixes da 17b/19b). Batch rename já mergeado
-na `main`; falta o Rafael confirmar na tela a branch
-`fatia-19b-drag-ghost-fix` (fix do arrasto + reset da Smart Collection),
-que contém TUDO. Depois disso: F4 é opcional e fica para uma próxima
-conversa (decisão dele).
+Próximo item já com direção definida: **executável / entrada no menu de
+aplicativos do Zorin** (F4, mais abaixo). O resto da F4 ainda não tem
+direção (auto-tagging, checagem seamless, etc.) — decisão do Rafael.
 
 ## Como ler este arquivo
 Uma fatia por vez, em branch própria. Cada fatia termina com: pytest verde,
@@ -293,44 +292,60 @@ redescobrir nada: 25 aplicar o tema · 26 ícones SVG · 27 delegate dos cards �
 28 reorganização estilo Connecter · 29 tags com ícone (**mexe no banco, precisa
 de autorização**) · 30 acabamento.
 
-### ☐ Redesign visual — tema mais estiloso e translúcido
-Hoje o app usa a aparência padrão do Qt (cinza, sem estilo). Objetivo: um
-visual mais agradável sem virar poluído.
+### ☑ Redesign visual (F4) — Fatias 24 a 28 + 3 rodadas de correção, mergeado na main
+Tema claro estilo Craft: fundo branco liso, cartões brancos separados por
+contorno quase invisível + sombra discreta, monocromático (cor só em tag e
+chip de extensão), cantos arredondados nos cards e em menus (não em
+diálogos — eles têm barra de título do gerenciador de janelas, arredondar
+por baixo dela deixa costura feia, testado e revertido).
 
-**Direção pedida pelo Rafael:**
-- Minimalista e intuitivo — pouca informação na tela de uma vez.
-- Fundo simples, porém estiloso — **sem gradientes**.
-- Efeito **translúcido** nos botões (estilo "vidro fosco").
-- **Cantos arredondados** em cards, botões e painéis.
-- Fontes **simples e fáceis de ler** (legibilidade acima de tudo — não
-  pediu uma fonte específica).
-- Organização limpa: hierarquia visual clara, sem excesso de bordas/linhas.
+- **24** — `ui/theme.py`/`theme.qss`/`theme_gallery.py`, vitrine em
+  `--theme-preview`. Regra nova: nenhum `setStyleSheet` fora de `theme.py`.
+- **25** — tema aplicado na janela real (cartões, sombra, WA_StyledBackground).
+- **26** — 8 ícones SVG desenhados à mão (estrelas, lupa, refresh, check,
+  filtro, resolução — nenhuma fonte da máquina tem o glifo ★, medido com
+  QRawFont).
+- **27** — primeiro `QStyledItemDelegate` do projeto: cards quadrados,
+  chip de extensão (`.FBX`/`.EXR`) no lugar de cor por tipo, slider de
+  tamanho da miniatura (`cell_for_icon()` como fonte única de geometria).
+- **28** — barra de busca em 1 linha, "Incluir subpastas" removido,
+  Tipos/Nota/Resolução viraram ícone (`FilterButton`, popup de escolha
+  única) na linha do breadcrumb.
+- **Correções pós-tela** (3 rodadas): janela não redimensionava (painel de
+  detalhes sem QScrollArea forçava altura mínima de 1214px — resolvido);
+  preview de capa customizada sumia (`_thumb_from_disk` não olhava
+  `cover_path`); checkbox de árvore/tabela virava quadrado preto
+  (`QTreeView::indicator`/`QListView::indicator`/`QTableView::indicator`
+  não estilizados); miniatura vazava por cima do nome; diálogos sem
+  moldura; painel de detalhes com cantos quadrados (viewport da
+  QScrollArea preenchia o fundo por cima do #card); preview de `.svg`
+  novo via QtSvg; preview manual liberado pra qualquer asset sem
+  miniatura nativa (`.ies`/`.psd`/`.cube`, não só modelo).
 
-**Referência visual anexada por ele:** screenshot do Craft (app de notas)
-— fundo em aquarela floral suave (tons lavanda/roxo), painel de estilo à
-direita com efeito translúcido flutuando sobre o fundo, cantos
-arredondados em todo canto, paleta de cor suave e coerente (roxo como cor
-de destaque), tipografia serifada nos títulos, separador decorativo tipo
-"washi tape", sidebar enxuta (só título + índice).
+**Não verificável por screenshot automatizado** (offscreen não renderiza
+sombra/máscara/decoração de janela): cantos arredondados de card/menu,
+ausência de costura no diálogo — confirmados por Rafael na tela real.
+303 testes verdes.
 
-**Abordagem técnica provável (a confirmar quando entrar):** QSS (Qt Style
-Sheets — CSS do Qt) pra cor/bordas/hover; ícones SVG no lugar dos
-placeholders de texto da grade ("LUT", "IES") e dos botões ★/☆.
-Translucidez REAL de janela (`WA_TranslucentBackground`) é mais
-arriscada no Linux — depende do compositor ativo no Zorin — então o mais
-provável é simular o efeito (cor semi-transparente sólida, sem depender do
-compositor) em vez de transparência de verdade. Vou mostrar um protótipo
-visual pequeno antes de aplicar no app inteiro.
-**Sem "deu certo" ainda** — depende do Rafael aprovar o protótipo primeiro.
+### ☑ Executável / entrada no menu de aplicativos (Zorin OS)
+`~/.local/share/applications/assetdeck.desktop` (fora do repositório —
+caminhos absolutos desta máquina): `Exec` chama o Python da venv direto
+(`.venv/bin/python -m assetdeck`, sem precisar "ativar" nada) e `Path`
+fixa o diretório de trabalho no repo, porque o pacote não é instalado via
+pip — `python -m` só acha `assetdeck` se o cwd for a raiz do projeto
+(testado: sem `Path=`, o import falha). Validado com
+`desktop-file-validate` (limpo depois de trocar `Categories` — `Graphics`
++ `Utility` juntas contavam como duas categorias "principais" e duplicavam
+o app no menu) e testado rodando o `Exec` literal do arquivo.
 
-### ☐ Executável / entrada no menu de aplicativos (Zorin OS)
-Fazer o AssetDeck aparecer no menu de aplicativos do Zorin (GNOME), sem
-precisar abrir terminal pra usar.
-**Abordagem (nível usuário, sem sudo):** arquivo `.desktop` apontando pro
-Python da venv + ícone, em `~/.local/share/applications/` (o GNOME já
-escaneia essa pasta sozinho — nenhuma instalação de sistema). Empacotar
-com PyInstaller/Nuitka (binário único, sem depender do caminho da venv)
-fica pra depois, só se um dia o app precisar rodar em outra máquina.
+Ícone novo: `assetdeck/ui/icons/app-icon.svg` (dois cartões sobrepostos,
+cor de destaque — referência ao nome "AssetDeck") + `app-icon.png` 256px
+gerado com o mesmo `QSvgRenderer` do resto dos ícones. `Icon=` do
+`.desktop` usa caminho absoluto (não é o pacote Python, é lido por fora
+do processo). De brinde, o app ganhou `setWindowIcon()` de verdade
+(carregado por caminho relativo ao pacote) — antes não tinha nenhum,
+aparecia um ícone genérico na barra de tarefas/alt-tab.
+
 **Deu certo quando:** o AssetDeck aparece no menu de aplicativos do Zorin
 com ícone próprio e abre com duplo clique, sem terminal.
 
