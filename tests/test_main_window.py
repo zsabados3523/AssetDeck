@@ -54,13 +54,13 @@ def test_breadcrumb_acompanha_a_pasta_selecionada(janela):
     (testado à parte, na FolderTree). Chamar direto evita depender de uma
     subpasta existir na biblioteca mínima do fixture `janela`.
     """
-    assert janela.breadcrumb.text() == "BIBLIOTECA (TUDO)"
+    assert janela._breadcrumb_full == "BIBLIOTECA (TUDO)"
 
     janela._on_dir_selected("Modelos/Cadeiras")
-    assert janela.breadcrumb.text() == "BIBLIOTECA › MODELOS › CADEIRAS"
+    assert janela._breadcrumb_full == "BIBLIOTECA › MODELOS › CADEIRAS"
 
     janela._on_dir_selected("")
-    assert janela.breadcrumb.text() == "BIBLIOTECA (TUDO)"
+    assert janela._breadcrumb_full == "BIBLIOTECA (TUDO)"
 
 
 def test_footer_mostra_contagem_e_atualiza_com_selecao(janela):
