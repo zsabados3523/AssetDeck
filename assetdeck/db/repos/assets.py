@@ -13,13 +13,12 @@ def count_active(conn: sqlite3.Connection) -> int:
     return row["n"]
 
 
-def list_for_grid(
+def _build_where(
     conn: sqlite3.Connection,
     search: str | None = None,
     asset_types: list[str] | None = None,
     dir_prefix: str | None = None,
     include_subdirs: bool = True,
-    expand_sets: bool = False,
     tag_id: int | None = None,
     min_rating: int | None = None,
     starred_only: bool = False,
@@ -27,40 +26,12 @@ def list_for_grid(
     include_hidden: bool = False,
     include_dependencies: bool = True,
     collection_id: int | None = None,
-    extensions: list[str] | None = None,
-) -> list[dict]:
-    """Assets para a grid (asset + arquivo principal), com filtros combináveis.
-
-    - search: busca por nome via FTS5 (prefixo, sem diferenciar acentos)
-    - asset_types: lista de tipos marcados no checklist ([] ou None = todos)
-    - extensions: extensão do arquivo principal ('fbx', 'obj'...), sem ponto
-      e sem diferenciar maiúsculas ([] ou None = todas — filtro secundário
-      da Fatia 31, dentro de um tipo)
-    - dir_prefix: pasta selecionada na árvore ('' ou None = raiz/tudo)
-    - include_subdirs: False = só arquivos diretamente na pasta
-    - expand_sets: True = toggle 'agrupar' DESLIGADO — cada mapa de um set
-      PBR vira um card próprio (só visualização; o banco não muda)
-    - collection_id: só assets dentro dessa coleção, na ORDEM MANUAL em que
-      foram arrastados para dentro (Fatia 17)
-    """
-    join_files = ("JOIN files f ON f.asset_id = a.id" if expand_sets
-                  else "JOIN files f ON f.asset_id = a.id AND f.is_primary = 1")
-    # Capa customizada (Fatia 10). No modo expandido ela é descartada apenas
-    # para assets de VÁRIOS arquivos (cada mapa do set mostra a si mesmo);
-    # um modelo continua exibindo a capa escolhida — bug relatado pelo Rafael.
-    cover_select = ("(SELECT p.file_path FROM previews p WHERE p.asset_id = a.id"
-                    " AND p.is_cover = 1 AND p.deleted_at IS NULL LIMIT 1)"
-                    " AS cover_path")
-    sql = f"""SELECT a.id, a.uuid, a.name, a.asset_type, a.notes,
-                    a.rating, a.starred, a.hidden, a.is_dependency,
-                    f.rel_path, f.size_bytes, f.content_hash, f.missing_since,
-                    f.width, f.height,
-                    {cover_select},
-                    (SELECT COUNT(*) FROM files f2
-                     WHERE f2.asset_id = a.id AND f2.deleted_at IS NULL) AS files_count
-             FROM assets a
-             {join_files}
-             WHERE a.deleted_at IS NULL AND f.deleted_at IS NULL"""
+    category_filters: list[dict] | None = None,
+) -> tuple[str, list]:
+    """Trecho de WHERE + params compartilhado por `list_for_grid` e
+    `count_by_category` — os dois precisam responder aos MESMOS filtros,
+    e duplicar essa lógica é como o contador sai de sincronia com a grade."""
+    sql = ""
     params: list = []
 
     if not include_hidden:
@@ -83,10 +54,24 @@ def list_for_grid(
     if asset_types:
         sql += f" AND a.asset_type IN ({','.join('?' * len(asset_types))})"
         params.extend(asset_types)
-    if extensions:
-        ramos_ext = " OR ".join("lower(f.rel_path) LIKE ?" for _ in extensions)
-        sql += f" AND ({ramos_ext})"
-        params.extend(f"%.{e.lower()}" for e in extensions)
+    if category_filters:
+        # OR entre categorias, AND entre tipo e extensão DENTRO de cada uma:
+        # marcar .fbx em Modelos não pode restringir Imagens a .fbx também.
+        grupos = []
+        for grupo in category_filters:
+            tipos = grupo.get("asset_types") or []
+            exts = grupo.get("extensions") or []
+            if not tipos:
+                continue
+            pedaco = f"a.asset_type IN ({','.join('?' * len(tipos))})"
+            params.extend(tipos)
+            if exts:
+                ramos_ext = " OR ".join("lower(f.rel_path) LIKE ?" for _ in exts)
+                pedaco += f" AND ({ramos_ext})"
+                params.extend(f"%.{e.lower()}" for e in exts)
+            grupos.append(f"({pedaco})")
+        if grupos:
+            sql += " AND (" + " OR ".join(grupos) + ")"
     if tag_id is not None:
         # Filtrar por 'Madeira' inclui assets taggeados nas subtags
         from assetdeck.db.repos import tags as tags_repo
@@ -119,6 +104,69 @@ def list_for_grid(
             params.append(_like_escape(dir_prefix) + "/%/%")
     elif not include_subdirs:
         sql += " AND f.rel_path NOT LIKE '%/%'"  # raiz: só arquivos soltos nela
+
+    return sql, params
+
+
+def list_for_grid(
+    conn: sqlite3.Connection,
+    search: str | None = None,
+    asset_types: list[str] | None = None,
+    dir_prefix: str | None = None,
+    include_subdirs: bool = True,
+    expand_sets: bool = False,
+    tag_id: int | None = None,
+    min_rating: int | None = None,
+    starred_only: bool = False,
+    min_resolution: int | None = None,
+    include_hidden: bool = False,
+    include_dependencies: bool = True,
+    collection_id: int | None = None,
+    category_filters: list[dict] | None = None,
+) -> list[dict]:
+    """Assets para a grid (asset + arquivo principal), com filtros combináveis.
+
+    - search: busca por nome via FTS5 (prefixo, sem diferenciar acentos)
+    - asset_types: lista de tipos crus ([] ou None = todos). Contrato antigo,
+      ainda usado por Smart Collections salvas antes da Fatia 31.
+    - category_filters: filtro da barra de categorias (Fatia 31) —
+      `[{"asset_types": [...], "extensions": [...]}, ...]`, OR entre grupos,
+      AND entre tipo e extensão dentro do grupo. Extensão sem ponto e sem
+      diferenciar maiúsculas; lista vazia = todas as daquela categoria.
+    - dir_prefix: pasta selecionada na árvore ('' ou None = raiz/tudo)
+    - include_subdirs: False = só arquivos diretamente na pasta
+    - expand_sets: True = toggle 'agrupar' DESLIGADO — cada mapa de um set
+      PBR vira um card próprio (só visualização; o banco não muda)
+    - collection_id: só assets dentro dessa coleção, na ORDEM MANUAL em que
+      foram arrastados para dentro (Fatia 17)
+    """
+    join_files = ("JOIN files f ON f.asset_id = a.id" if expand_sets
+                  else "JOIN files f ON f.asset_id = a.id AND f.is_primary = 1")
+    # Capa customizada (Fatia 10). No modo expandido ela é descartada apenas
+    # para assets de VÁRIOS arquivos (cada mapa do set mostra a si mesmo);
+    # um modelo continua exibindo a capa escolhida — bug relatado pelo Rafael.
+    cover_select = ("(SELECT p.file_path FROM previews p WHERE p.asset_id = a.id"
+                    " AND p.is_cover = 1 AND p.deleted_at IS NULL LIMIT 1)"
+                    " AS cover_path")
+    sql = f"""SELECT a.id, a.uuid, a.name, a.asset_type, a.notes,
+                    a.rating, a.starred, a.hidden, a.is_dependency,
+                    f.rel_path, f.size_bytes, f.content_hash, f.missing_since,
+                    f.width, f.height,
+                    {cover_select},
+                    (SELECT COUNT(*) FROM files f2
+                     WHERE f2.asset_id = a.id AND f2.deleted_at IS NULL) AS files_count
+             FROM assets a
+             {join_files}
+             WHERE a.deleted_at IS NULL AND f.deleted_at IS NULL"""
+
+    where, params = _build_where(
+        conn, search=search, asset_types=asset_types, dir_prefix=dir_prefix,
+        include_subdirs=include_subdirs, tag_id=tag_id, min_rating=min_rating,
+        starred_only=starred_only, min_resolution=min_resolution,
+        include_hidden=include_hidden, include_dependencies=include_dependencies,
+        collection_id=collection_id, category_filters=category_filters,
+    )
+    sql += where
 
     if collection_id is not None:
         # Ordem manual: a ordem em que os assets foram arrastados para dentro
@@ -158,23 +206,42 @@ def distinct_types(conn: sqlite3.Connection) -> list[str]:
     ]
 
 
-def distinct_extensions(conn: sqlite3.Connection, asset_type: str | None = None) -> list[str]:
+def extension_counts(conn: sqlite3.Connection,
+                     asset_types: list[str] | None = None) -> dict[str, int]:
     """Extensões (sem ponto, minúsculas) do arquivo principal dos assets
-    ativos — opcionalmente restrito a um tipo. Para popular o filtro
-    secundário da Fatia 31 (só aparece quando um tipo tem mais de uma)."""
+    ativos e quantos assets cada uma tem — opcionalmente restrito a uma
+    lista de tipos (uma categoria da Fatia 31 pode juntar 2+ tipos)."""
     sql = """SELECT f.rel_path FROM files f
              JOIN assets a ON a.id = f.asset_id
              WHERE f.is_primary = 1 AND f.deleted_at IS NULL AND a.deleted_at IS NULL"""
     params: list = []
-    if asset_type:
-        sql += " AND a.asset_type = ?"
-        params.append(asset_type)
-    exts: set[str] = set()
+    if asset_types:
+        sql += f" AND a.asset_type IN ({','.join('?' * len(asset_types))})"
+        params.extend(asset_types)
+    contagem: dict[str, int] = {}
     for row in conn.execute(sql, params):
         nome = row["rel_path"].rsplit("/", 1)[-1]
         if "." in nome:
-            exts.add(nome.rsplit(".", 1)[-1].lower())
-    return sorted(exts)
+            ext = nome.rsplit(".", 1)[-1].lower()
+            contagem[ext] = contagem.get(ext, 0) + 1
+    return dict(sorted(contagem.items()))
+
+
+def count_by_category(conn: sqlite3.Connection, categorias, **filtros) -> dict[str, int]:
+    """Quantos assets cada categoria tem, respeitando os filtros ATIVOS
+    (busca, pasta, tag, nota...) mas ignorando o próprio filtro de
+    categoria — senão clicar numa categoria zeraria o contador das outras,
+    e o número perde a função de prever o resultado do clique.
+
+    `categorias`: iterável de `ui.categories.Category`."""
+    filtros.pop("category_filters", None)
+    where, params = _build_where(conn, **filtros)
+    sql = f"""SELECT a.asset_type AS t, COUNT(*) AS n FROM assets a
+              JOIN files f ON f.asset_id = a.id AND f.is_primary = 1
+              WHERE a.deleted_at IS NULL AND f.deleted_at IS NULL{where}
+              GROUP BY a.asset_type"""
+    por_tipo = {r["t"]: r["n"] for r in conn.execute(sql, params)}
+    return {c.key: sum(por_tipo.get(t, 0) for t in c.asset_types) for c in categorias}
 
 
 def set_rating(conn: sqlite3.Connection, asset_id: int, rating: int | None) -> None:

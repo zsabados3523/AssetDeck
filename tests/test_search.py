@@ -151,30 +151,75 @@ def test_tipos_distintos_para_o_combo(conn, lib):
     assert assets_repo.distinct_types(conn) == ["hdri", "texture"]
 
 
-def test_extensoes_distintas_por_tipo(conn, lib):
+def test_contagem_de_extensoes_por_tipo(conn, lib):
     # 4 .jpg + 2 .png em texture; 1 .hdr em hdri (Fatia 31)
-    assert assets_repo.distinct_extensions(conn, asset_type="texture") == ["jpg", "png"]
-    assert assets_repo.distinct_extensions(conn, asset_type="hdri") == ["hdr"]
-    assert assets_repo.distinct_extensions(conn, asset_type="model") == []
+    assert assets_repo.extension_counts(conn, ["texture"]) == {"jpg": 4, "png": 2}
+    assert assets_repo.extension_counts(conn, ["hdri"]) == {"hdr": 1}
+    assert assets_repo.extension_counts(conn, ["model"]) == {}
 
 
-def test_extensoes_distintas_sem_tipo_junta_tudo(conn, lib):
-    assert assets_repo.distinct_extensions(conn) == ["hdr", "jpg", "png"]
+def test_contagem_de_extensoes_sem_tipo_junta_tudo(conn, lib):
+    assert assets_repo.extension_counts(conn) == {"hdr": 1, "jpg": 4, "png": 2}
 
 
-def test_filtro_por_extensao_dentro_do_tipo(conn, lib):
-    rows = assets_repo.list_for_grid(conn, asset_types=["texture"], extensions=["jpg"])
+def test_filtro_de_categoria_com_extensao(conn, lib):
+    rows = assets_repo.list_for_grid(
+        conn, category_filters=[{"asset_types": ["texture"], "extensions": ["jpg"]}])
     assert _names(rows) == ["Concreto Rústico 4K", "StoneQuartziteTile_2K",
-                             "Wood Oak", "na_raiz_texturas"]
+                            "Wood Oak", "na_raiz_texturas"]
 
-    rows = assets_repo.list_for_grid(conn, asset_types=["texture"], extensions=["png"])
+    rows = assets_repo.list_for_grid(
+        conn, category_filters=[{"asset_types": ["texture"], "extensions": ["png"]}])
     assert _names(rows) == ["concrete_polished", "solto_na_raiz"]
 
 
-def test_filtro_por_extensao_maiuscula_nao_diferencia(conn, lib):
-    rows = assets_repo.list_for_grid(conn, extensions=["JPG"])
+def test_filtro_de_categoria_sem_extensao_traz_a_categoria_inteira(conn, lib):
+    rows = assets_repo.list_for_grid(
+        conn, category_filters=[{"asset_types": ["texture"], "extensions": []}])
+    assert len(rows) == 6
+
+
+def test_extensao_de_uma_categoria_nao_restringe_a_outra(conn, lib):
+    """O bug da primeira versão da Fatia 31: `extensions` era global, então
+    marcar .jpg em Imagens também exigia .jpg dos HDRIs (que só têm .hdr)."""
+    rows = assets_repo.list_for_grid(conn, category_filters=[
+        {"asset_types": ["texture"], "extensions": ["jpg"]},
+        {"asset_types": ["hdri"], "extensions": []},
+    ])
+    assert _names(rows) == ["Concreto Rústico 4K", "StoneQuartziteTile_2K",
+                            "Wood Oak", "na_raiz_texturas", "studio_small"]
+
+
+def test_filtro_de_categoria_maiuscula_nao_diferencia(conn, lib):
+    rows = assets_repo.list_for_grid(
+        conn, category_filters=[{"asset_types": ["texture"], "extensions": ["JPG"]}])
     assert len(rows) == 4
 
 
-def test_filtro_por_extensao_vazio_nao_restringe(conn, lib):
-    assert len(assets_repo.list_for_grid(conn, extensions=[])) == 7
+def test_filtro_de_categoria_vazio_nao_restringe(conn, lib):
+    assert len(assets_repo.list_for_grid(conn, category_filters=[])) == 7
+
+
+def test_contagem_por_categoria_respeita_os_outros_filtros(conn, lib):
+    from assetdeck.ui.categories import CATEGORIES
+
+    contagem = assets_repo.count_by_category(conn, CATEGORIES)
+    assert contagem["imagens"] == 6
+    assert contagem["hdris"] == 1
+    assert contagem["modelos"] == 0
+
+    # com busca ativa, o contador prevê o resultado do clique
+    contagem = assets_repo.count_by_category(conn, CATEGORIES, search="conc")
+    assert contagem["imagens"] == 2
+    assert contagem["hdris"] == 0
+
+
+def test_contagem_por_categoria_ignora_o_proprio_filtro_de_categoria(conn, lib):
+    """Senão clicar em 'Imagens' zeraria o contador de 'HDRIs' e o Rafael
+    não teria como saber que ainda existe HDRI pra ver."""
+    from assetdeck.ui.categories import CATEGORIES
+
+    contagem = assets_repo.count_by_category(
+        conn, CATEGORIES,
+        category_filters=[{"asset_types": ["texture"], "extensions": []}])
+    assert contagem["hdris"] == 1
