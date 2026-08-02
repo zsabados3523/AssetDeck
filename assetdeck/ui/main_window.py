@@ -139,27 +139,38 @@ class MainWindow(QMainWindow):
         )
         self.hidden_check.toggled.connect(lambda _c: self._apply_filters())
 
-        self.count_label = QLabel()
         self.progress = QProgressBar()
         self.progress.setVisible(False)
-        self.progress.setMaximumWidth(280)
+        self.progress.setMaximumWidth(220)
         self.rescan_btn = QPushButton("Reindexar")
-        self.rescan_btn.setIcon(icons.icon("refresh", theme.TEXT))
+        self.rescan_btn.setObjectName("primary")
+        self.rescan_btn.setIcon(icons.icon("refresh", theme.ON_ACCENT))
         self.rescan_btn.clicked.connect(self.start_scan)
 
-        top = QHBoxLayout()
-        top.addWidget(self.search_box, stretch=1)
-        top.addWidget(self.type_filter)
-        top.addWidget(self.rating_combo)
-        top.addWidget(self.fav_check)
-        top.addWidget(self.res_combo)
-        top.addWidget(self.subdirs_check)
-        top.addWidget(self.group_check)
-        top.addWidget(self.deps_check)
-        top.addWidget(self.hidden_check)
-        top.addWidget(self.count_label)
-        top.addWidget(self.progress)
-        top.addWidget(self.rescan_btn)
+        # Duas fileiras, estilo Connecter (Fatia 28): busca em cima (é a ação
+        # mais usada), filtros embaixo — em vez de 11 widgets crus na mesma
+        # linha, o que o Rafael descreveu como "amontoado".
+        search_row = QHBoxLayout()
+        search_row.addWidget(self.search_box, stretch=1)
+        search_row.addWidget(self.progress)
+        search_row.addWidget(self.rescan_btn)
+
+        filters_row = QHBoxLayout()
+        filters_row.setSpacing(10)
+        filters_row.addWidget(self.type_filter)
+        filters_row.addWidget(self.rating_combo)
+        filters_row.addWidget(self.fav_check)
+        filters_row.addWidget(self.res_combo)
+        filters_row.addWidget(self.subdirs_check)
+        filters_row.addWidget(self.group_check)
+        filters_row.addWidget(self.deps_check)
+        filters_row.addWidget(self.hidden_check)
+        filters_row.addStretch(1)
+
+        top = QVBoxLayout()
+        top.setSpacing(10)
+        top.addLayout(search_row)
+        top.addLayout(filters_row)
 
         # --- pastas + grid + detalhes ---
         self.model = AssetGridModel(conn, self._library_root, self._pipeline, parent=self)
@@ -177,7 +188,7 @@ class MainWindow(QMainWindow):
         self.grid.customContextMenuRequested.connect(self._grid_menu)
 
         self.folders = FolderTree()
-        self.folders.dir_selected.connect(lambda _d: self._apply_filters())
+        self.folders.dir_selected.connect(self._on_dir_selected)
 
         self.tags = TagTree()
         self.tags.tag_selected.connect(lambda _t: self._apply_filters())
@@ -226,10 +237,24 @@ class MainWindow(QMainWindow):
         self.details.property_value_changed.connect(self._on_property_value_changed)
         self.details.manage_properties_requested.connect(self._manage_properties)
 
+        # Caminho navegável acima da grade (Fatia 28, estilo Connecter): a
+        # única pista de "onde estou" antes disso era o item selecionado na
+        # árvore de pastas — fácil de perder de vista depois de rolar.
+        self.breadcrumb = QLabel()
+        self.breadcrumb.setObjectName("sectionTitle")
+        self._update_breadcrumb("")
+
+        grid_container = QWidget()
+        grid_layout = QVBoxLayout(grid_container)
+        grid_layout.setContentsMargins(0, 0, 0, 0)
+        grid_layout.setSpacing(6)
+        grid_layout.addWidget(self.breadcrumb)
+        grid_layout.addWidget(self.grid)
+
         # A grade NUNCA leva sombra: ela rola com centenas de assets, e o
         # QGraphicsDropShadowEffect força o Qt a renderizar a subárvore
         # inteira fora da tela a cada quadro (medido ~2,3x mais caro).
-        grid_card = theme.make_card(self.grid, sombra=False)
+        grid_card = theme.make_card(grid_container, sombra=False)
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.setHandleWidth(10)
@@ -263,6 +288,11 @@ class MainWindow(QMainWindow):
 
         self._setup_bridge()  # ponte com o Blender (F2)
         self._setup_library_menu()  # relocalizar assets perdidos (Fatia 19)
+
+        # Contagem sempre visível no rodapé (Fatia 28) — antes vivia num
+        # QLabel solto na barra de filtros, junto de mais 10 widgets.
+        self.footer_count = QLabel()
+        self.statusBar().addPermanentWidget(self.footer_count)
 
         self.statusBar().showMessage(f"v{__version__} · banco: {db_path}")
         self._reload_all()
@@ -302,6 +332,18 @@ class MainWindow(QMainWindow):
     def _apply_filters(self) -> None:
         self.model.set_filters(**self._current_filters_dict())
         self.refresh_count()
+
+    def _update_breadcrumb(self, dir_prefix: str) -> None:
+        """"" -> biblioteca inteira; "A/B" -> "Biblioteca › A › B"."""
+        if not dir_prefix:
+            self.breadcrumb.setText("BIBLIOTECA (TUDO)")
+        else:
+            trilha = " › ".join(dir_prefix.split("/"))
+            self.breadcrumb.setText(f"BIBLIOTECA › {trilha}".upper())
+
+    def _on_dir_selected(self, dir_prefix: str) -> None:
+        self._update_breadcrumb(dir_prefix)
+        self._apply_filters()
 
     # ---- tags ----
 
@@ -516,7 +558,9 @@ class MainWindow(QMainWindow):
         self._set_combo_value(self.res_combo, query.get("min_resolution"))
         self.hidden_check.setChecked(bool(query.get("include_hidden")))
         self.deps_check.setChecked(bool(query.get("include_dependencies")))
-        self.folders.select(query.get("dir_prefix") or "")
+        dir_prefix = query.get("dir_prefix") or ""
+        self.folders.select(dir_prefix)
+        self._update_breadcrumb(dir_prefix)
         self.tags.select(query.get("tag_id"))
         self.collections.select(query.get("collection_id"))
         self._apply_filters()
@@ -597,10 +641,11 @@ class MainWindow(QMainWindow):
     def refresh_count(self) -> int:
         total = assets_repo.count_active(self._conn)
         shown = self.model.rowCount()
-        if shown == total:
-            self.count_label.setText(f"{total} assets")
-        else:
-            self.count_label.setText(f"{shown} de {total} assets")
+        texto = f"{total} assets" if shown == total else f"{shown} de {total} assets"
+        selecionados = len(self._selected_asset_ids())
+        if selecionados > 1:
+            texto += f" · {selecionados} selecionados"
+        self.footer_count.setText(texto)
         return total
 
     # ---- seleção / detalhes ----
@@ -1024,7 +1069,7 @@ class MainWindow(QMainWindow):
         if self.progress.maximum() != total:
             self.progress.setRange(0, total)
         self.progress.setValue(done)
-        self.count_label.setText(f"{live_count} assets")
+        self.footer_count.setText(f"{live_count} assets")
         self.statusBar().showMessage(f"Indexando… {done}/{total} arquivos")
 
     def _on_finished(self, stats: ScanStats) -> None:
