@@ -46,6 +46,41 @@ def test_janela_abre_com_todos_os_paineis(janela):
         assert getattr(janela, atributo) is not None
 
 
+def test_breadcrumb_acompanha_a_pasta_selecionada(janela):
+    """Fatia 28: o caminho acima da grade é a única pista visível de 'onde
+    estou' depois de rolar — tem de mudar com a seleção na árvore.
+
+    `_on_dir_selected` é o slot real conectado a `folders.dir_selected`
+    (testado à parte, na FolderTree). Chamar direto evita depender de uma
+    subpasta existir na biblioteca mínima do fixture `janela`.
+    """
+    assert janela.breadcrumb.text() == "BIBLIOTECA (TUDO)"
+
+    janela._on_dir_selected("Modelos/Cadeiras")
+    assert janela.breadcrumb.text() == "BIBLIOTECA › MODELOS › CADEIRAS"
+
+    janela._on_dir_selected("")
+    assert janela.breadcrumb.text() == "BIBLIOTECA (TUDO)"
+
+
+def test_footer_mostra_contagem_e_atualiza_com_selecao(janela):
+    """A contagem saiu da barra de filtros (eram 11 widgets na mesma linha)
+    e virou permanente no rodapé (Fatia 28)."""
+    assert "assets" in janela.footer_count.text()
+    assert "selecionado" not in janela.footer_count.text()
+
+    janela.grid.selectionModel().select(
+        janela.model.index(0),
+        janela.grid.selectionModel().SelectionFlag.Select,
+    )
+    janela.grid.selectionModel().select(
+        janela.model.index(1),
+        janela.grid.selectionModel().SelectionFlag.Select,
+    )
+    janela.refresh_count()
+    assert "2 selecionados" in janela.footer_count.text()
+
+
 def test_tema_pinta_a_janela_e_os_cards_ficam_arredondados(qapp, janela):
     """Regressão da Fatia 25: aplicar o QSS global e conferir na janela REAL
     (não numa sonda isolada) que o cartão da grade tem o canto arredondado —
@@ -59,7 +94,9 @@ def test_tema_pinta_a_janela_e_os_cards_ficam_arredondados(qapp, janela):
         janela.show()
         qapp.processEvents()
 
-        grid_card = janela.grid.parentWidget()
+        # Fatia 28: self.grid mora dentro de um container com o breadcrumb
+        # em cima, e ESSE container é que fica dentro do QFrame#card.
+        grid_card = janela.grid.parentWidget().parentWidget()
         assert grid_card.objectName() == "card"
 
         img = grid_card.grab().toImage()
