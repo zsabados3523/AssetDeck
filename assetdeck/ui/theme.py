@@ -236,6 +236,29 @@ def background_tile_path(variant: Variant = DEFAULT) -> Path | None:
     return destino
 
 
+def icon_asset_path(nome: str, cor: str, tam: int = 12) -> Path:
+    """Ícone de `ui/icons.py` cacheado como PNG em disco.
+
+    QSS só aceita `url()` apontando para um ARQUIVO — não dá para passar um
+    QPixmap gerado em memória. Mesmo padrão do ladrilho de fundo: o nome do
+    arquivo carrega o hash dos parâmetros, então mudar a cor gera um PNG novo
+    em vez de servir o velho.
+    """
+    from assetdeck.ui import icons as icons_mod
+
+    assinatura = f"{nome}-{cor}-{tam}"
+    nome_arquivo = f"icon-{hashlib.sha1(assinatura.encode()).hexdigest()[:12]}.png"
+    destino = config.cache_dir() / "theme" / nome_arquivo
+    if destino.exists():
+        return destino
+
+    destino.parent.mkdir(parents=True, exist_ok=True)
+    pix = icons_mod.pixmap(nome, cor=cor, tam=tam)
+    if not pix.save(str(destino), "PNG"):
+        raise RuntimeError(f"Não consegui gravar o ícone '{nome}' em {destino}")
+    return destino
+
+
 # --------------------------------------------------------------------------
 # Tokens e QSS
 # --------------------------------------------------------------------------
@@ -306,6 +329,9 @@ def build_tokens(variant: Variant = DEFAULT) -> dict[str, str]:
         "font_size": "13px",
         "font_size_small": "12px",
         "font_size_title": "15px",
+
+        "check_icon": str(icon_asset_path("check", ON_ACCENT, 12)),
+        "chevron_icon": str(icon_asset_path("chevron-down", TEXT_MUTED, 12)),
     }
 
 

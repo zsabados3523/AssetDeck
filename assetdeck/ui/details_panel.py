@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
 )
 
 from assetdeck.thumbs.raster import can_thumbnail
+from assetdeck.ui import theme
 
 log = logging.getLogger(__name__)
 
@@ -99,17 +100,28 @@ class DetailsPanel(QWidget):
         # Rating (5 estrelas clicáveis) + favorito — Fatia 9
         from PySide6.QtWidgets import QHBoxLayout as _QHBox
 
+        # Ícone, não texto: nenhuma fonte da máquina tem o glifo ★ (medido com
+        # QRawFont na Fatia 24) — o Qt caía numa fonte substituta e saía torto.
+        from PySide6.QtCore import QSize as _QSize
+
+        from assetdeck.ui import icons as _icons
+
+        self._star_filled = _icons.icon("star-filled", theme.ACCENT)
+        self._star_outline = _icons.icon("star-outline", theme.TEXT_MUTED)
+
         self._rating: int | None = None
         stars_row = _QHBox()
         self.star_btns: list[QPushButton] = []
         for i in range(1, 6):
-            b = QPushButton("☆")
-            b.setFlat(True)
+            b = QPushButton()
+            b.setObjectName("ghost")
+            b.setIconSize(_QSize(16, 16))
             b.setMaximumWidth(28)
             b.clicked.connect(lambda _c=False, n=i: self._on_star_clicked(n))
             self.star_btns.append(b)
             stars_row.addWidget(b)
-        self.fav_btn = QPushButton("☆ Favorito")
+        self.fav_btn = QPushButton("Favorito")
+        self.fav_btn.setIconSize(_QSize(16, 16))
         self.fav_btn.setCheckable(True)
         self.fav_btn.toggled.connect(self._on_fav_toggled)
         stars_row.addWidget(self.fav_btn)
@@ -173,6 +185,9 @@ class DetailsPanel(QWidget):
         layout.addWidget(self.notes_edit)
         layout.addWidget(self.save_notes_btn)
         layout.addStretch()
+
+        self._paint_stars()
+        self.fav_btn.setIcon(self._star_outline)
 
     def _set_buttons(self, enabled: bool) -> None:
         self.open_folder_btn.setEnabled(enabled)
@@ -269,14 +284,17 @@ class DetailsPanel(QWidget):
 
     def _paint_stars(self) -> None:
         for i, b in enumerate(self.star_btns, start=1):
-            b.setText("★" if self._rating and i <= self._rating else "☆")
+            b.setIcon(
+                self._star_filled if self._rating and i <= self._rating
+                else self._star_outline
+            )
 
     def load_rating(self, rating: int | None, starred: bool) -> None:
         self._rating = rating
         self._paint_stars()
         self.fav_btn.blockSignals(True)
         self.fav_btn.setChecked(starred)
-        self.fav_btn.setText("★ Favorito" if starred else "☆ Favorito")
+        self.fav_btn.setIcon(self._star_filled if starred else self._star_outline)
         self.fav_btn.blockSignals(False)
 
     def _on_star_clicked(self, n: int) -> None:
@@ -286,7 +304,7 @@ class DetailsPanel(QWidget):
         self.rating_changed.emit(self._rating)
 
     def _on_fav_toggled(self, checked: bool) -> None:
-        self.fav_btn.setText("★ Favorito" if checked else "☆ Favorito")
+        self.fav_btn.setIcon(self._star_filled if checked else self._star_outline)
         self.starred_changed.emit(checked)
 
     # ---- tags (checkbox interativo) ----
