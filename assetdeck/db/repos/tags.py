@@ -16,7 +16,7 @@ def _now() -> str:
 # ---- CRUD de tags ----
 
 def create(conn: sqlite3.Connection, name: str, parent_id: int | None = None,
-           color: str | None = None) -> int:
+           color: str | None = None, icon: str | None = None) -> int:
     """Cria a tag; se já existir (mesmo nome no mesmo pai), devolve a existente."""
     name = name.strip()
     if not name:
@@ -38,8 +38,8 @@ def create(conn: sqlite3.Connection, name: str, parent_id: int | None = None,
             log.info("Tag reativada após soft-delete: %r (pai=%s)", name, parent_id)
         return row["id"]
     cur = conn.execute(
-        "INSERT INTO tags (name, parent_id, color) VALUES (?, ?, ?)",
-        (name, parent_id, color),
+        "INSERT INTO tags (name, parent_id, color, icon) VALUES (?, ?, ?, ?)",
+        (name, parent_id, color, icon),
     )
     conn.commit()
     log.info("Tag criada: %r (pai=%s)", name, parent_id)
@@ -55,6 +55,14 @@ def rename(conn: sqlite3.Connection, tag_id: int, name: str) -> None:
 def set_color(conn: sqlite3.Connection, tag_id: int, color: str | None) -> None:
     conn.execute("UPDATE tags SET color = ?, updated_at = ? WHERE id = ?",
                  (color, _now(), tag_id))
+    conn.commit()
+
+
+def set_icon(conn: sqlite3.Connection, tag_id: int, icon: str | None) -> None:
+    """Nome do ícone (ex.: 'tag-madeira'), ou None para limpar. A coluna
+    existe desde o schema v1 mas só ganhou uso na Fatia 33."""
+    conn.execute("UPDATE tags SET icon = ?, updated_at = ? WHERE id = ?",
+                 (icon, _now(), tag_id))
     conn.commit()
 
 
@@ -74,7 +82,7 @@ def soft_delete(conn: sqlite3.Connection, tag_id: int) -> int:
 def list_tree(conn: sqlite3.Connection) -> list[sqlite3.Row]:
     """Todas as tags ativas, ordenadas para montar a árvore."""
     return conn.execute(
-        """SELECT id, parent_id, name, color, sort_order FROM tags
+        """SELECT id, parent_id, name, color, icon, sort_order FROM tags
            WHERE deleted_at IS NULL
            ORDER BY parent_id IS NOT NULL, parent_id, sort_order, name COLLATE NOCASE"""
     ).fetchall()
@@ -165,7 +173,7 @@ def unassign(conn: sqlite3.Connection, asset_id: int, tag_id: int) -> None:
 
 def tags_of(conn: sqlite3.Connection, asset_id: int) -> list[sqlite3.Row]:
     return conn.execute(
-        """SELECT t.id, t.name, t.parent_id, t.color, at.source, at.confidence
+        """SELECT t.id, t.name, t.parent_id, t.color, t.icon, at.source, at.confidence
            FROM asset_tags at JOIN tags t ON t.id = at.tag_id
            WHERE at.asset_id = ? AND t.deleted_at IS NULL
            ORDER BY t.name COLLATE NOCASE""",

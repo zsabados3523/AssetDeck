@@ -466,9 +466,37 @@ pasta inexistente cai na raiz. 388 testes verdes (`test_nav_history.py`,
 `test_folder_tree.py` — a `FolderTree` não tinha cobertura nenhuma — e
 `test_navegacao_pastas.py`, todos novos).
 
-### ☐ Fatia 33 — Ícones pré-definidos para tags
-Conjunto de ícones prontos (preset) que o Rafael pode escolher ao criar ou
-editar uma tag, além da cor que já existe hoje.
+### ☑ Fatia 33 — Ícones pré-definidos para tags
+26 ícones `tag-*.svg` desenhados à mão (12 materiais · 6 natureza ·
+5 objetos · 3 marcadores), escolhidos num diálogo próprio pelo menu de
+contexto da árvore ("Ícone…", ao lado de "Cor…").
+
+**Zero DDL:** a coluna `tags.icon` existe desde o schema v1
+(`001_initial.sql:68`, documentada em `SCHEMA.md:113` como "nome de
+ícone") e nunca tinha sido lida nem escrita. Só faltava o SELECT
+(`list_tree`, `tags_of`), o `set_icon` e a UI.
+
+- `ui/tag_icons.py` — lista dos presets + `pixmap_for(icon, color, tam)`,
+  a **única** função que decide como uma tag é desenhada. Os 3 pontos de
+  exibição chamam ela; é isso que impede eles de divergirem.
+- **Ícone tingido com a cor da tag** (decisão do Rafael): ocupa o mesmo
+  espaço de antes e mostra as duas informações de uma vez. Tag sem ícone
+  mantém o quadradinho colorido de sempre.
+- **Guarda contra SVG que sumiu:** `icons.pixmap` levanta
+  `FileNotFoundError`, e sem tratamento uma única tag derrubaria o reload
+  da árvore INTEIRA. Cai no quadradinho e loga em WARNING — nunca
+  `except` mudo. Testado com `caplog`.
+- Aparece na árvore lateral, no painel de detalhes e no Ctrl+T (os dois
+  últimos não mostravam nem a cor antes).
+- `tests/test_tag_tree.py` novo — a `TagTree` não tinha cobertura
+  nenhuma, mesma lacuna que a `FolderTree` tinha antes da Fatia 32.
+
+**Deu certo quando** (verificado com a `MainWindow` real contra a
+testlib): pôr madeira/marrom em "Materiais" e metal/azul em "Metal" mostra
+os dois tingidos na árvore e no painel de detalhes; tag sem ícone segue
+com o quadradinho; tag com ícone inexistente no banco não derruba nada.
+507 testes verdes (os 26 SVGs somam 78 casos sozinhos em `test_icons.py`,
+que varre a pasta desde a Fatia 32).
 
 ### ☐ Fatia 34 — Visualizador avançado de HDRI/EXR
 Preview com rotação (esfera), visualização de reflexos — como o
@@ -523,6 +551,13 @@ de HDRI...), passar o tema Craft por cima de tudo de uma vez — evita
 retocar duas vezes. Absorve também a Fatia 30 (Acabamento) que ficou
 pendente da F4.
 
+Itens já anotados para esta fatia:
+- **Botões de navegação grandes demais** (Fatia 32) — o Rafael viu na tela
+  e pediu pra deixar pro overhaul em vez de ajustar na hora.
+- A `breadcrumb_row` está lotada (3 botões de navegação + 6 de categoria +
+  nota + resolução + slider); repensar o arranjo inteiro em vez de só
+  encolher peça por peça.
+
 ### ☐ Fatia 44 — Bug: preview customizado não aceita imagem externa via drag-and-drop
 Relatado pelo Rafael (2026-08-02): arrastar um `.png`/`.jpeg` do
 gerenciador de arquivos do sistema para cima de um asset na grade não
@@ -542,6 +577,21 @@ temporário em `dragEnterEvent`/`dropEvent` pra confirmar se o evento
 chega no app; testar também com `QT_QPA_PLATFORM=xcb` (descarta
 Wayland-specific). Cobertura de teste também falta: nenhum teste hoje
 simula um `QDropEvent` com `hasUrls()` real contra `AssetGridView`.
+
+### ☐ Fatia 45 — Cor e ícone de tag não sobrevivem ao sidecar
+Achado ao fatiar a 33. O sidecar grava tags como lista plana de caminhos
+(`sidecar/writer.py:52` → `["Materiais/Madeira"]`) e `reader.py:52-56`
+valida como `list[str]`; a restauração em `indexer/scanner.py` chama
+`get_or_create_path`, que recria a hierarquia **sem cor e sem ícone**.
+Ou seja: apagar o banco e reindexar devolve as tags, mas cinzas e sem
+ícone.
+
+**A cor tem esse buraco desde a Fatia 8** — o ícone só herdou o mesmo
+problema, por isso não foi consertado dentro da 33. Resolver os dois
+juntos: exige mudar o formato de `tags` de string para objeto, o que
+quebra o `FORMAT_VERSION = 1` do sidecar (`writer.py:22`) e o validador
+do reader — precisa de versionamento de formato com leitura das duas
+formas.
 
 ---
 
