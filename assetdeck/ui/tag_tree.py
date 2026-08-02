@@ -9,7 +9,6 @@ import logging
 import sqlite3
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QColor, QPixmap
 from PySide6.QtWidgets import (
     QColorDialog,
     QInputDialog,
@@ -21,7 +20,8 @@ from PySide6.QtWidgets import (
 )
 
 from assetdeck.db.repos import tags as tags_repo
-from assetdeck.ui.tag_dialogs import AliasDialog
+from assetdeck.ui import tag_icons
+from assetdeck.ui.tag_dialogs import AliasDialog, TagIconDialog
 
 log = logging.getLogger(__name__)
 
@@ -57,10 +57,7 @@ class TagTree(QTreeWidget):
         for r in tags_repo.list_tree(conn):
             item = QTreeWidgetItem([r["name"]])
             item.setData(0, _TAG_ROLE, r["id"])
-            if r["color"]:
-                pix = QPixmap(12, 12)
-                pix.fill(QColor(r["color"]))
-                item.setIcon(0, pix)
+            item.setIcon(0, tag_icons.pixmap_for(r["icon"], r["color"]))
             pai = itens.get(r["parent_id"])
             if pai is not None:
                 pai.addChild(item)
@@ -128,6 +125,7 @@ class TagTree(QTreeWidget):
             menu.addSeparator()
             menu.addAction("Renomear…", lambda: self._renomear(tag_id, item.text(0)))
             menu.addAction("Cor…", lambda: self._cor(tag_id))
+            menu.addAction("Ícone…", lambda: self._icone(tag_id))
             menu.addAction("Aliases (PT/EN)…", lambda: self._aliases(tag_id))
             menu.addSeparator()
             menu.addAction("Excluir (com subtags)", lambda: self._excluir(tag_id, item.text(0)))
@@ -149,6 +147,10 @@ class TagTree(QTreeWidget):
         cor = QColorDialog.getColor(parent=self, title="Cor da tag")
         if cor.isValid():
             tags_repo.set_color(self._conn, tag_id, cor.name())
+            self.structure_changed.emit()
+
+    def _icone(self, tag_id: int) -> None:
+        if TagIconDialog(self._conn, tag_id, self).exec():
             self.structure_changed.emit()
 
     def _aliases(self, tag_id: int) -> None:

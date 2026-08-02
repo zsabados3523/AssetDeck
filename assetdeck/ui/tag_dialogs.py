@@ -5,23 +5,28 @@ from __future__ import annotations
 import logging
 import sqlite3
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QSize, Qt
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
+    QButtonGroup,
     QComboBox,
     QDialog,
     QDialogButtonBox,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QListWidget,
     QListWidgetItem,
     QPushButton,
+    QToolButton,
     QTreeWidget,
     QTreeWidgetItem,
     QVBoxLayout,
 )
 
 from assetdeck.db.repos import tags as tags_repo
+from assetdeck.ui import tag_icons
 
 log = logging.getLogger(__name__)
 
@@ -61,6 +66,7 @@ class QuickTagDialog(QDialog):
         for r in tags_repo.list_tree(conn):
             item = QTreeWidgetItem([r["name"]])
             item.setData(0, _TAG_ROLE, r["id"])
+            item.setIcon(0, QIcon(tag_icons.pixmap_for(r["icon"], r["color"])))
             n = contagem.get(r["id"], 0)
             estado = (Qt.CheckState.Checked if n == len(asset_ids) and n > 0
                       else Qt.CheckState.PartiallyChecked if n > 0
@@ -186,3 +192,78 @@ class AliasDialog(QDialog):
             tags_repo.remove_alias(self._conn, item.data(_TAG_ROLE))
             self._mudou = True
             self._reload()
+
+
+class TagIconDialog(QDialog):
+    """Grade dos ícones pré-definidos (Fatia 33). Os ícones aparecem já
+    tingidos com a cor da tag — é assim que vão ficar na árvore."""
+
+    COLUNAS = 6
+
+    def __init__(self, conn: sqlite3.Connection, tag_id: int, parent=None) -> None:
+        super().__init__(parent)
+        self._conn = conn
+        self._tag_id = tag_id
+        self.escolhido: str | None = None
+        self._confirmado = False
+
+        row = conn.execute("SELECT color, icon FROM tags WHERE id = ?",
+                           (tag_id,)).fetchone()
+        self._cor = row["color"] if row else None
+        self.escolhido = row["icon"] if row else None
+
+        self.setWindowTitle(f"Ícone de: {tags_repo.tag_path(conn, tag_id)}")
+
+        self._grupo = QButtonGroup(self)
+        self._grupo.setExclusive(True)
+        self._botoes: dict[str, QToolButton] = {}
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(10)
+
+        for secao in tag_icons.SECOES:
+            titulo = QLabel(secao.titulo)
+            titulo.setObjectName("sectionTitle")
+            layout.addWidget(titulo)
+
+            grade = QGridLayout()
+            grade.setSpacing(4)
+            for i, ti in enumerate(secao.icones):
+                b = QToolButton()
+                b.setCheckable(True)
+                b.setIcon(QIcon(tag_icons.pixmap_for(ti.key, self._cor, 24)))
+                b.setIconSize(QSize(24, 24))
+                b.setToolTip(ti.label)
+                b.setChecked(ti.key == self.escolhido)
+                b.clicked.connect(lambda _c=False, k=ti.key: self._escolher(k))
+                self._grupo.addButton(b)
+                self._botoes[ti.key] = b
+                grade.addWidget(b, i // self.COLUNAS, i % self.COLUNAS)
+            layout.addLayout(grade)
+
+        sem = QPushButton("Sem ícone (só a cor)")
+        sem.clicked.connect(self._limpar)
+        layout.addWidget(sem)
+
+        botoes = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok
+                                  | QDialogButtonBox.StandardButton.Cancel)
+        botoes.accepted.connect(self._confirmar)
+        botoes.rejected.connect(self.reject)
+        layout.addWidget(botoes)
+
+    def _escolher(self, key: str) -> None:
+        self.escolhido = key
+
+    def _limpar(self) -> None:
+        self.escolhido = None
+        botao = self._grupo.checkedButton()
+        if botao is not None:
+            self._grupo.setExclusive(False)  # senão o Qt recusa desmarcar
+            botao.setChecked(False)
+            self._grupo.setExclusive(True)
+
+    def _confirmar(self) -> None:
+        tags_repo.set_icon(self._conn, self._tag_id, self.escolhido)
+        self._confirmado = True
+        self.accept()

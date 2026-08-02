@@ -7,7 +7,7 @@ import sqlite3
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QUrl, Signal
-from PySide6.QtGui import QDesktopServices, QPixmap
+from PySide6.QtGui import QDesktopServices, QIcon, QPixmap
 from PySide6.QtWidgets import (
     QFormLayout,
     QLabel,
@@ -18,7 +18,7 @@ from PySide6.QtWidgets import (
 )
 
 from assetdeck.thumbs.raster import can_thumbnail
-from assetdeck.ui import theme
+from assetdeck.ui import tag_icons, theme
 
 log = logging.getLogger(__name__)
 
@@ -345,6 +345,7 @@ class DetailsPanel(QWidget):
         for r in tag_rows:
             item = QTreeWidgetItem([r["name"]])
             item.setData(0, 32, r["id"])
+            item.setIcon(0, QIcon(tag_icons.pixmap_for(r["icon"], r["color"])))
             item.setCheckState(
                 0, Qt.CheckState.Checked if r["id"] in checked_ids
                 else Qt.CheckState.Unchecked
