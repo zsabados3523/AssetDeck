@@ -88,6 +88,11 @@ def run(argv: list[str]) -> int:
     from assetdeck.ui.main_window import MainWindow
 
     app = QApplication(sys.argv[:1])
+
+    from assetdeck.ui import theme
+
+    theme.apply_theme(app)
+
     win = MainWindow(conn=conn, library_root=cfg["library_root"],
                      db_path=config.db_path(), thumbs_dir=config.thumbs_dir())
     win.show()

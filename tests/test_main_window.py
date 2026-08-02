@@ -46,6 +46,41 @@ def test_janela_abre_com_todos_os_paineis(janela):
         assert getattr(janela, atributo) is not None
 
 
+def test_tema_pinta_a_janela_e_os_cards_ficam_arredondados(qapp, janela):
+    """Regressão da Fatia 25: aplicar o QSS global e conferir na janela REAL
+    (não numa sonda isolada) que o cartão da grade tem o canto arredondado —
+    é onde o bug do viewport retangular vazando apareceria de verdade."""
+    from assetdeck.ui import theme
+
+    antes = (qapp.styleSheet(), qapp.palette(), qapp.font())
+    try:
+        theme.apply_theme(qapp)
+        janela.resize(1000, 700)
+        janela.show()
+        qapp.processEvents()
+
+        grid_card = janela.grid.parentWidget()
+        assert grid_card.objectName() == "card"
+
+        img = grid_card.grab().toImage()
+        from PySide6.QtGui import QColor
+
+        def px(x, y):
+            return QColor(img.pixelColor(x, y)).name().upper()
+
+        # A prova fina de curvatura (comparar quina x meio da aresta) já está
+        # em test_theme.py numa sonda isolada, onde a geometria é controlada.
+        # Aqui, na janela REAL, o que importa é que a quina do card mostra o
+        # fundo — se alguém voltar a arredondar a QListView direto (sem o
+        # QFrame#card em volta), o viewport pinta retângulo e isto quebra.
+        assert px(1, 1) == theme.BG.upper(), "a quina do card da grade não é curva"
+    finally:
+        qss, paleta, fonte = antes
+        qapp.setStyleSheet(qss)
+        qapp.setPalette(paleta)
+        qapp.setFont(fonte)
+
+
 def test_painel_de_detalhes_tem_sinais_de_propriedades(janela):
     assert hasattr(janela.details, "property_value_changed")
     assert hasattr(janela.details, "manage_properties_requested")

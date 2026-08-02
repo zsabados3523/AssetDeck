@@ -45,6 +45,7 @@ from assetdeck.ui.property_defs_dialog import PropertyDefsDialog
 from assetdeck.ui.relocate_dialog import RelocateDialog
 from assetdeck.ui.scan_worker import ScanController
 from assetdeck.ui.smart_collection_panel import SmartCollectionPanel
+from assetdeck.ui import theme
 from assetdeck.ui.tag_dialogs import QuickTagDialog
 from assetdeck.ui.tag_tree import TagTree
 from assetdeck.ui.type_filter import TypeFilter
@@ -186,18 +187,26 @@ class MainWindow(QMainWindow):
             lambda: self.smart_collections.reload(self._conn)
         )
 
+        # Cada painel é um QFrame#card translúcido em volta de uma view
+        # transparente — o viewport de uma QTreeWidget/QListView pinta
+        # retângulo no canto e vaza por cima de qualquer border-radius posto
+        # nela diretamente, então o card por fora é obrigatório (Fatia 24).
         left = QSplitter(Qt.Orientation.Vertical)
-        left.addWidget(self.folders)
-        left.addWidget(self.tags)
-        left.addWidget(self.collections)
-        left.addWidget(self.smart_collections)
+        left.setHandleWidth(10)
+        left.addWidget(theme.make_card(self.folders, titulo="Pastas"))
+        left.addWidget(theme.make_card(self.tags, titulo="Tags"))
+        left.addWidget(theme.make_card(self.collections, titulo="Coleções"))
+        left.addWidget(theme.make_card(self.smart_collections, titulo="Smart Collections"))
         left.setSizes([280, 200, 200, 200])
-        left.setMinimumWidth(180)
-        left.setMaximumWidth(320)
+        left.setMinimumWidth(200)
+        left.setMaximumWidth(340)
 
+        # DetailsPanel é o próprio card (objectName="card" nele mesmo) — não
+        # precisa de embrulho extra, então o min/max width fica nele direto.
         self.details = DetailsPanel(self._library_root)
         self.details.setMinimumWidth(300)
         self.details.setMaximumWidth(380)
+        theme.apply_card_shadow(self.details)
         self.details.notes_saved.connect(self._on_notes_saved)
         self.details.tag_toggled.connect(self._on_tag_toggled)
         self.details.rating_changed.connect(self._on_rating_changed)
@@ -208,18 +217,32 @@ class MainWindow(QMainWindow):
         self.details.property_value_changed.connect(self._on_property_value_changed)
         self.details.manage_properties_requested.connect(self._manage_properties)
 
+        # A grade NUNCA leva sombra: ela rola com centenas de assets, e o
+        # QGraphicsDropShadowEffect força o Qt a renderizar a subárvore
+        # inteira fora da tela a cada quadro (medido ~2,3x mais caro).
+        grid_card = theme.make_card(self.grid, sombra=False)
+
         splitter = QSplitter(Qt.Orientation.Horizontal)
+        splitter.setHandleWidth(10)
         splitter.addWidget(left)
-        splitter.addWidget(self.grid)
+        splitter.addWidget(grid_card)
         splitter.addWidget(self.details)
         splitter.setStretchFactor(0, 0)
         splitter.setStretchFactor(1, 1)
         splitter.setStretchFactor(2, 0)
-        splitter.setSizes([220, 760, 300])
+        splitter.setSizes([240, 740, 300])
+
+        top_widget = QWidget()
+        top_widget.setLayout(top)
+        top_card = theme.make_card(top_widget)
 
         central = QWidget()
+        central.setObjectName("appSurface")
+        central.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         layout = QVBoxLayout(central)
-        layout.addLayout(top)
+        layout.setContentsMargins(14, 14, 14, 14)
+        layout.setSpacing(12)
+        layout.addWidget(top_card)
         layout.addWidget(splitter)
         self.setCentralWidget(central)
 
