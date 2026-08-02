@@ -37,6 +37,10 @@ class TagTree(QTreeWidget):
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self._conn: sqlite3.Connection | None = None
+        # Só a PRIMEIRA carga abre tudo (bom padrão pra árvore vazia/nova).
+        # Dali em diante, reload() preserva o que o Rafael abriu/fechou —
+        # senão criar ou apagar uma tag reabria a árvore inteira.
+        self._primeira_carga = True
         self.setHeaderHidden(True)
         self.setAcceptDrops(True)
         self.currentItemChanged.connect(self._on_current)
@@ -47,6 +51,7 @@ class TagTree(QTreeWidget):
 
     def reload(self, conn: sqlite3.Connection) -> None:
         self._conn = conn
+        expandidas = self._tags_expandidas()
         self.blockSignals(True)
         self.clear()
         raiz = QTreeWidgetItem(["(sem filtro de tag)"])
@@ -65,9 +70,32 @@ class TagTree(QTreeWidget):
                 self.addTopLevelItem(item)
             itens[r["id"]] = item
 
-        self.expandAll()
+        if self._primeira_carga:
+            # Só quem TEM filho — expandAll() marca folha como expandida
+            # também, e esse estado sobra: quando ela ganhasse o primeiro
+            # filho depois, apareceria aberta sem o Rafael ter pedido.
+            for item in itens.values():
+                if item.childCount():
+                    item.setExpanded(True)
+            self._primeira_carga = False
+        else:
+            for tag_id, item in itens.items():
+                item.setExpanded(tag_id in expandidas)
         self.setCurrentItem(raiz)
         self.blockSignals(False)
+
+    def _tags_expandidas(self) -> set[int]:
+        """Ids das tags com o ramo aberto AGORA — capturado antes do
+        clear() pra restaurar depois de reconstruir a árvore."""
+        expandidas: set[int] = set()
+        it = QTreeWidgetItemIterator(self)
+        while it.value():
+            item = it.value()
+            tag_id = item.data(0, _TAG_ROLE)
+            if tag_id is not None and item.isExpanded():
+                expandidas.add(tag_id)
+            it += 1
+        return expandidas
 
     def current_tag_id(self) -> int | None:
         item = self.currentItem()

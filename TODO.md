@@ -591,6 +591,16 @@ dele): aplicar o balanceado sobre as 2 tags que ele tinha reporta
 "47 criadas, 2 já existiam", e "Materiais"/"Metal" saem com cor e ícone
 idênticos aos de antes. 565 testes verdes.
 
+**Ajuste pós-tela (2026-08-02):** o Rafael reportou que criar/apagar
+qualquer tag reabria a árvore INTEIRA — `reload()` chamava `expandAll()`
+sem olhar o que já estava aberto/fechado. Corrigido: `_tags_expandidas()`
+captura o estado antes do `clear()` e restaura depois. Só a primeira
+carga (árvore vazia/recém-aberta) expande tudo; dali em diante o Rafael
+manda. Detalhe achado no caminho: `expandAll()` marca até FOLHA como
+"expandida" — sem filtrar por `childCount()`, uma tag sem filho hoje
+apareceria aberta sozinha no dia em que ganhasse o primeiro filho.
+9 testes novos em `test_tag_tree.py`; 569 no total.
+
 ### ☐ Fatia 36 — Barra de menus
 Arquivo, Editar, Ferramentas, Configurações, Janela — o app hoje não tem
 menu de topo nenhum. Definir o conteúdo de cada menu na hora de fatiar.
