@@ -27,11 +27,15 @@ def list_for_grid(
     include_hidden: bool = False,
     include_dependencies: bool = True,
     collection_id: int | None = None,
+    extensions: list[str] | None = None,
 ) -> list[dict]:
     """Assets para a grid (asset + arquivo principal), com filtros combináveis.
 
     - search: busca por nome via FTS5 (prefixo, sem diferenciar acentos)
     - asset_types: lista de tipos marcados no checklist ([] ou None = todos)
+    - extensions: extensão do arquivo principal ('fbx', 'obj'...), sem ponto
+      e sem diferenciar maiúsculas ([] ou None = todas — filtro secundário
+      da Fatia 31, dentro de um tipo)
     - dir_prefix: pasta selecionada na árvore ('' ou None = raiz/tudo)
     - include_subdirs: False = só arquivos diretamente na pasta
     - expand_sets: True = toggle 'agrupar' DESLIGADO — cada mapa de um set
@@ -79,6 +83,10 @@ def list_for_grid(
     if asset_types:
         sql += f" AND a.asset_type IN ({','.join('?' * len(asset_types))})"
         params.extend(asset_types)
+    if extensions:
+        ramos_ext = " OR ".join("lower(f.rel_path) LIKE ?" for _ in extensions)
+        sql += f" AND ({ramos_ext})"
+        params.extend(f"%.{e.lower()}" for e in extensions)
     if tag_id is not None:
         # Filtrar por 'Madeira' inclui assets taggeados nas subtags
         from assetdeck.db.repos import tags as tags_repo
@@ -148,6 +156,25 @@ def distinct_types(conn: sqlite3.Connection) -> list[str]:
             "SELECT DISTINCT asset_type FROM assets WHERE deleted_at IS NULL ORDER BY 1"
         )
     ]
+
+
+def distinct_extensions(conn: sqlite3.Connection, asset_type: str | None = None) -> list[str]:
+    """Extensões (sem ponto, minúsculas) do arquivo principal dos assets
+    ativos — opcionalmente restrito a um tipo. Para popular o filtro
+    secundário da Fatia 31 (só aparece quando um tipo tem mais de uma)."""
+    sql = """SELECT f.rel_path FROM files f
+             JOIN assets a ON a.id = f.asset_id
+             WHERE f.is_primary = 1 AND f.deleted_at IS NULL AND a.deleted_at IS NULL"""
+    params: list = []
+    if asset_type:
+        sql += " AND a.asset_type = ?"
+        params.append(asset_type)
+    exts: set[str] = set()
+    for row in conn.execute(sql, params):
+        nome = row["rel_path"].rsplit("/", 1)[-1]
+        if "." in nome:
+            exts.add(nome.rsplit(".", 1)[-1].lower())
+    return sorted(exts)
 
 
 def set_rating(conn: sqlite3.Connection, asset_id: int, rating: int | None) -> None:

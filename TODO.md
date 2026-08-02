@@ -387,11 +387,28 @@ sequência, a confirmar antes de começar cada fatia (uma por vez, como
 sempre). Nenhuma tem direção técnica definida ainda — isso é decidido na
 hora de fatiar cada uma.
 
-### ☐ Fatia 31 — Filtro por extensão dentro do tipo de asset
-Hoje o filtro é só por `asset_type` (Modelos, Texturas...). Pedido do
-Rafael: dentro de "Modelos 3D", poder restringir por extensão (só `.fbx`,
-só `.obj`, ou os dois) — generalizar para todos os `asset_type` que têm
-mais de uma extensão possível.
+### ☑ Fatia 31 — Filtro por extensão dentro do tipo de asset
+`assets_repo.list_for_grid` ganhou o parâmetro `extensions` (filtra pelo
+sufixo de `files.rel_path`, case-insensitive) e a função nova
+`distinct_extensions(conn, asset_type=None)`. `TypeFilter`
+(`ui/type_filter.py`) ganhou um checklist secundário indentado de
+extensões por tipo — só aparece pra tipo marcado com mais de uma
+extensão presente na biblioteca (ex.: `texture` com `.jpg`/`.png`/`.tiff`
+na testlib; `ies` com uma extensão só não ganha checklist). Desmarcar o
+tipo pai esconde e ANULA a extensão marcada (não vaza pra outros tipos
+selecionados junto). `main_window.py`: `_current_filters_dict`/
+`_restore_filters` levam `extensions` — Smart Collections salvam/restauram
+de graça, sem migração (query é JSON livre).
+**Limitação conhecida:** com 2+ TIPOS marcados ao mesmo tempo, o filtro de
+extensão é global (não por tipo) — marcar `.fbx` sob "model" enquanto
+"texture" também está marcado restringiria "texture" a `.fbx` também
+(caso raro; documentar se o Rafael esbarrar nisso, resolvido fatiando de
+novo com um filtro por tipo+extensão combinado se necessário).
+**Deu certo quando:** marcar "texture" mostra 11 de 391 assets da testlib;
+marcar também `.jpg` mostra 4; desmarcar "texture" volta a mostrar os 391
+(a extensão não vaza). Verificado rodando a `MainWindow` de verdade contra
+a testlib (script manual, não só teste offscreen). 322 testes verdes (14
+novos: `tests/test_search.py` + `tests/test_type_filter.py` novo).
 
 ### ☐ Fatia 32 — Navegação de pastas com histórico
 Controles tipo navegador (voltar / avançar) na área de visualização de

@@ -149,3 +149,32 @@ def test_lista_de_pastas_para_arvore(conn, lib):
 
 def test_tipos_distintos_para_o_combo(conn, lib):
     assert assets_repo.distinct_types(conn) == ["hdri", "texture"]
+
+
+def test_extensoes_distintas_por_tipo(conn, lib):
+    # 4 .jpg + 2 .png em texture; 1 .hdr em hdri (Fatia 31)
+    assert assets_repo.distinct_extensions(conn, asset_type="texture") == ["jpg", "png"]
+    assert assets_repo.distinct_extensions(conn, asset_type="hdri") == ["hdr"]
+    assert assets_repo.distinct_extensions(conn, asset_type="model") == []
+
+
+def test_extensoes_distintas_sem_tipo_junta_tudo(conn, lib):
+    assert assets_repo.distinct_extensions(conn) == ["hdr", "jpg", "png"]
+
+
+def test_filtro_por_extensao_dentro_do_tipo(conn, lib):
+    rows = assets_repo.list_for_grid(conn, asset_types=["texture"], extensions=["jpg"])
+    assert _names(rows) == ["Concreto Rústico 4K", "StoneQuartziteTile_2K",
+                             "Wood Oak", "na_raiz_texturas"]
+
+    rows = assets_repo.list_for_grid(conn, asset_types=["texture"], extensions=["png"])
+    assert _names(rows) == ["concrete_polished", "solto_na_raiz"]
+
+
+def test_filtro_por_extensao_maiuscula_nao_diferencia(conn, lib):
+    rows = assets_repo.list_for_grid(conn, extensions=["JPG"])
+    assert len(rows) == 4
+
+
+def test_filtro_por_extensao_vazio_nao_restringe(conn, lib):
+    assert len(assets_repo.list_for_grid(conn, extensions=[])) == 7
