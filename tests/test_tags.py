@@ -133,6 +133,46 @@ def test_recriar_subtag_apos_soft_delete_reaproveita_e_reativa(env):
     assert nomes == {"Materiais", "Concreto"}
 
 
+def test_icone_da_tag_persiste_e_volta_na_arvore(env):
+    """A coluna tags.icon existe desde o v1 mas só ganhou uso na Fatia 33."""
+    conn, _, _ = env
+    madeira = tags_repo.create(conn, "Madeira")
+    tags_repo.set_icon(conn, madeira, "tag-madeira")
+
+    linha = next(r for r in tags_repo.list_tree(conn) if r["id"] == madeira)
+    assert linha["icon"] == "tag-madeira"
+
+
+def test_icone_chega_junto_com_as_tags_do_asset(env):
+    """O painel de detalhes desenha a partir de tags_of."""
+    conn, _, _ = env
+    madeira = tags_repo.create(conn, "Madeira")
+    tags_repo.set_icon(conn, madeira, "tag-madeira")
+    tags_repo.assign(conn, _id(conn, "oak_planks"), madeira)
+
+    linha = tags_repo.tags_of(conn, _id(conn, "oak_planks"))[0]
+    assert linha["icon"] == "tag-madeira"
+
+
+def test_set_icon_com_none_limpa(env):
+    conn, _, _ = env
+    t = tags_repo.create(conn, "Metal", icon="tag-metal")
+    tags_repo.set_icon(conn, t, None)
+
+    linha = next(r for r in tags_repo.list_tree(conn) if r["id"] == t)
+    assert linha["icon"] is None
+
+
+def test_icone_sobrevive_ao_renomear(env):
+    conn, _, _ = env
+    t = tags_repo.create(conn, "Metal", icon="tag-metal")
+    tags_repo.rename(conn, t, "Metais")
+
+    linha = next(r for r in tags_repo.list_tree(conn) if r["id"] == t)
+    assert linha["name"] == "Metais"
+    assert linha["icon"] == "tag-metal"
+
+
 def test_tags_sobrevivem_ao_desastre_via_sidecar(env):
     """Banco morre → sidecar devolve tags com hierarquia completa."""
     conn, root, tmp_path = env
