@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QProgressBar,
     QPushButton,
     QSplitter,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -51,6 +52,7 @@ from assetdeck.ui import icons, theme
 from assetdeck.ui.tag_dialogs import QuickTagDialog
 from assetdeck.ui.tag_tree import TagTree
 from assetdeck.ui.categories import CATEGORIES
+from assetdeck.ui.nav_history import NavHistory
 from assetdeck.ui.category_bar import CategoryBar
 
 log = logging.getLogger(__name__)
@@ -172,6 +174,7 @@ class MainWindow(QMainWindow):
 
         self.folders = FolderTree()
         self.folders.dir_selected.connect(self._on_dir_selected)
+        self.history = NavHistory()
 
         self.tags = TagTree()
         self.tags.tag_selected.connect(lambda _t: self._apply_filters())
@@ -238,10 +241,22 @@ class MainWindow(QMainWindow):
         self.size_slider.setToolTip("Tamanho das miniaturas")
         self.size_slider.valueChanged.connect(self.grid.set_icon_size)
 
+        # Voltar / Avançar / Subir (Fatia 32): a árvore lateral era o único
+        # jeito de mudar de pasta, sem como desfazer.
+        self.back_btn = self._nav_button("arrow-left", "Voltar (Alt+←)",
+                                         self._go_back)
+        self.fwd_btn = self._nav_button("arrow-right", "Avançar (Alt+→)",
+                                        self._go_forward)
+        self.up_btn = self._nav_button("arrow-up", "Subir um nível (Alt+↑)",
+                                       self._go_up)
+
         # Tipos / Nota / Resolução moram AQUI (pedido do Rafael, Fatia 28c):
         # entre o título da pasta e o slider, como ícone compacto — não mais
         # na barra de filtros de cima.
         breadcrumb_row = QHBoxLayout()
+        breadcrumb_row.addWidget(self.back_btn)
+        breadcrumb_row.addWidget(self.fwd_btn)
+        breadcrumb_row.addWidget(self.up_btn)
         breadcrumb_row.addWidget(self.breadcrumb, stretch=1)
         breadcrumb_row.addWidget(self.categories)
         breadcrumb_row.addWidget(self.rating_filter)
@@ -292,6 +307,10 @@ class MainWindow(QMainWindow):
         from PySide6.QtGui import QKeySequence, QShortcut
 
         QShortcut(QKeySequence("Ctrl+T"), self, activated=self._quick_tag_dialog)
+        # Navegação de pastas (Fatia 32), mesmas teclas de um navegador
+        QShortcut(QKeySequence("Alt+Left"), self, activated=self._go_back)
+        QShortcut(QKeySequence("Alt+Right"), self, activated=self._go_forward)
+        QShortcut(QKeySequence("Alt+Up"), self, activated=self._go_up)
         self._tag_clipboard: list[int] | None = None
 
         self._setup_bridge()  # ponte com o Blender (F2)
@@ -311,14 +330,20 @@ class MainWindow(QMainWindow):
     # ---- filtros e contagem ----
 
     def _reload_all(self) -> None:
-        """Recarga completa: pastas, tags, checklist de tipos e grid."""
+        """Recarga completa: pastas, tags, checklist de tipos e grid.
+
+        `folders.reload` reseta a seleção para a raiz — antes da Fatia 32
+        isso jogava o Rafael de volta pra "tudo" no fim de cada varredura, e
+        ainda deixava o breadcrumb mostrando a pasta antiga. Agora a pasta é
+        restaurada (ou cai na raiz, se sumiu do disco)."""
+        anterior = self.history.current()
         self.folders.reload(self._conn)
         self.tags.reload(self._conn)
         self.collections.reload(self._conn)
         self.smart_collections.reload(self._conn)
         self.categories.reload(self._conn, self._category_counts())
         self.model.reload()
-        self._apply_filters()
+        self._go_to_dir(anterior, record=False)
 
     def _category_counts(self) -> dict:
         """Contagem por categoria respeitando os filtros ativos (menos o de
@@ -356,14 +381,92 @@ class MainWindow(QMainWindow):
     def _update_breadcrumb(self, dir_prefix: str) -> None:
         """"" -> biblioteca inteira; "A/B" -> "Biblioteca › A › B"."""
         if not dir_prefix:
-            self.breadcrumb.setText("BIBLIOTECA (TUDO)")
+            self._breadcrumb_full = "BIBLIOTECA (TUDO)"
         else:
             trilha = " › ".join(dir_prefix.split("/"))
-            self.breadcrumb.setText(f"BIBLIOTECA › {trilha}".upper())
+            self._breadcrumb_full = f"BIBLIOTECA › {trilha}".upper()
+        self._elide_breadcrumb()
+
+    def _elide_breadcrumb(self) -> None:
+        """A linha divide espaço com 3 botões de navegação, 6 de categoria,
+        nota, resolução e o slider — caminho fundo não cabe. Corta pela
+        ESQUERDA: a pasta atual (à direita) é o que importa saber."""
+        from PySide6.QtGui import QFontMetrics
+
+        fm = QFontMetrics(self.breadcrumb.font())
+        largura = max(self.breadcrumb.width(), 80)
+        self.breadcrumb.setText(
+            fm.elidedText(self._breadcrumb_full, Qt.TextElideMode.ElideLeft, largura))
+        self.breadcrumb.setToolTip(self._breadcrumb_full)
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        if hasattr(self, "_breadcrumb_full"):  # pode disparar durante o __init__
+            self._elide_breadcrumb()  # o espaço disponível mudou
 
     def _on_dir_selected(self, dir_prefix: str) -> None:
+        """Clique na árvore: a árvore já mudou de seleção sozinha, só falta
+        registrar no histórico e refiltar."""
+        self.history.push(dir_prefix)
         self._update_breadcrumb(dir_prefix)
         self._apply_filters()
+        self._sync_nav_buttons()
+
+    # ---- navegação de pastas (Fatia 32) ----
+
+    def _nav_button(self, icone: str, dica: str, slot) -> QToolButton:
+        b = QToolButton()
+        b.setIcon(icons.icon(icone, theme.TEXT_MUTED))
+        b.setIconSize(QSize(16, 16))
+        b.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
+        b.setToolTip(dica)
+        b.clicked.connect(slot)
+        b.setEnabled(False)
+        return b
+
+    def _go_to_dir(self, dir_prefix: str, record: bool = True) -> None:
+        """ÚNICO caminho para mudar de pasta programaticamente. Existia
+        espalhado entre `_on_dir_selected` e `_restore_filters`; centralizar
+        é o que mantém o histórico honesto."""
+        if not self.folders.select(dir_prefix) and dir_prefix:
+            # Pasta sumiu (reindexação, biblioteca trocada): cai na raiz em
+            # vez de deixar a seleção velha com o breadcrumb mentindo.
+            log.info("Pasta %r não existe mais — voltando para a raiz.", dir_prefix)
+            self.folders.select("")
+            dir_prefix = ""
+            self.history.replace_current("")
+        if record:
+            self.history.push(dir_prefix)
+        self._update_breadcrumb(dir_prefix)
+        self._apply_filters()
+        self._sync_nav_buttons()
+
+    def _go_back(self) -> None:
+        if self.history.can_back():
+            self._go_to_dir(self.history.back(), record=False)
+
+    def _go_forward(self) -> None:
+        if self.history.can_forward():
+            self._go_to_dir(self.history.forward(), record=False)
+
+    def _go_up(self) -> None:
+        atual = self.history.current()
+        if atual:
+            self._go_to_dir(atual.rsplit("/", 1)[0] if "/" in atual else "")
+
+    def _sync_nav_buttons(self) -> None:
+        self.back_btn.setEnabled(self.history.can_back())
+        self.fwd_btn.setEnabled(self.history.can_forward())
+        self.up_btn.setEnabled(bool(self.history.current()))
+
+    def mousePressEvent(self, event) -> None:
+        """Botões laterais do mouse navegam, como em qualquer navegador."""
+        if event.button() == Qt.MouseButton.BackButton:
+            self._go_back()
+        elif event.button() == Qt.MouseButton.ForwardButton:
+            self._go_forward()
+        else:
+            super().mousePressEvent(event)
 
     # ---- tags ----
 
@@ -584,12 +687,12 @@ class MainWindow(QMainWindow):
         self.res_filter.set_value(query.get("min_resolution"))
         self.hidden_check.setChecked(bool(query.get("include_hidden")))
         self.deps_check.setChecked(bool(query.get("include_dependencies")))
-        dir_prefix = query.get("dir_prefix") or ""
-        self.folders.select(dir_prefix)
-        self._update_breadcrumb(dir_prefix)
         self.tags.select(query.get("tag_id"))
         self.collections.select(query.get("collection_id"))
-        self._apply_filters()
+        # Por último: `_go_to_dir` já reaplica os filtros com tudo no lugar,
+        # e registra a pasta no histórico (decisão do Rafael — aplicar uma
+        # Smart Collection é navegação como qualquer outra).
+        self._go_to_dir(query.get("dir_prefix") or "")
 
     def _selected_asset_ids(self) -> list[int]:
         rows = [self.model.row_at(i)

@@ -60,15 +60,33 @@ class FolderTree(QTreeWidget):
         if current is not None:
             self.dir_selected.emit(current.data(0, _DIR_ROLE))
 
-    def select(self, dir_prefix: str) -> None:
+    def select(self, dir_prefix: str) -> bool:
         """Seleciona a pasta pelo caminho salvo (ex.: ao aplicar uma Smart
-        Collection). Não emite dir_selected — quem chama reaplica o filtro."""
+        Collection). Não emite dir_selected — quem chama reaplica o filtro.
+
+        Devolve False se a pasta não existe mais na árvore (sumiu do disco
+        entre uma varredura e outra, ou veio de um histórico/Smart
+        Collection antigos): quem chama precisa saber pra cair na raiz em
+        vez de seguir com a seleção velha e um breadcrumb mentindo."""
         self.blockSignals(True)
-        it = QTreeWidgetItemIterator(self)
-        while it.value():
-            item = it.value()
-            if item.data(0, _DIR_ROLE) == dir_prefix:
-                self.setCurrentItem(item)
-                break
-            it += 1
-        self.blockSignals(False)
+        try:
+            it = QTreeWidgetItemIterator(self)
+            while it.value():
+                item = it.value()
+                if item.data(0, _DIR_ROLE) == dir_prefix:
+                    # Expandir os ancestrais: sem isso a pasta fica
+                    # selecionada dentro de um nó fechado e o usuário não vê
+                    # onde foi parar.
+                    pai = item.parent()
+                    while pai is not None:
+                        pai.setExpanded(True)
+                        pai = pai.parent()
+                    self.setCurrentItem(item)
+                    self.scrollToItem(item)
+                    return True
+                it += 1
+        finally:
+            self.blockSignals(False)
+        log.warning("Pasta %r não está mais na árvore — seleção não mudou.",
+                    dir_prefix)
+        return False

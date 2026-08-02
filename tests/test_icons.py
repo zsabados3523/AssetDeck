@@ -4,8 +4,10 @@ import pytest
 
 from assetdeck.ui import icons
 
-TODOS = ("star-filled", "star-outline", "eye-off", "search", "refresh",
-         "chevron-down", "check")
+# Varrido da pasta em vez de escrito à mão: a lista fixa já tinha ficado
+# desatualizada duas vezes (faltavam 'filter', 'resolution' e os 'cat-*').
+TODOS = tuple(sorted(p.stem for p in icons.ICONS_DIR.glob("*.svg")
+                     if p.stem != "app-icon"))
 
 
 @pytest.mark.parametrize("nome", TODOS)
