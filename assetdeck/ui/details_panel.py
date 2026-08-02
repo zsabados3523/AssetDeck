@@ -161,8 +161,14 @@ class DetailsPanel(QWidget):
         self.save_notes_btn.setEnabled(False)
         self.save_notes_btn.clicked.connect(self._save_notes)
 
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(14, 12, 14, 14)
+        # O painel inteiro (preview + form + galeria + tags + propriedades +
+        # notas) empilhado sem rolagem fazia a JANELA exigir ~1000px de
+        # altura mínima só para caber este painel — o Rafael relatou que o
+        # app não redimensionava nem maximizava por causa disso. A correção
+        # é rolar o CONTEÚDO aqui dentro, não encolher nenhum widget.
+        content = QWidget()
+        layout = QVBoxLayout(content)
+        layout.setContentsMargins(0, 0, 8, 0)
         layout.setSpacing(8)
         layout.addWidget(self.preview)
         layout.addWidget(self.name)
@@ -185,6 +191,18 @@ class DetailsPanel(QWidget):
         layout.addWidget(self.notes_edit)
         layout.addWidget(self.save_notes_btn)
         layout.addStretch()
+
+        from PySide6.QtWidgets import QFrame, QScrollArea
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setWidget(content)
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(14, 12, 14, 14)
+        outer.setSpacing(0)
+        outer.addWidget(scroll)
 
         self._paint_stars()
         self.fav_btn.setIcon(self._star_outline)

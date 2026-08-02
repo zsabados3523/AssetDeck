@@ -25,8 +25,34 @@ from assetdeck.ui import theme
 
 log = logging.getLogger(__name__)
 
-CELL = QSize(176, 200)
-ICON = 160
+# Geometria do card — fonte ÚNICA usada pela view (setGridSize/setIconSize),
+# pelo modelo (tamanho real da miniatura) e pelo delegate (sizeHint e o
+# retângulo da miniatura em paint()). Antes eram três números fixos que
+# podiam sair de sincronia — foi exatamente essa falta de sincronia que
+# fazia a miniatura vazar por cima do nome (bug relatado pelo Rafael).
+CARD_MARGIN = 3    # respiro entre células, além do spacing(8) da view
+CARD_PAD = 10       # margem interna do card, em volta da miniatura
+CARD_GAP = 8        # entre a miniatura e o nome
+NAME_HEIGHT = 36    # altura reservada para até 2 linhas de nome
+MIN_ICON = 96        # menor tamanho de miniatura no slider (Fatia 28)
+MAX_ICON = 240        # maior tamanho de miniatura no slider
+DEFAULT_ICON = 160
+
+
+def cell_for_icon(icon_px: int) -> QSize:
+    """Tamanho da célula da grade para uma miniatura QUADRADA de `icon_px`.
+
+    A miniatura é sempre quadrada (pedido do Rafael: "sem achatar nada") — é
+    o `KeepAspectRatio` no `.scaled()` do modelo quem encaixa a imagem real
+    dentro desse quadrado sem esticar.
+    """
+    largura = icon_px + 2 * CARD_PAD + 2 * CARD_MARGIN
+    altura = icon_px + 2 * CARD_PAD + CARD_GAP + NAME_HEIGHT + 2 * CARD_MARGIN
+    return QSize(largura, altura)
+
+
+ICON = DEFAULT_ICON
+CELL = cell_for_icon(ICON)
 
 # Papéis extras que o AssetCardDelegate (Fatia 27) lê para desenhar o card.
 # Antes o "★ " e o "[oculto] " eram prefixo de string no DisplayRole — além de
@@ -49,10 +75,12 @@ class AssetGridModel(QAbstractListModel):
         self._pipeline.ready.connect(self._on_thumb_ready)
         self._rows: list[sqlite3.Row] = []
         self._row_by_asset: dict[int, int] = {}
-        self._placeholders: dict[str, QPixmap] = {}
+        self._placeholders: dict[tuple[str, int], QPixmap] = {}
         # Populado por _pixmap_for a cada DecorationRole; o delegate lê logo
         # depois via HAS_THUMB_ROLE — mesma chamada de paint, sem corrida.
         self._is_placeholder: dict[int, bool] = {}
+        # Tamanho da miniatura, ajustável pelo slider da grade (Fatia 28).
+        self._icon_px = ICON
         # Filtros ativos (Fatia 4; tipos viraram lista na Fatia 5)
         self._search: str | None = None
         self._asset_types: list[str] = []
@@ -97,6 +125,19 @@ class AssetGridModel(QAbstractListModel):
         if expand != self._expand_sets:
             self._expand_sets = expand
             self._requery()
+
+    def set_icon_size(self, px: int) -> None:
+        """Slider de tamanho da grade (Fatia 28). As thumbs já geradas em
+        disco não mudam — só o quanto exibimos delas, então basta redesenhar
+        (sem re-requisitar nada do pipeline)."""
+        px = max(MIN_ICON, min(MAX_ICON, px))
+        if px != self._icon_px:
+            self._icon_px = px
+            if self._rows:
+                self.dataChanged.emit(
+                    self.index(0), self.index(len(self._rows) - 1),
+                    [Qt.ItemDataRole.DecorationRole],
+                )
 
     def reload(self) -> None:
         """Recarga completa (pós-varredura): refaz a consulta e o pré-aquecimento."""
@@ -216,10 +257,10 @@ class AssetGridModel(QAbstractListModel):
             src = self._root / row["rel_path"]
             key_hash = row["content_hash"]
 
-        # Bug pego na Fatia 27: a chave não incluía ICON. Se o tamanho do
-        # ícone mudasse, o QPixmapCache servia pixmaps do tamanho velho pelo
-        # resto do processo.
-        key = f"thumb:{key_hash}:{ICON}"
+        # Bug pego na Fatia 27: a chave não incluía o tamanho. Se o tamanho
+        # do ícone mudasse (agora pode, via slider — Fatia 28), o
+        # QPixmapCache servia pixmaps do tamanho velho pelo resto do processo.
+        key = f"thumb:{key_hash}:{self._icon_px}"
         cached = QPixmapCache.find(key)
         if cached:
             self._is_placeholder[row["id"]] = False
@@ -230,10 +271,11 @@ class AssetGridModel(QAbstractListModel):
             if path is not None:
                 pix = QPixmap(str(path))
                 if not pix.isNull():
-                    # FIT: a célula tem ICON px; entregar 256px fazia a view
-                    # CORTAR a imagem (feedback do Rafael). Encaixa inteira.
+                    # FIT: encaixa inteira dentro do quadrado (sem esticar,
+                    # sem cortar — pedido do Rafael); o delegate ainda
+                    # reencolhe na hora de pintar se sobrar alguma folga.
                     pix = pix.scaled(
-                        ICON, ICON, Qt.AspectRatioMode.KeepAspectRatio,
+                        self._icon_px, self._icon_px, Qt.AspectRatioMode.KeepAspectRatio,
                         Qt.TransformationMode.SmoothTransformation,
                     )
                     QPixmapCache.insert(key, pix)
@@ -251,12 +293,20 @@ class AssetGridModel(QAbstractListModel):
     def _placeholder(self, asset_type: str) -> QPixmap:
         """Pastilha lisa na cor única de "sem miniatura" (decisão do Rafael:
         nada de cor por tipo). O reconhecimento do tipo passa a ser o chip de
-        extensão que o AssetCardDelegate desenha por cima (Fatia 27)."""
-        pix = self._placeholders.get(asset_type)
+        extensão que o AssetCardDelegate desenha por cima (Fatia 27).
+
+        Segue `self._icon_px` (não o módulo ICON fixo): o delegate nunca
+        desenha este pixmap no tamanho nativo dentro da grade (ele pinta o
+        próprio retângulo TYPE_TINT), mas o baralho de arrasto múltiplo
+        (`_stacked_preview`) usa `_pixmap_for` — inclusive o fallback — então
+        vale manter consistente com o tamanho pedido.
+        """
+        chave = (asset_type, self._icon_px)
+        pix = self._placeholders.get(chave)
         if pix is None:
-            pix = QPixmap(ICON, ICON)
+            pix = QPixmap(self._icon_px, self._icon_px)
             pix.fill(QColor(theme.TYPE_TINT))
-            self._placeholders[asset_type] = pix
+            self._placeholders[chave] = pix
         return pix
 
 
@@ -345,6 +395,28 @@ class AssetGridView(QListView):
         self.setDragEnabled(True)
         self.setDragDropMode(QListView.DragDropMode.DragDrop)
         self.setDefaultDropAction(Qt.DropAction.CopyAction)
+
+    # ---- tamanho da miniatura (slider da Fatia 28) ----
+
+    def set_icon_size(self, px: int) -> None:
+        """Muda o tamanho das miniaturas ao vivo — grade, modelo e delegate
+        têm de mudar JUNTOS (é `cell_for_icon` quem garante isso)."""
+        px = max(MIN_ICON, min(MAX_ICON, px))
+        cell = cell_for_icon(px)
+        self.setIconSize(QSize(px, px))
+        self.setGridSize(cell)
+
+        delegate = self.itemDelegate()
+        if hasattr(delegate, "set_icon_size"):
+            delegate.set_icon_size(px)
+
+        model = self.model()
+        if model is not None and hasattr(model, "set_icon_size"):
+            model.set_icon_size(px)
+
+        # uniformItemSizes cacheia o tamanho antigo; sem isto a grade só
+        # relayouta no próximo scroll/resize.
+        self.doItemsLayout()
 
     # ---- arrasto para fora (Tag, Collection, Blender, gerenciador de arquivos) ----
 

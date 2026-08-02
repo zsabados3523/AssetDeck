@@ -184,6 +184,40 @@ def _borda_do_card(sonda) -> str:
     return _pixel(sonda.grab().toImage(), 50, 150)
 
 
+def test_checkbox_de_arvore_nao_fica_preto(qapp):
+    """Bug visto na tela (tags_tree do painel de detalhes): sem uma regra
+    própria para QTreeView::indicator, o Qt desenha o checkbox de item de
+    árvore/lista como um quadrado PRETO sólido assim que qualquer stylesheet
+    global está ativo — marcado ou não, ilegível dos dois jeitos."""
+    from PySide6.QtCore import Qt as _Qt
+    from PySide6.QtGui import QColor
+    from PySide6.QtWidgets import QTreeWidget, QTreeWidgetItem, QWidget
+
+    raiz = QWidget()
+    raiz.setAttribute(_Qt.WidgetAttribute.WA_StyledBackground, True)
+    raiz.setObjectName("appSurface")
+    raiz.resize(200, 60)
+    raiz.setStyleSheet(theme.build_qss())
+
+    arvore = QTreeWidget(raiz)
+    arvore.setGeometry(0, 0, 200, 60)
+    arvore.setHeaderHidden(True)
+    item = QTreeWidgetItem(["madeira"])
+    item.setFlags(item.flags() | _Qt.ItemFlag.ItemIsUserCheckable)
+    item.setCheckState(0, _Qt.CheckState.Unchecked)
+    arvore.addTopLevelItem(item)
+
+    raiz.show()
+    qapp.processEvents()
+    img = raiz.grab().toImage()
+
+    pretos = sum(
+        1 for x in range(20) for y in range(20)
+        if QColor(img.pixelColor(x, y)).name() == "#000000"
+    )
+    assert pretos == 0, "o indicador da árvore ainda está pintando preto sólido"
+
+
 def test_o_qss_realmente_pinta_o_card(sonda):
     """Fundo e painel são os dois brancos: o que prova que a folha pegou é a
     LINHA de contorno. Se o Qt descartar o QSS por erro de sintaxe, a aresta

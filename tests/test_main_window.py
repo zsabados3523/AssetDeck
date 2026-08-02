@@ -167,6 +167,31 @@ def test_smart_collection_nenhuma_aplicada_reseta_filtros(janela):
     assert janela.model.rowCount() == 2  # volta a mostrar tudo
 
 
+def test_thumb_from_disk_usa_a_capa_customizada(janela, tmp_path):
+    """Bug relatado pelo Rafael: arrastar um .png sobre um .blend para virar
+    a capa dele, depois selecionar o .blend — o preview grande do painel de
+    detalhes ficava em '(sem preview ainda)'. Causa: _thumb_from_disk nunca
+    olhava pra `cover_path` (só existia em thumbs_dir, onde uma capa
+    customizada não mora — ela vive em previews_dir)."""
+    from assetdeck.db.repos import previews as previews_repo
+
+    row_modelo = janela._conn.execute(
+        "SELECT id FROM assets WHERE name = 'modelo'"
+    ).fetchone()
+    asset_id = row_modelo["id"]
+
+    origem = tmp_path / "capa.png"
+    Image.new("RGB", (64, 64), color="red").save(origem)
+    previews_repo.add(janela._conn, asset_id, origem, tmp_path / "previews")
+    janela.model.reload()  # a linha em cache do modelo ainda não tinha a capa
+
+    linha = janela.model.row_at(janela.model.index_of_asset(asset_id))
+    assert linha["cover_path"], "a capa devia estar em cover_path"
+
+    pix = janela._thumb_from_disk(linha)
+    assert pix is not None and not pix.isNull()
+
+
 def test_ponte_e_render_ficam_prontos(janela):
     """Cobre o NameError que derrubava a abertura do app."""
     assert janela._bridge is not None

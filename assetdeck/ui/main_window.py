@@ -33,6 +33,7 @@ from assetdeck.indexer import duplicates as duplicates_finder
 from assetdeck.indexer import relocator
 from assetdeck.indexer.scanner import ScanStats
 from assetdeck.thumbs.pipeline import ThumbnailPipeline
+from assetdeck.ui import asset_grid
 from assetdeck.ui.asset_grid import AssetGridModel, AssetGridView
 from assetdeck.ui.batch_rename_dialog import BatchRenameDialog
 from assetdeck.ui.collection_tree import CollectionTree
@@ -167,10 +168,17 @@ class MainWindow(QMainWindow):
         filters_row.addWidget(self.hidden_check)
         filters_row.addStretch(1)
 
+        # objectName próprio: deixa os controles desta fileira mais baixos
+        # (padding menor) sem afetar botão/combo em nenhum outro lugar do
+        # app — pedido do Rafael de enxutar a barra de filtros verticalmente.
+        filters_widget = QWidget()
+        filters_widget.setObjectName("filterBar")
+        filters_widget.setLayout(filters_row)
+
         top = QVBoxLayout()
-        top.setSpacing(10)
+        top.setSpacing(6)
         top.addLayout(search_row)
-        top.addLayout(filters_row)
+        top.addWidget(filters_widget)
 
         # --- pastas + grid + detalhes ---
         self.model = AssetGridModel(conn, self._library_root, self._pipeline, parent=self)
@@ -244,11 +252,26 @@ class MainWindow(QMainWindow):
         self.breadcrumb.setObjectName("sectionTitle")
         self._update_breadcrumb("")
 
+        # Slider de tamanho da miniatura (pedido do Rafael, estilo Connecter):
+        # a grade e o modelo mudam JUNTOS — ver AssetGridView.set_icon_size.
+        from PySide6.QtWidgets import QSlider
+
+        self.size_slider = QSlider(Qt.Orientation.Horizontal)
+        self.size_slider.setRange(asset_grid.MIN_ICON, asset_grid.MAX_ICON)
+        self.size_slider.setValue(asset_grid.DEFAULT_ICON)
+        self.size_slider.setFixedWidth(110)
+        self.size_slider.setToolTip("Tamanho das miniaturas")
+        self.size_slider.valueChanged.connect(self.grid.set_icon_size)
+
+        breadcrumb_row = QHBoxLayout()
+        breadcrumb_row.addWidget(self.breadcrumb, stretch=1)
+        breadcrumb_row.addWidget(self.size_slider)
+
         grid_container = QWidget()
         grid_layout = QVBoxLayout(grid_container)
         grid_layout.setContentsMargins(0, 0, 0, 0)
         grid_layout.setSpacing(6)
-        grid_layout.addWidget(self.breadcrumb)
+        grid_layout.addLayout(breadcrumb_row)
         grid_layout.addWidget(self.grid)
 
         # A grade NUNCA leva sombra: ela rola com centenas de assets, e o
@@ -651,18 +674,32 @@ class MainWindow(QMainWindow):
     # ---- seleção / detalhes ----
 
     def _thumb_from_disk(self, row) -> "QPixmap | None":
-        """Thumb em 256px direto do cache em disco (a da RAM está reduzida
-        para caber na célula da grid — ampliá-la ficaria borrado)."""
+        """Thumb em alta resolução para o preview grande do painel de
+        detalhes (a cópia em RAM do modelo da grade está reduzida para caber
+        na célula — ampliá-la ficaria borrada).
+
+        Bug corrigido: uma capa CUSTOMIZADA (arrastar uma imagem sobre um
+        modelo, Fatia 10b) nunca passava por `thumbs_dir` — ela mora em
+        `previews_dir()`, via `cover_path`. Este método nunca olhava para
+        `cover_path`, então caía direto no fallback de RAM, que também usava
+        uma chave de cache desatualizada (sem o `:{ICON}` da Fatia 27) — a
+        combinação fazia o preview grande nunca aparecer para esses assets.
+        """
         from PySide6.QtGui import QPixmap
 
         from assetdeck.thumbs.cache import thumb_path
+
+        cover = row.get("cover_path")
+        if cover:
+            pix = QPixmap(cover)
+            return pix if not pix.isNull() else None
 
         p = thumb_path(self._thumbs_dir, row["content_hash"])
         if p.exists():
             pix = QPixmap(str(p))
             if not pix.isNull():
                 return pix
-        return QPixmapCache.find(f"thumb:{row['content_hash']}")
+        return QPixmapCache.find(f"thumb:{row['content_hash']}:{asset_grid.ICON}")
 
     def _on_selection(self, current: QModelIndex, _previous: QModelIndex) -> None:
         row = self.model.row_at(current)
