@@ -120,6 +120,9 @@ class TagTree(QTreeWidget):
         tag_id = item.data(0, _TAG_ROLE) if item else None
         menu = QMenu(self)
         menu.addAction("Nova tag raiz…", lambda: self._nova(None))
+        # Não depende de ter clicado numa tag, então fica no nível sempre
+        # visível do menu.
+        menu.addAction("Aplicar template…", self._template)
         if tag_id is not None:
             menu.addAction("Nova subtag…", lambda: self._nova(tag_id))
             menu.addSeparator()
@@ -147,6 +150,15 @@ class TagTree(QTreeWidget):
         cor = QColorDialog.getColor(parent=self, title="Cor da tag")
         if cor.isValid():
             tags_repo.set_color(self._conn, tag_id, cor.name())
+            self.structure_changed.emit()
+
+    def _template(self) -> None:
+        from assetdeck.ui.tag_templates_dialog import TagTemplateDialog
+
+        dlg = TagTemplateDialog(self._conn, self)
+        if dlg.exec() and dlg.aplicado is not None:
+            log.info("Template aplicado: %d criadas, %d já existiam.",
+                     dlg.aplicado.criadas, dlg.aplicado.existentes)
             self.structure_changed.emit()
 
     def _icone(self, tag_id: int) -> None:
