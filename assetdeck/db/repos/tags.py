@@ -22,10 +22,20 @@ def create(conn: sqlite3.Connection, name: str, parent_id: int | None = None,
     if not name:
         raise ValueError("Nome de tag não pode ser vazio.")
     row = conn.execute(
-        "SELECT id FROM tags WHERE name = ? AND parent_id IS ? AND deleted_at IS NULL",
+        "SELECT id, deleted_at FROM tags WHERE name = ? AND parent_id IS ?",
         (name, parent_id),
     ).fetchone()
     if row:
+        if row["deleted_at"] is not None:
+            # Tag soft-deletada ocupa o mesmo (parent_id, name) por causa da
+            # UNIQUE constraint — reativa em vez de tentar inserir de novo,
+            # senão o INSERT abaixo estoura IntegrityError.
+            conn.execute(
+                "UPDATE tags SET deleted_at = NULL, updated_at = ? WHERE id = ?",
+                (_now(), row["id"]),
+            )
+            conn.commit()
+            log.info("Tag reativada após soft-delete: %r (pai=%s)", name, parent_id)
         return row["id"]
     cur = conn.execute(
         "INSERT INTO tags (name, parent_id, color) VALUES (?, ?, ?)",

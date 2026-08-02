@@ -107,6 +107,32 @@ def test_soft_delete_de_tag_some_da_lista_e_do_filtro(env):
     assert tags_repo.tags_of(conn, _id(conn, "oak_planks")) == []
 
 
+def test_recriar_tag_apos_soft_delete_reaproveita_e_reativa(env):
+    """Bug: apagar 'Materiais' e criar 'Materiais' de novo não podia sumir da UI."""
+    conn, _, _ = env
+    materiais = tags_repo.create(conn, "Materiais")
+    tags_repo.soft_delete(conn, materiais)
+    assert tags_repo.list_tree(conn) == []
+
+    materiais_novo = tags_repo.create(conn, "Materiais")
+
+    assert materiais_novo == materiais  # reaproveita a linha, não tenta inserir outra
+    assert [t["name"] for t in tags_repo.list_tree(conn)] == ["Materiais"]
+
+
+def test_recriar_subtag_apos_soft_delete_reaproveita_e_reativa(env):
+    conn, _, _ = env
+    materiais = tags_repo.create(conn, "Materiais")
+    concreto = tags_repo.create(conn, "Concreto", parent_id=materiais)
+    tags_repo.soft_delete(conn, concreto)
+
+    concreto_novo = tags_repo.create(conn, "Concreto", parent_id=materiais)
+
+    assert concreto_novo == concreto
+    nomes = {t["name"] for t in tags_repo.list_tree(conn)}
+    assert nomes == {"Materiais", "Concreto"}
+
+
 def test_tags_sobrevivem_ao_desastre_via_sidecar(env):
     """Banco morre → sidecar devolve tags com hierarquia completa."""
     conn, root, tmp_path = env
