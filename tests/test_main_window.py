@@ -16,7 +16,7 @@ from assetdeck.ui.main_window import MainWindow
 
 
 @pytest.fixture
-def janela(qapp, tmp_path, monkeypatch):
+def janela(qapp, qt_settle, tmp_path, monkeypatch):
     monkeypatch.setenv("ASSETDECK_CONFIG_DIR", str(tmp_path / "cfg"))
     monkeypatch.setenv("ASSETDECK_DATA_DIR", str(tmp_path / "data"))
     monkeypatch.setenv("ASSETDECK_CACHE_DIR", str(tmp_path / "cache"))
@@ -36,6 +36,7 @@ def janela(qapp, tmp_path, monkeypatch):
     yield w
     w.close()
     conn.close()
+    qt_settle(w)
 
 
 def test_janela_abre_com_todos_os_paineis(janela):
