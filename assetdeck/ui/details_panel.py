@@ -48,16 +48,19 @@ class DetailsPanel(QWidget):
         self._current_asset_id: int | None = None
         self._loaded_notes: str = ""
 
+        # Subclasse de QWidget filha IGNORA o `background` do QSS sem isto
+        # (medido na Fatia 24) — sem ele o painel fica transparente sobre o
+        # que estiver atrás em vez de virar o cartão branco.
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.setObjectName("card")
+
         self.preview = QLabel("Selecione um asset")
         self.preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.preview.setMinimumSize(220, 220)
 
         self.name = QLabel("—")
         self.name.setWordWrap(True)
-        nfont = self.name.font()
-        nfont.setPointSize(12)
-        nfont.setBold(True)
-        self.name.setFont(nfont)
+        self.name.setObjectName("title")
 
         self.f_type = QLabel("—")
         self.f_dims = QLabel("—")
@@ -115,13 +118,14 @@ class DetailsPanel(QWidget):
         # Aviso de edição em massa (sugestão do Rafael): com N selecionados,
         # tag/nota de estrela/favorito valem para todos
         self.multi_label = QLabel()
-        self.multi_label.setStyleSheet("color: #b07d2b; font-weight: bold;")
+        self.multi_label.setObjectName("multiWarn")
         self.multi_label.setVisible(False)
 
         # Tags com checkbox (forma 2 de taggear): marcar/desmarcar aplica na hora
         from PySide6.QtWidgets import QTreeWidget
 
-        tags_label = QLabel("Tags:")
+        tags_label = QLabel("TAGS")
+        tags_label.setObjectName("sectionTitle")
         self.tags_tree = QTreeWidget()
         self.tags_tree.setHeaderHidden(True)
         self.tags_tree.setMaximumHeight(150)
@@ -129,12 +133,14 @@ class DetailsPanel(QWidget):
         self._loading_tags = False
 
         # Custom properties (EAV tipado) — Fatia 22
-        props_label = QLabel("Propriedades:")
+        props_label = QLabel("PROPRIEDADES")
+        props_label.setObjectName("sectionTitle")
         self.props_form = QFormLayout()
         self.manage_props_btn = QPushButton("Gerenciar propriedades…")
         self.manage_props_btn.clicked.connect(self.manage_properties_requested.emit)
 
-        notes_label = QLabel("Notas:")
+        notes_label = QLabel("NOTAS")
+        notes_label.setObjectName("sectionTitle")
         self.notes_edit = QPlainTextEdit()
         self.notes_edit.setPlaceholderText("Anotações suas sobre este asset…")
         self.notes_edit.setMaximumHeight(110)
@@ -144,6 +150,8 @@ class DetailsPanel(QWidget):
         self.save_notes_btn.clicked.connect(self._save_notes)
 
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(14, 12, 14, 14)
+        layout.setSpacing(8)
         layout.addWidget(self.preview)
         layout.addWidget(self.name)
         layout.addLayout(form)
@@ -151,7 +159,9 @@ class DetailsPanel(QWidget):
         layout.addWidget(self.open_file_btn)
         layout.addLayout(stars_row)
         layout.addWidget(self.multi_label)
-        layout.addWidget(QLabel("Galeria de previews:"))
+        gallery_label = QLabel("GALERIA DE PREVIEWS")
+        gallery_label.setObjectName("sectionTitle")
+        layout.addWidget(gallery_label)
         layout.addWidget(self.gallery)
         layout.addWidget(self.add_preview_btn)
         layout.addWidget(tags_label)
