@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
 )
 
 from assetdeck.thumbs.raster import can_thumbnail
+from assetdeck.ui import theme
 
 log = logging.getLogger(__name__)
 
@@ -48,16 +49,19 @@ class DetailsPanel(QWidget):
         self._current_asset_id: int | None = None
         self._loaded_notes: str = ""
 
+        # Subclasse de QWidget filha IGNORA o `background` do QSS sem isto
+        # (medido na Fatia 24) — sem ele o painel fica transparente sobre o
+        # que estiver atrás em vez de virar o cartão branco.
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.setObjectName("card")
+
         self.preview = QLabel("Selecione um asset")
         self.preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.preview.setMinimumSize(220, 220)
 
         self.name = QLabel("—")
         self.name.setWordWrap(True)
-        nfont = self.name.font()
-        nfont.setPointSize(12)
-        nfont.setBold(True)
-        self.name.setFont(nfont)
+        self.name.setObjectName("title")
 
         self.f_type = QLabel("—")
         self.f_dims = QLabel("—")
@@ -96,17 +100,28 @@ class DetailsPanel(QWidget):
         # Rating (5 estrelas clicáveis) + favorito — Fatia 9
         from PySide6.QtWidgets import QHBoxLayout as _QHBox
 
+        # Ícone, não texto: nenhuma fonte da máquina tem o glifo ★ (medido com
+        # QRawFont na Fatia 24) — o Qt caía numa fonte substituta e saía torto.
+        from PySide6.QtCore import QSize as _QSize
+
+        from assetdeck.ui import icons as _icons
+
+        self._star_filled = _icons.icon("star-filled", theme.ACCENT)
+        self._star_outline = _icons.icon("star-outline", theme.TEXT_MUTED)
+
         self._rating: int | None = None
         stars_row = _QHBox()
         self.star_btns: list[QPushButton] = []
         for i in range(1, 6):
-            b = QPushButton("☆")
-            b.setFlat(True)
+            b = QPushButton()
+            b.setObjectName("ghost")
+            b.setIconSize(_QSize(16, 16))
             b.setMaximumWidth(28)
             b.clicked.connect(lambda _c=False, n=i: self._on_star_clicked(n))
             self.star_btns.append(b)
             stars_row.addWidget(b)
-        self.fav_btn = QPushButton("☆ Favorito")
+        self.fav_btn = QPushButton("Favorito")
+        self.fav_btn.setIconSize(_QSize(16, 16))
         self.fav_btn.setCheckable(True)
         self.fav_btn.toggled.connect(self._on_fav_toggled)
         stars_row.addWidget(self.fav_btn)
@@ -115,13 +130,14 @@ class DetailsPanel(QWidget):
         # Aviso de edição em massa (sugestão do Rafael): com N selecionados,
         # tag/nota de estrela/favorito valem para todos
         self.multi_label = QLabel()
-        self.multi_label.setStyleSheet("color: #b07d2b; font-weight: bold;")
+        self.multi_label.setObjectName("multiWarn")
         self.multi_label.setVisible(False)
 
         # Tags com checkbox (forma 2 de taggear): marcar/desmarcar aplica na hora
         from PySide6.QtWidgets import QTreeWidget
 
-        tags_label = QLabel("Tags:")
+        tags_label = QLabel("TAGS")
+        tags_label.setObjectName("sectionTitle")
         self.tags_tree = QTreeWidget()
         self.tags_tree.setHeaderHidden(True)
         self.tags_tree.setMaximumHeight(150)
@@ -129,12 +145,14 @@ class DetailsPanel(QWidget):
         self._loading_tags = False
 
         # Custom properties (EAV tipado) — Fatia 22
-        props_label = QLabel("Propriedades:")
+        props_label = QLabel("PROPRIEDADES")
+        props_label.setObjectName("sectionTitle")
         self.props_form = QFormLayout()
         self.manage_props_btn = QPushButton("Gerenciar propriedades…")
         self.manage_props_btn.clicked.connect(self.manage_properties_requested.emit)
 
-        notes_label = QLabel("Notas:")
+        notes_label = QLabel("NOTAS")
+        notes_label.setObjectName("sectionTitle")
         self.notes_edit = QPlainTextEdit()
         self.notes_edit.setPlaceholderText("Anotações suas sobre este asset…")
         self.notes_edit.setMaximumHeight(110)
@@ -143,7 +161,15 @@ class DetailsPanel(QWidget):
         self.save_notes_btn.setEnabled(False)
         self.save_notes_btn.clicked.connect(self._save_notes)
 
-        layout = QVBoxLayout(self)
+        # O painel inteiro (preview + form + galeria + tags + propriedades +
+        # notas) empilhado sem rolagem fazia a JANELA exigir ~1000px de
+        # altura mínima só para caber este painel — o Rafael relatou que o
+        # app não redimensionava nem maximizava por causa disso. A correção
+        # é rolar o CONTEÚDO aqui dentro, não encolher nenhum widget.
+        content = QWidget()
+        layout = QVBoxLayout(content)
+        layout.setContentsMargins(0, 0, 8, 0)
+        layout.setSpacing(8)
         layout.addWidget(self.preview)
         layout.addWidget(self.name)
         layout.addLayout(form)
@@ -151,7 +177,9 @@ class DetailsPanel(QWidget):
         layout.addWidget(self.open_file_btn)
         layout.addLayout(stars_row)
         layout.addWidget(self.multi_label)
-        layout.addWidget(QLabel("Galeria de previews:"))
+        gallery_label = QLabel("GALERIA DE PREVIEWS")
+        gallery_label.setObjectName("sectionTitle")
+        layout.addWidget(gallery_label)
         layout.addWidget(self.gallery)
         layout.addWidget(self.add_preview_btn)
         layout.addWidget(tags_label)
@@ -163,6 +191,29 @@ class DetailsPanel(QWidget):
         layout.addWidget(self.notes_edit)
         layout.addWidget(self.save_notes_btn)
         layout.addStretch()
+
+        from PySide6.QtWidgets import QFrame, QScrollArea
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        # O viewport da QScrollArea preenche o próprio fundo (palette Base,
+        # branco opaco) por padrão — cobre os cantos arredondados do #card
+        # por baixo dele (bug visto na tela: o painel de detalhes inteiro
+        # parecia quadrado). QSS não alcança o viewport de forma confiável
+        # (é um QWidget anônimo, sem objectName, criado pelo próprio Qt);
+        # a saída certa é desligar o preenchimento automático direto aqui.
+        scroll.viewport().setAutoFillBackground(False)
+        scroll.setWidget(content)
+        content.setAutoFillBackground(False)
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(14, 12, 14, 14)
+        outer.setSpacing(0)
+        outer.addWidget(scroll)
+
+        self._paint_stars()
+        self.fav_btn.setIcon(self._star_outline)
 
     def _set_buttons(self, enabled: bool) -> None:
         self.open_folder_btn.setEnabled(enabled)
@@ -259,14 +310,17 @@ class DetailsPanel(QWidget):
 
     def _paint_stars(self) -> None:
         for i, b in enumerate(self.star_btns, start=1):
-            b.setText("★" if self._rating and i <= self._rating else "☆")
+            b.setIcon(
+                self._star_filled if self._rating and i <= self._rating
+                else self._star_outline
+            )
 
     def load_rating(self, rating: int | None, starred: bool) -> None:
         self._rating = rating
         self._paint_stars()
         self.fav_btn.blockSignals(True)
         self.fav_btn.setChecked(starred)
-        self.fav_btn.setText("★ Favorito" if starred else "☆ Favorito")
+        self.fav_btn.setIcon(self._star_filled if starred else self._star_outline)
         self.fav_btn.blockSignals(False)
 
     def _on_star_clicked(self, n: int) -> None:
@@ -276,7 +330,7 @@ class DetailsPanel(QWidget):
         self.rating_changed.emit(self._rating)
 
     def _on_fav_toggled(self, checked: bool) -> None:
-        self.fav_btn.setText("★ Favorito" if checked else "☆ Favorito")
+        self.fav_btn.setIcon(self._star_filled if checked else self._star_outline)
         self.starred_changed.emit(checked)
 
     # ---- tags (checkbox interativo) ----

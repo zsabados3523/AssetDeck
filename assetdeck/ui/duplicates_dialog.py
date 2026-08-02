@@ -33,6 +33,8 @@ class DuplicatesDialog(QDialog):
         self.resize(720, 460)
 
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(10)
         total_itens = sum(len(g) for g in grupos)
         layout.addWidget(QLabel(
             f"{len(grupos)} grupo(s) de mesma textura ({total_itens} asset(s) no total). "
@@ -41,6 +43,7 @@ class DuplicatesDialog(QDialog):
         ))
 
         self.table = QTableWidget(total_itens + len(grupos), 3)
+        self.table.setObjectName("cardFlat")
         self.table.setHorizontalHeaderLabels(["Asset", "Resolução", "Caminho"])
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
         self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)

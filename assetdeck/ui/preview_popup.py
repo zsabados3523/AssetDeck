@@ -61,7 +61,7 @@ class PreviewPopup(QDialog):
         self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.info_label = QLabel()
         self.info_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.info_label.setStyleSheet("color: gray;")
+        self.info_label.setObjectName("previewInfo")
 
         # Barra do "PBR Material Viewer": um botão por mapa do set
         self.maps_bar = QWidget()

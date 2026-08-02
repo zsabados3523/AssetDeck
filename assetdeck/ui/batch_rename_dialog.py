@@ -58,6 +58,8 @@ class BatchRenameDialog(QDialog):
         self.info_label.setWordWrap(True)
 
         self.table = QTableWidget(0, 2)
+        self.table.setObjectName("cardFlat")  # borda/cantos — sem isto a
+        # tabela fica "flutuando" sem moldura sobre o fundo flat do diálogo
         self.table.setHorizontalHeaderLabels(["Nome atual", "Nome novo"])
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
@@ -74,6 +76,8 @@ class BatchRenameDialog(QDialog):
         self.renomear_btn.setEnabled(False)
 
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(10)
         layout.addLayout(campos)
         layout.addWidget(self.info_label)
         layout.addWidget(self.table)

@@ -6,7 +6,7 @@ import logging
 import sqlite3
 from pathlib import Path
 
-from PySide6.QtCore import QModelIndex, Qt, QTimer
+from PySide6.QtCore import QModelIndex, QSize, Qt, QTimer
 from PySide6.QtGui import QPixmapCache
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -33,18 +33,21 @@ from assetdeck.indexer import duplicates as duplicates_finder
 from assetdeck.indexer import relocator
 from assetdeck.indexer.scanner import ScanStats
 from assetdeck.thumbs.pipeline import ThumbnailPipeline
+from assetdeck.ui import asset_grid
 from assetdeck.ui.asset_grid import AssetGridModel, AssetGridView
 from assetdeck.ui.batch_rename_dialog import BatchRenameDialog
 from assetdeck.ui.collection_tree import CollectionTree
 from assetdeck.ui.details_panel import DetailsPanel
 from assetdeck.sidecar import writer as sidecar_writer
 from assetdeck.ui.duplicates_dialog import DuplicatesDialog
+from assetdeck.ui.filter_button import FilterButton
 from assetdeck.ui.folder_tree import FolderTree
 from assetdeck.ui.preview_popup import PreviewPopup
 from assetdeck.ui.property_defs_dialog import PropertyDefsDialog
 from assetdeck.ui.relocate_dialog import RelocateDialog
 from assetdeck.ui.scan_worker import ScanController
 from assetdeck.ui.smart_collection_panel import SmartCollectionPanel
+from assetdeck.ui import icons, theme
 from assetdeck.ui.tag_dialogs import QuickTagDialog
 from assetdeck.ui.tag_tree import TagTree
 from assetdeck.ui.type_filter import TypeFilter
@@ -72,6 +75,10 @@ class MainWindow(QMainWindow):
             "Buscar por nome…  (ex.: concreto, wood 4k, madeira E rústico, pedra OU metal)"
         )
         self.search_box.setClearButtonEnabled(True)
+        self.search_box.addAction(
+            icons.icon("search", theme.TEXT_MUTED),
+            QLineEdit.ActionPosition.LeadingPosition,
+        )
         self._search_debounce = QTimer(self)
         self._search_debounce.setSingleShot(True)
         self._search_debounce.setInterval(250)  # espera parar de digitar
@@ -81,38 +88,36 @@ class MainWindow(QMainWindow):
         )
 
         self.type_filter = TypeFilter()
+        self.type_filter.setIcon(icons.icon("filter", theme.TEXT_MUTED))
+        self.type_filter.setIconSize(QSize(14, 14))
         self.type_filter.changed.connect(self._apply_filters)
 
-        self.subdirs_check = QCheckBox("Incluir subpastas")
-        self.subdirs_check.setChecked(True)
-        self.subdirs_check.toggled.connect(lambda _c: self._apply_filters())
+        # Nota mínima e resolução mínima (Fatia 9) — eram QComboBox longos
+        # ("Nota: todas") na barra de filtros; viraram botão de ícone
+        # compacto na linha do breadcrumb (pedido do Rafael, Fatia 28c).
+        self.rating_filter = FilterButton(
+            "star-filled", [("Nota: todas", None)] + [(f"★ ≥ {n}", n) for n in range(1, 6)]
+        )
+        self.rating_filter.changed.connect(self._apply_filters)
+
+        self.res_filter = FilterButton(
+            "resolution",
+            [("Resolução: todas", None), ("≥ 1K", 1024), ("≥ 2K", 2048),
+             ("≥ 4K", 4096), ("≥ 8K", 8192)],
+        )
+        self.res_filter.changed.connect(self._apply_filters)
 
         # Toggle do Rafael: ver sets PBR como 1 card (ligado) ou cada mapa
         # separado (desligado). Só visualização — o banco não muda.
-        self.group_check = QCheckBox("Agrupar sets PBR")
+        self.group_check = QCheckBox("Agrupar PBR")
         self.group_check.setChecked(True)
         self.group_check.toggled.connect(
             lambda c: (self.model.set_expand_sets(not c), self.refresh_count())
         )
 
-        # Filtros da Fatia 9: nota mínima, favoritos, resolução mínima
-        from PySide6.QtWidgets import QComboBox
-
-        self.rating_combo = QComboBox()
-        self.rating_combo.addItem("Nota: todas", None)
-        for n in range(1, 6):
-            self.rating_combo.addItem("★" * n + f" ≥ {n}", n)
-        self.rating_combo.currentIndexChanged.connect(lambda _i: self._apply_filters())
-
-        self.fav_check = QCheckBox("Só ★")
+        self.fav_check = QCheckBox("Só favoritos")
         self.fav_check.setToolTip("Mostrar só favoritos")
         self.fav_check.toggled.connect(lambda _c: self._apply_filters())
-
-        self.res_combo = QComboBox()
-        self.res_combo.addItem("Resolução: todas", None)
-        for label, px in (("≥ 1K", 1024), ("≥ 2K", 2048), ("≥ 4K", 4096), ("≥ 8K", 8192)):
-            self.res_combo.addItem(label, px)
-        self.res_combo.currentIndexChanged.connect(lambda _i: self._apply_filters())
 
         # Sugestão do Rafael: texturas que acompanham um .blend/.fbx são
         # dependências dele — poluem a grade e o Blender. Ocultas por padrão.
@@ -130,24 +135,24 @@ class MainWindow(QMainWindow):
         )
         self.hidden_check.toggled.connect(lambda _c: self._apply_filters())
 
-        self.count_label = QLabel()
         self.progress = QProgressBar()
         self.progress.setVisible(False)
-        self.progress.setMaximumWidth(280)
+        self.progress.setMaximumWidth(220)
         self.rescan_btn = QPushButton("Reindexar")
+        self.rescan_btn.setObjectName("primary")
+        self.rescan_btn.setIcon(icons.icon("refresh", theme.ON_ACCENT))
         self.rescan_btn.clicked.connect(self.start_scan)
 
+        # Uma linha só (pedido do Rafael, Fatia 28c): busca + os quatro
+        # filtros mais usados no dia a dia + reindexar. "Incluir subpastas"
+        # saiu de vez (ele não via caso de uso pra desligar) e Tipos/Nota/
+        # Resolução foram pra linha do breadcrumb, como ícone.
         top = QHBoxLayout()
         top.addWidget(self.search_box, stretch=1)
-        top.addWidget(self.type_filter)
-        top.addWidget(self.rating_combo)
         top.addWidget(self.fav_check)
-        top.addWidget(self.res_combo)
-        top.addWidget(self.subdirs_check)
         top.addWidget(self.group_check)
         top.addWidget(self.deps_check)
         top.addWidget(self.hidden_check)
-        top.addWidget(self.count_label)
         top.addWidget(self.progress)
         top.addWidget(self.rescan_btn)
 
@@ -167,7 +172,7 @@ class MainWindow(QMainWindow):
         self.grid.customContextMenuRequested.connect(self._grid_menu)
 
         self.folders = FolderTree()
-        self.folders.dir_selected.connect(lambda _d: self._apply_filters())
+        self.folders.dir_selected.connect(self._on_dir_selected)
 
         self.tags = TagTree()
         self.tags.tag_selected.connect(lambda _t: self._apply_filters())
@@ -186,18 +191,26 @@ class MainWindow(QMainWindow):
             lambda: self.smart_collections.reload(self._conn)
         )
 
+        # Cada painel é um QFrame#card translúcido em volta de uma view
+        # transparente — o viewport de uma QTreeWidget/QListView pinta
+        # retângulo no canto e vaza por cima de qualquer border-radius posto
+        # nela diretamente, então o card por fora é obrigatório (Fatia 24).
         left = QSplitter(Qt.Orientation.Vertical)
-        left.addWidget(self.folders)
-        left.addWidget(self.tags)
-        left.addWidget(self.collections)
-        left.addWidget(self.smart_collections)
+        left.setHandleWidth(10)
+        left.addWidget(theme.make_card(self.folders, titulo="Pastas"))
+        left.addWidget(theme.make_card(self.tags, titulo="Tags"))
+        left.addWidget(theme.make_card(self.collections, titulo="Coleções"))
+        left.addWidget(theme.make_card(self.smart_collections, titulo="Smart Collections"))
         left.setSizes([280, 200, 200, 200])
-        left.setMinimumWidth(180)
-        left.setMaximumWidth(320)
+        left.setMinimumWidth(200)
+        left.setMaximumWidth(340)
 
+        # DetailsPanel é o próprio card (objectName="card" nele mesmo) — não
+        # precisa de embrulho extra, então o min/max width fica nele direto.
         self.details = DetailsPanel(self._library_root)
         self.details.setMinimumWidth(300)
         self.details.setMaximumWidth(380)
+        theme.apply_card_shadow(self.details)
         self.details.notes_saved.connect(self._on_notes_saved)
         self.details.tag_toggled.connect(self._on_tag_toggled)
         self.details.rating_changed.connect(self._on_rating_changed)
@@ -208,18 +221,71 @@ class MainWindow(QMainWindow):
         self.details.property_value_changed.connect(self._on_property_value_changed)
         self.details.manage_properties_requested.connect(self._manage_properties)
 
+        # Caminho navegável acima da grade (Fatia 28, estilo Connecter): a
+        # única pista de "onde estou" antes disso era o item selecionado na
+        # árvore de pastas — fácil de perder de vista depois de rolar.
+        self.breadcrumb = QLabel()
+        self.breadcrumb.setObjectName("sectionTitle")
+        self._update_breadcrumb("")
+
+        # Slider de tamanho da miniatura (pedido do Rafael, estilo Connecter):
+        # a grade e o modelo mudam JUNTOS — ver AssetGridView.set_icon_size.
+        from PySide6.QtWidgets import QSlider
+
+        self.size_slider = QSlider(Qt.Orientation.Horizontal)
+        self.size_slider.setRange(asset_grid.MIN_ICON, asset_grid.MAX_ICON)
+        self.size_slider.setValue(asset_grid.DEFAULT_ICON)
+        self.size_slider.setFixedWidth(110)
+        self.size_slider.setToolTip("Tamanho das miniaturas")
+        self.size_slider.valueChanged.connect(self.grid.set_icon_size)
+
+        # Tipos / Nota / Resolução moram AQUI (pedido do Rafael, Fatia 28c):
+        # entre o título da pasta e o slider, como ícone compacto — não mais
+        # na barra de filtros de cima.
+        breadcrumb_row = QHBoxLayout()
+        breadcrumb_row.addWidget(self.breadcrumb, stretch=1)
+        breadcrumb_row.addWidget(self.type_filter)
+        breadcrumb_row.addWidget(self.rating_filter)
+        breadcrumb_row.addWidget(self.res_filter)
+        breadcrumb_row.addWidget(self.size_slider)
+
+        grid_container = QWidget()
+        grid_layout = QVBoxLayout(grid_container)
+        grid_layout.setContentsMargins(0, 0, 0, 0)
+        grid_layout.setSpacing(6)
+        grid_layout.addLayout(breadcrumb_row)
+        grid_layout.addWidget(self.grid)
+
+        # A grade NUNCA leva sombra: ela rola com centenas de assets, e o
+        # QGraphicsDropShadowEffect força o Qt a renderizar a subárvore
+        # inteira fora da tela a cada quadro (medido ~2,3x mais caro).
+        grid_card = theme.make_card(grid_container, sombra=False)
+
         splitter = QSplitter(Qt.Orientation.Horizontal)
+        splitter.setHandleWidth(10)
         splitter.addWidget(left)
-        splitter.addWidget(self.grid)
+        splitter.addWidget(grid_card)
         splitter.addWidget(self.details)
         splitter.setStretchFactor(0, 0)
         splitter.setStretchFactor(1, 1)
         splitter.setStretchFactor(2, 0)
-        splitter.setSizes([220, 760, 300])
+        splitter.setSizes([240, 740, 300])
+
+        # objectName próprio: controles mais baixos SÓ nesta fileira (padding
+        # menor), sem afetar botão/campo em nenhum outro lugar do app —
+        # pedido do Rafael de enxutar a barra de busca verticalmente.
+        top_widget = QWidget()
+        top_widget.setObjectName("searchBar")
+        top_widget.setLayout(top)
+        top_card = theme.make_card(top_widget)
 
         central = QWidget()
+        central.setObjectName("appSurface")
+        central.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         layout = QVBoxLayout(central)
-        layout.addLayout(top)
+        layout.setContentsMargins(14, 14, 14, 14)
+        layout.setSpacing(12)
+        layout.addWidget(top_card)
         layout.addWidget(splitter)
         self.setCentralWidget(central)
 
@@ -231,6 +297,14 @@ class MainWindow(QMainWindow):
 
         self._setup_bridge()  # ponte com o Blender (F2)
         self._setup_library_menu()  # relocalizar assets perdidos (Fatia 19)
+
+        # Contagem sempre visível no rodapé (Fatia 28) — antes vivia num
+        # QLabel solto na barra de filtros, junto de mais 10 widgets.
+        self.footer_count = QLabel()
+        self.statusBar().addPermanentWidget(self.footer_count)
+        # É uma linha de status, não precisa da altura padrão do Fusion
+        # (pedido do Rafael de enxutar o rodapé).
+        self.statusBar().setMaximumHeight(24)
 
         self.statusBar().showMessage(f"v{__version__} · banco: {db_path}")
         self._reload_all()
@@ -257,11 +331,13 @@ class MainWindow(QMainWindow):
             search=self.search_box.text().strip(),
             asset_types=self.type_filter.selected(),
             dir_prefix=dir_prefix,
-            include_subdirs=self.subdirs_check.isChecked(),
+            # "Incluir subpastas" saiu da UI (pedido do Rafael, Fatia 28c —
+            # ele não via caso de uso pra desligar). Sempre True agora.
+            include_subdirs=True,
             tag_id=self.tags.current_tag_id(),
-            min_rating=self.rating_combo.currentData(),
+            min_rating=self.rating_filter.value(),
             starred_only=self.fav_check.isChecked(),
-            min_resolution=self.res_combo.currentData(),
+            min_resolution=self.res_filter.value(),
             include_hidden=self.hidden_check.isChecked(),
             include_dependencies=self.deps_check.isChecked(),
             collection_id=self.collections.current_collection_id(),
@@ -270,6 +346,18 @@ class MainWindow(QMainWindow):
     def _apply_filters(self) -> None:
         self.model.set_filters(**self._current_filters_dict())
         self.refresh_count()
+
+    def _update_breadcrumb(self, dir_prefix: str) -> None:
+        """"" -> biblioteca inteira; "A/B" -> "Biblioteca › A › B"."""
+        if not dir_prefix:
+            self.breadcrumb.setText("BIBLIOTECA (TUDO)")
+        else:
+            trilha = " › ".join(dir_prefix.split("/"))
+            self.breadcrumb.setText(f"BIBLIOTECA › {trilha}".upper())
+
+    def _on_dir_selected(self, dir_prefix: str) -> None:
+        self._update_breadcrumb(dir_prefix)
+        self._apply_filters()
 
     # ---- tags ----
 
@@ -316,7 +404,7 @@ class MainWindow(QMainWindow):
         texto = f"{'★' * rating}" if rating else "nota removida"
         sufixo = f" em {len(alvos)} assets" if len(alvos) > 1 else ""
         self.statusBar().showMessage(f"Nota: {texto}{sufixo}")
-        if self.rating_combo.currentData():
+        if self.rating_filter.value():
             self._apply_filters()
 
     def _on_starred_changed(self, starred: bool) -> None:
@@ -475,24 +563,23 @@ class MainWindow(QMainWindow):
     def _restore_filters(self, query: dict) -> None:
         """Reescreve os widgets de filtro a partir de uma query salva e
         reaplica — a partir daí, a reatividade que já existe (nota, tags,
-        reindexação) mantém a visão sempre recalculada."""
+        reindexação) mantém a visão sempre recalculada.
+
+        `include_subdirs` de uma Smart Collection antiga (salva antes da
+        Fatia 28c) é ignorado — o toggle saiu da UI, agora é sempre True."""
         self.search_box.setText(query.get("search") or "")
         self.type_filter.set_selected(query.get("asset_types") or [])
-        self.subdirs_check.setChecked(bool(query.get("include_subdirs", True)))
-        self._set_combo_value(self.rating_combo, query.get("min_rating"))
+        self.rating_filter.set_value(query.get("min_rating"))
         self.fav_check.setChecked(bool(query.get("starred_only")))
-        self._set_combo_value(self.res_combo, query.get("min_resolution"))
+        self.res_filter.set_value(query.get("min_resolution"))
         self.hidden_check.setChecked(bool(query.get("include_hidden")))
         self.deps_check.setChecked(bool(query.get("include_dependencies")))
-        self.folders.select(query.get("dir_prefix") or "")
+        dir_prefix = query.get("dir_prefix") or ""
+        self.folders.select(dir_prefix)
+        self._update_breadcrumb(dir_prefix)
         self.tags.select(query.get("tag_id"))
         self.collections.select(query.get("collection_id"))
         self._apply_filters()
-
-    @staticmethod
-    def _set_combo_value(combo, value) -> None:
-        idx = combo.findData(value)
-        combo.setCurrentIndex(idx if idx >= 0 else 0)
 
     def _selected_asset_ids(self) -> list[int]:
         rows = [self.model.row_at(i)
@@ -565,27 +652,42 @@ class MainWindow(QMainWindow):
     def refresh_count(self) -> int:
         total = assets_repo.count_active(self._conn)
         shown = self.model.rowCount()
-        if shown == total:
-            self.count_label.setText(f"{total} assets")
-        else:
-            self.count_label.setText(f"{shown} de {total} assets")
+        texto = f"{total} assets" if shown == total else f"{shown} de {total} assets"
+        selecionados = len(self._selected_asset_ids())
+        if selecionados > 1:
+            texto += f" · {selecionados} selecionados"
+        self.footer_count.setText(texto)
         return total
 
     # ---- seleção / detalhes ----
 
     def _thumb_from_disk(self, row) -> "QPixmap | None":
-        """Thumb em 256px direto do cache em disco (a da RAM está reduzida
-        para caber na célula da grid — ampliá-la ficaria borrado)."""
+        """Thumb em alta resolução para o preview grande do painel de
+        detalhes (a cópia em RAM do modelo da grade está reduzida para caber
+        na célula — ampliá-la ficaria borrada).
+
+        Bug corrigido: uma capa CUSTOMIZADA (arrastar uma imagem sobre um
+        modelo, Fatia 10b) nunca passava por `thumbs_dir` — ela mora em
+        `previews_dir()`, via `cover_path`. Este método nunca olhava para
+        `cover_path`, então caía direto no fallback de RAM, que também usava
+        uma chave de cache desatualizada (sem o `:{ICON}` da Fatia 27) — a
+        combinação fazia o preview grande nunca aparecer para esses assets.
+        """
         from PySide6.QtGui import QPixmap
 
         from assetdeck.thumbs.cache import thumb_path
+
+        cover = row.get("cover_path")
+        if cover:
+            pix = QPixmap(cover)
+            return pix if not pix.isNull() else None
 
         p = thumb_path(self._thumbs_dir, row["content_hash"])
         if p.exists():
             pix = QPixmap(str(p))
             if not pix.isNull():
                 return pix
-        return QPixmapCache.find(f"thumb:{row['content_hash']}")
+        return QPixmapCache.find(f"thumb:{row['content_hash']}:{asset_grid.ICON}")
 
     def _on_selection(self, current: QModelIndex, _previous: QModelIndex) -> None:
         row = self.model.row_at(current)
@@ -892,16 +994,28 @@ class MainWindow(QMainWindow):
                                      "seu arquivo original não é tocado)")
 
     def _on_asset_preview_dropped(self, target_id: int, source_ids: list) -> None:
-        """Asset de imagem arrastado de dentro da grid sobre um model (Fatia 10b)."""
+        """Asset de imagem arrastado de dentro da grid sobre outro asset
+        (Fatia 10b — inicialmente só modelos; pedido do Rafael para valer em
+        qualquer tipo sem preview de verdade: .ies, .psd, .cube, .dwg…).
+
+        A regra não é mais por TIPO fixo — é por o alvo já ter ou não uma
+        miniatura de verdade (`can_preview` no arquivo dele). Um .blend nunca
+        tem; um .ies/.psd/.cube também não; um .svg agora tem (Fatia 28d), e
+        um .jpg sempre teve — esses continuam de fora, a capa automática já
+        é a imagem real."""
         from assetdeck import config
         from assetdeck.thumbs.preview import can_preview
 
         alvo = self._conn.execute(
             "SELECT name, asset_type FROM assets WHERE id = ?", (target_id,)
         ).fetchone()
-        if alvo is None or alvo["asset_type"] not in ("model", "scene"):
+        if alvo is None:
+            return
+        alvo_path = assets_repo.primary_abs_path(self._conn, target_id, self._library_root)
+        if alvo_path is not None and can_preview(alvo_path):
             self.statusBar().showMessage(
-                "Previews internos só podem ser aplicados a MODELOS (.blend/.fbx/.obj…)"
+                f"'{alvo['name']}' já tem uma miniatura de verdade — "
+                "preview manual só vale para assets sem preview nativo"
             )
             return
 
@@ -992,7 +1106,7 @@ class MainWindow(QMainWindow):
         if self.progress.maximum() != total:
             self.progress.setRange(0, total)
         self.progress.setValue(done)
-        self.count_label.setText(f"{live_count} assets")
+        self.footer_count.setText(f"{live_count} assets")
         self.statusBar().showMessage(f"Indexando… {done}/{total} arquivos")
 
     def _on_finished(self, stats: ScanStats) -> None:
