@@ -46,6 +46,78 @@ def test_janela_abre_com_todos_os_paineis(janela):
         assert getattr(janela, atributo) is not None
 
 
+def test_breadcrumb_acompanha_a_pasta_selecionada(janela):
+    """Fatia 28: o caminho acima da grade é a única pista visível de 'onde
+    estou' depois de rolar — tem de mudar com a seleção na árvore.
+
+    `_on_dir_selected` é o slot real conectado a `folders.dir_selected`
+    (testado à parte, na FolderTree). Chamar direto evita depender de uma
+    subpasta existir na biblioteca mínima do fixture `janela`.
+    """
+    assert janela.breadcrumb.text() == "BIBLIOTECA (TUDO)"
+
+    janela._on_dir_selected("Modelos/Cadeiras")
+    assert janela.breadcrumb.text() == "BIBLIOTECA › MODELOS › CADEIRAS"
+
+    janela._on_dir_selected("")
+    assert janela.breadcrumb.text() == "BIBLIOTECA (TUDO)"
+
+
+def test_footer_mostra_contagem_e_atualiza_com_selecao(janela):
+    """A contagem saiu da barra de filtros (eram 11 widgets na mesma linha)
+    e virou permanente no rodapé (Fatia 28)."""
+    assert "assets" in janela.footer_count.text()
+    assert "selecionado" not in janela.footer_count.text()
+
+    janela.grid.selectionModel().select(
+        janela.model.index(0),
+        janela.grid.selectionModel().SelectionFlag.Select,
+    )
+    janela.grid.selectionModel().select(
+        janela.model.index(1),
+        janela.grid.selectionModel().SelectionFlag.Select,
+    )
+    janela.refresh_count()
+    assert "2 selecionados" in janela.footer_count.text()
+
+
+def test_tema_pinta_a_janela_e_os_cards_ficam_arredondados(qapp, janela):
+    """Regressão da Fatia 25: aplicar o QSS global e conferir na janela REAL
+    (não numa sonda isolada) que o cartão da grade tem o canto arredondado —
+    é onde o bug do viewport retangular vazando apareceria de verdade."""
+    from assetdeck.ui import theme
+
+    antes = (qapp.styleSheet(), qapp.palette(), qapp.font())
+    try:
+        theme.apply_theme(qapp)
+        janela.resize(1000, 700)
+        janela.show()
+        qapp.processEvents()
+
+        # Fatia 28: self.grid mora dentro de um container com o breadcrumb
+        # em cima, e ESSE container é que fica dentro do QFrame#card.
+        grid_card = janela.grid.parentWidget().parentWidget()
+        assert grid_card.objectName() == "card"
+
+        img = grid_card.grab().toImage()
+        from PySide6.QtGui import QColor
+
+        def px(x, y):
+            return QColor(img.pixelColor(x, y)).name().upper()
+
+        # A prova fina de curvatura (comparar quina x meio da aresta) já está
+        # em test_theme.py numa sonda isolada, onde a geometria é controlada.
+        # Aqui, na janela REAL, o que importa é que a quina do card mostra o
+        # fundo — se alguém voltar a arredondar a QListView direto (sem o
+        # QFrame#card em volta), o viewport pinta retângulo e isto quebra.
+        assert px(1, 1) == theme.BG.upper(), "a quina do card da grade não é curva"
+    finally:
+        qss, paleta, fonte = antes
+        qapp.setStyleSheet(qss)
+        qapp.setPalette(paleta)
+        qapp.setFont(fonte)
+
+
 def test_painel_de_detalhes_tem_sinais_de_propriedades(janela):
     assert hasattr(janela.details, "property_value_changed")
     assert hasattr(janela.details, "manage_properties_requested")
@@ -95,6 +167,31 @@ def test_smart_collection_nenhuma_aplicada_reseta_filtros(janela):
     assert janela.model.rowCount() == 2  # volta a mostrar tudo
 
 
+def test_thumb_from_disk_usa_a_capa_customizada(janela, tmp_path):
+    """Bug relatado pelo Rafael: arrastar um .png sobre um .blend para virar
+    a capa dele, depois selecionar o .blend — o preview grande do painel de
+    detalhes ficava em '(sem preview ainda)'. Causa: _thumb_from_disk nunca
+    olhava pra `cover_path` (só existia em thumbs_dir, onde uma capa
+    customizada não mora — ela vive em previews_dir)."""
+    from assetdeck.db.repos import previews as previews_repo
+
+    row_modelo = janela._conn.execute(
+        "SELECT id FROM assets WHERE name = 'modelo'"
+    ).fetchone()
+    asset_id = row_modelo["id"]
+
+    origem = tmp_path / "capa.png"
+    Image.new("RGB", (64, 64), color="red").save(origem)
+    previews_repo.add(janela._conn, asset_id, origem, tmp_path / "previews")
+    janela.model.reload()  # a linha em cache do modelo ainda não tinha a capa
+
+    linha = janela.model.row_at(janela.model.index_of_asset(asset_id))
+    assert linha["cover_path"], "a capa devia estar em cover_path"
+
+    pix = janela._thumb_from_disk(linha)
+    assert pix is not None and not pix.isNull()
+
+
 def test_ponte_e_render_ficam_prontos(janela):
     """Cobre o NameError que derrubava a abertura do app."""
     assert janela._bridge is not None
@@ -137,3 +234,51 @@ def test_reload_grid_funciona_com_lista_vazia(janela):
 
 def test_batch_rename_selected_existe(janela):
     assert hasattr(janela, "_batch_rename_selected")
+
+
+def _asset_id(conn, nome: str) -> int:
+    row = conn.execute(
+        "SELECT id FROM assets WHERE name = ? AND deleted_at IS NULL", (nome,)
+    ).fetchone()
+    assert row is not None, f"asset '{nome}' não foi indexado"
+    return row["id"]
+
+
+def test_preview_manual_vale_para_asset_sem_miniatura_nativa(janela):
+    """Fatia 28d: a restrição de tipo (só 'model'/'scene') virou uma
+    restrição de CONTEÚDO — vale pra qualquer asset sem preview de verdade
+    (.ies, .psd, .cube… e, antes disso, .blend/.fbx)."""
+    from assetdeck import config
+    from assetdeck.db.repos import libraries as libraries_repo
+    from assetdeck.indexer.scanner import scan_library
+
+    # Preferência "ask" (padrão) abre um QMessageBox.exec() MODAL — trava a
+    # suíte esperando um clique que nunca vem. "never" evita a pergunta.
+    cfg = config.load_config()
+    cfg["hide_preview_source"] = "never"
+    config.save_config(cfg)
+
+    root = janela._library_root
+    (root / "spot.ies").write_bytes(b"IES:LM-63-2002" + b"\x00" * 20)
+    lib_id = libraries_repo.get_or_create(janela._conn, root)
+    scan_library(janela._conn, lib_id, root)
+    janela.model.reload()
+
+    ies_id = _asset_id(janela._conn, "spot")
+    jpg_id = _asset_id(janela._conn, "textura")
+
+    janela._on_asset_preview_dropped(ies_id, [jpg_id])
+
+    linha = janela.model.row_at(janela.model.index_of_asset(ies_id))
+    assert linha["cover_path"], "o .ies devia ter ganhado a capa manual"
+
+
+def test_preview_manual_recusa_asset_que_ja_tem_miniatura_de_verdade(janela):
+    """Um .jpg já tem preview nativo — não faz sentido sobrepor com um
+    preview manual, então o drop é ignorado (com aviso no rodapé)."""
+    jpg_id = _asset_id(janela._conn, "textura")
+
+    janela._on_asset_preview_dropped(jpg_id, [jpg_id])
+
+    linha = janela.model.row_at(janela.model.index_of_asset(jpg_id))
+    assert not linha["cover_path"]

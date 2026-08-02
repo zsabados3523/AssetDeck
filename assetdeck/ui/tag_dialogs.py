@@ -47,6 +47,7 @@ class QuickTagDialog(QDialog):
         self.search.textChanged.connect(self._filter)
 
         self.tree = QTreeWidget()
+        self.tree.setObjectName("cardFlat")
         self.tree.setHeaderHidden(True)
 
         # Estado inicial: em quantos dos selecionados cada tag está?
@@ -78,6 +79,8 @@ class QuickTagDialog(QDialog):
         botoes.rejected.connect(self.reject)
 
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(10)
         layout.addWidget(self.search)
         layout.addWidget(self.tree)
         layout.addWidget(botoes)
@@ -132,6 +135,7 @@ class AliasDialog(QDialog):
         self.resize(340, 360)
 
         self.lista = QListWidget()
+        self.lista.setObjectName("cardFlat")
         self.campo = QLineEdit()
         self.campo.setPlaceholderText("novo alias (ex.: madeira)")
         self.lang = QComboBox()
@@ -152,6 +156,8 @@ class AliasDialog(QDialog):
         linha.addWidget(add)
 
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(10)
         layout.addWidget(QLabel("Buscar por qualquer um destes acha a tag:"))
         layout.addWidget(self.lista)
         layout.addLayout(linha)
