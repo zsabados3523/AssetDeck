@@ -27,6 +27,22 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def _set_app_icon(app) -> None:
+    """Ícone da janela (barra de tarefas, alt-tab) — o mesmo usado no atalho
+    do menu de aplicativos. Carregado por caminho relativo ao pacote (não
+    absoluto): funciona em qualquer máquina, ao contrário do `Icon=` do
+    `.desktop`, que precisa ser absoluto porque é lido fora do processo."""
+    from pathlib import Path
+
+    from PySide6.QtGui import QIcon
+
+    caminho = Path(__file__).parent / "ui" / "icons" / "app-icon.png"
+    if not caminho.exists():
+        log.warning("Ícone do app não encontrado em %s", caminho)
+        return
+    app.setWindowIcon(QIcon(str(caminho)))
+
+
 def _schedule_screenshot(app, win, args) -> None:
     """Agenda a captura da janela e o encerramento, se --screenshot foi pedido."""
     if not args.screenshot:
@@ -55,6 +71,7 @@ def _run_theme_preview(args) -> int:
     from assetdeck.ui.theme_gallery import ThemeGallery
 
     app = QApplication(_sys.argv[:1])
+    _set_app_icon(app)
     win = ThemeGallery()
     win.show()
     log.info("Vitrine do tema aberta (--theme-preview).")
@@ -92,6 +109,7 @@ def run(argv: list[str]) -> int:
     from assetdeck.ui import theme
 
     theme.apply_theme(app)
+    _set_app_icon(app)
 
     win = MainWindow(conn=conn, library_root=cfg["library_root"],
                      db_path=config.db_path(), thumbs_dir=config.thumbs_dir())
