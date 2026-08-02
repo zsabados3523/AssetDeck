@@ -27,6 +27,38 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+# Basename de install_desktop_entry.py's DEST (assetdeck.desktop, sem a
+# extensão) — é o "nome" que o GNOME usa pra casar a janela aberta com o
+# ícone fixado no dock. Tem que bater com os dois lugares.
+DESKTOP_FILE_ID = "assetdeck"
+
+
+def _set_app_icon(app) -> None:
+    """Identidade da janela pro sistema: ícone (barra de tarefas, alt-tab) E
+    o nome que o GNOME usa pra achar o `.desktop` correspondente.
+
+    Bug relatado pelo Rafael: fixar o app no dock e abrir mostrava OUTRO
+    ícone (o de engrenagem genérico) em vez do do AssetDeck — o dock abria
+    uma instância nova, sem reconhecer que era o app fixado. Causa: sem
+    `setDesktopFileName`, o Qt identifica a janela pelo nome do PROCESSO
+    (`python`, já que o app roda via `.venv/bin/python -m assetdeck`, não
+    instalado via pip) — o GNOME tenta casar isso com `assetdeck.desktop`
+    e não bate. `setDesktopFileName` resolve pela raiz: manda o Qt anunciar
+    a janela com o MESMO nome do `.desktop` (WM_CLASS no X11).
+    """
+    from pathlib import Path
+
+    from PySide6.QtGui import QIcon
+
+    app.setDesktopFileName(DESKTOP_FILE_ID)
+
+    caminho = Path(__file__).parent / "ui" / "icons" / "app-icon.png"
+    if not caminho.exists():
+        log.warning("Ícone do app não encontrado em %s", caminho)
+        return
+    app.setWindowIcon(QIcon(str(caminho)))
+
+
 def _schedule_screenshot(app, win, args) -> None:
     """Agenda a captura da janela e o encerramento, se --screenshot foi pedido."""
     if not args.screenshot:
@@ -55,6 +87,7 @@ def _run_theme_preview(args) -> int:
     from assetdeck.ui.theme_gallery import ThemeGallery
 
     app = QApplication(_sys.argv[:1])
+    _set_app_icon(app)
     win = ThemeGallery()
     win.show()
     log.info("Vitrine do tema aberta (--theme-preview).")
@@ -92,6 +125,7 @@ def run(argv: list[str]) -> int:
     from assetdeck.ui import theme
 
     theme.apply_theme(app)
+    _set_app_icon(app)
 
     win = MainWindow(conn=conn, library_root=cfg["library_root"],
                      db_path=config.db_path(), thumbs_dir=config.thumbs_dir())
