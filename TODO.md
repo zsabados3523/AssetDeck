@@ -498,11 +498,60 @@ com o quadradinho; tag com ícone inexistente no banco não derruba nada.
 507 testes verdes (os 26 SVGs somam 78 casos sozinhos em `test_icons.py`,
 que varre a pasta desde a Fatia 32).
 
-### ☐ Fatia 34 — Visualizador avançado de HDRI/EXR
-Preview com rotação (esfera), visualização de reflexos — como o
-Connecter tem. Maior escopo técnico da lista (provavelmente precisa de
-render 3D real, não só um QLabel com imagem); avaliar viabilidade com
-Qt/OpenGL na hora de fatiar.
+### ☑ Fatia 34 — Visualizador avançado de HDRI/EXR
+Duplo clique num `.hdr`/`.exr` abre um visualizador OpenGL com dois
+modos — **Ambiente** (estar dentro do HDRI, arrastar gira) e **Esfera de
+reflexo** (bola espelhada flutuando na cena). Todo o resto continua no
+`PreviewPopup`; o desvio reusa `thumbs/hdr.can_hdr()`.
+
+**Viabilidade medida antes de planejar**, não presumida: OpenGL 4.6
+(RTX 3070), pipeline completo (shader → VAO → textura → draw) validado
+num experimento isolado, e **nenhuma dependência nova** — PySide6 6.11.1
+já traz `QOpenGLShaderProgram`/`QOpenGLTexture`/`QOpenGLFunctions_3_3_Core`
+(PyOpenGL não é preciso). O Rafael escolheu OpenGL sabendo do custo.
+
+- **Os dois modos são só fragment shader sobre um triângulo de tela
+  cheia** — sem malha de esfera, sem índices, sem biblioteca de
+  geometria. Ambiente: direção do raio por pixel → equirretangular.
+  Esfera: interseção raio×esfera → `reflect()` → mesma textura.
+- `ui/hdri_camera.py` — yaw/pitch, clamp nos polos, base ortonormal.
+  **Sem Qt de propósito:** o `QOpenGLWidget` não roda offscreen, então a
+  matemática mora fora dele e fica coberta pelo pytest normal.
+- `app.py` chama `ensure_gl_format()` ANTES do `QApplication`: o formato
+  padrão é imutável depois, e sem 3.3 Core o `#version 330` não compila.
+- Visualizador criado sob demanda — quem nunca abre HDRI não paga o
+  contexto GL.
+- Textura liberada no `closeEvent` com o contexto corrente (senão o Qt
+  reclama e vaza 32MB de GPU por HDRI 4K).
+
+**Dois bugs achados vendo na tela** (o que os testes não pegariam):
+cena de cabeça pra baixo por um `mirrored()` indevido (o Qt já envia a
+scanline 0 como primeira linha da textura), e a esfera de reflexo presa a
+um ponto do mundo, escapando da tela ao girar — agora acompanha a câmera,
+para o ambiente girar EM VOLTA dela. Ambos travados em teste.
+
+**Limite honesto de cobertura:** o desenho GL em si não roda no pytest
+("QOpenGLWidget is not supported on this platform"). O que dá é testado
+(câmera, preparo de textura, roteamento, e o shader não sair de sincronia
+com a matemática Python); o render é verificado com `DISPLAY=:0` +
+`.grab()`, que captura o framebuffer de verdade.
+
+**Deu certo quando:** duplo clique em `belvedere_4k.hdr` e
+`belfast_farmhouse_4k.exr` (leitores diferentes) abre a cena navegável
+com horizonte reto e sem costura na emenda 360°; alternar pra Esfera
+mostra a bola refletindo o ambiente; girar mantém a bola centrada.
+542 testes verdes.
+
+**Ajuste pós-tela (2026-08-02):** o Rafael usou e apontou que o eixo
+VERTICAL estava invertido — arrastar para cima empurrava a vista para o
+alto em vez de puxar a imagem para cima. Corrigido; os dois eixos têm
+sinais diferentes de propósito agora (o horizontal ele aprovou como
+estava). Teste atualizado para travar o sentido novo.
+
+**Candidato barato se o Rafael sentir falta ao usar:** controle de
+exposição (oferecido e não escolhido) — com esta arquitetura é um
+`uniform` de uma linha, mas exige trocar a textura de 8-bit para float32.
+Zoom/campo de visão idem (`tan_half_fov` já é uniform).
 
 ### ☐ Fatia 35 — Templates de tags prontos
 Presets de estrutura de tags por área de atuação (arquitetura, filmagem,
@@ -577,6 +626,18 @@ temporário em `dragEnterEvent`/`dropEvent` pra confirmar se o evento
 chega no app; testar também com `QT_QPA_PLATFORM=xcb` (descarta
 Wayland-specific). Cobertura de teste também falta: nenhum teste hoje
 simula um `QDropEvent` com `hasUrls()` real contra `AssetGridView`.
+
+### ☐ Fatia 46 — Teste da ponte falha com o app aberto
+`tests/test_main_window.py::test_ponte_e_render_ficam_prontos` afirma que
+a ponte do Blender está escutando, mas ela usa a porta FIXA 45017
+(`config.DEFAULTS["bridge_port"]`). Com o AssetDeck de verdade aberto na
+máquina, a porta já está tomada e o teste falha — aconteceu duas vezes
+durante o desenvolvimento, e nas duas o "erro" era só o app do Rafael
+rodando.
+
+Não é regressão de código, é teste sem isolamento. Correção: o teste
+pedir porta 0 (o SO escolhe uma livre) ou pular explicitamente quando a
+porta estiver ocupada — nunca afrouxar a asserção.
 
 ### ☐ Fatia 45 — Cor e ícone de tag não sobrevivem ao sidecar
 Achado ao fatiar a 33. O sidecar grava tags como lista plana de caminhos
