@@ -25,6 +25,8 @@ class RelocateDialog(QDialog):
         self.resize(680, 420)
 
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(10)
         layout.addWidget(QLabel(
             f"{len(candidatos)} asset(s) sumido(s) batem com um arquivo "
             "encontrado em outro lugar (mesmo conteúdo). Desmarque o que não "
@@ -32,6 +34,7 @@ class RelocateDialog(QDialog):
         ))
 
         self.table = QTableWidget(len(candidatos), 3)
+        self.table.setObjectName("cardFlat")
         self.table.setHorizontalHeaderLabels(["Asset", "Caminho antigo (sumido)", "Caminho novo"])
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
         self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)

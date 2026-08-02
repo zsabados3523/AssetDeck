@@ -35,6 +35,7 @@ class PropertyDefsDialog(QDialog):
         self.resize(360, 420)
 
         self.list = QListWidget()
+        self.list.setObjectName("cardFlat")
         self.list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.list.customContextMenuRequested.connect(self._menu)
         self._reload()
@@ -47,6 +48,8 @@ class PropertyDefsDialog(QDialog):
         botoes.accepted.connect(self.accept)
 
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(10)
         layout.addWidget(self.list)
         layout.addWidget(nova_btn)
         layout.addWidget(botoes)

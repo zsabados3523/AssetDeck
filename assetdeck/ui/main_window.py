@@ -6,7 +6,7 @@ import logging
 import sqlite3
 from pathlib import Path
 
-from PySide6.QtCore import QModelIndex, Qt, QTimer
+from PySide6.QtCore import QModelIndex, QSize, Qt, QTimer
 from PySide6.QtGui import QPixmapCache
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -40,6 +40,7 @@ from assetdeck.ui.collection_tree import CollectionTree
 from assetdeck.ui.details_panel import DetailsPanel
 from assetdeck.sidecar import writer as sidecar_writer
 from assetdeck.ui.duplicates_dialog import DuplicatesDialog
+from assetdeck.ui.filter_button import FilterButton
 from assetdeck.ui.folder_tree import FolderTree
 from assetdeck.ui.preview_popup import PreviewPopup
 from assetdeck.ui.property_defs_dialog import PropertyDefsDialog
@@ -87,42 +88,36 @@ class MainWindow(QMainWindow):
         )
 
         self.type_filter = TypeFilter()
+        self.type_filter.setIcon(icons.icon("filter", theme.TEXT_MUTED))
+        self.type_filter.setIconSize(QSize(14, 14))
         self.type_filter.changed.connect(self._apply_filters)
 
-        self.subdirs_check = QCheckBox("Incluir subpastas")
-        self.subdirs_check.setChecked(True)
-        self.subdirs_check.toggled.connect(lambda _c: self._apply_filters())
+        # Nota mínima e resolução mínima (Fatia 9) — eram QComboBox longos
+        # ("Nota: todas") na barra de filtros; viraram botão de ícone
+        # compacto na linha do breadcrumb (pedido do Rafael, Fatia 28c).
+        self.rating_filter = FilterButton(
+            "star-filled", [("Nota: todas", None)] + [(f"★ ≥ {n}", n) for n in range(1, 6)]
+        )
+        self.rating_filter.changed.connect(self._apply_filters)
+
+        self.res_filter = FilterButton(
+            "resolution",
+            [("Resolução: todas", None), ("≥ 1K", 1024), ("≥ 2K", 2048),
+             ("≥ 4K", 4096), ("≥ 8K", 8192)],
+        )
+        self.res_filter.changed.connect(self._apply_filters)
 
         # Toggle do Rafael: ver sets PBR como 1 card (ligado) ou cada mapa
         # separado (desligado). Só visualização — o banco não muda.
-        self.group_check = QCheckBox("Agrupar sets PBR")
+        self.group_check = QCheckBox("Agrupar PBR")
         self.group_check.setChecked(True)
         self.group_check.toggled.connect(
             lambda c: (self.model.set_expand_sets(not c), self.refresh_count())
         )
 
-        # Filtros da Fatia 9: nota mínima, favoritos, resolução mínima
-        from PySide6.QtWidgets import QComboBox
-
-        # Ícone, não texto: nenhuma fonte da máquina tem o glifo ★ (medido com
-        # QRawFont na Fatia 24) — o Qt caía numa fonte substituta e saía torto.
-        star_icon = icons.icon("star-filled", theme.ACCENT)
-
-        self.rating_combo = QComboBox()
-        self.rating_combo.addItem("Nota: todas", None)
-        for n in range(1, 6):
-            self.rating_combo.addItem(star_icon, f"≥ {n}", n)
-        self.rating_combo.currentIndexChanged.connect(lambda _i: self._apply_filters())
-
         self.fav_check = QCheckBox("Só favoritos")
         self.fav_check.setToolTip("Mostrar só favoritos")
         self.fav_check.toggled.connect(lambda _c: self._apply_filters())
-
-        self.res_combo = QComboBox()
-        self.res_combo.addItem("Resolução: todas", None)
-        for label, px in (("≥ 1K", 1024), ("≥ 2K", 2048), ("≥ 4K", 4096), ("≥ 8K", 8192)):
-            self.res_combo.addItem(label, px)
-        self.res_combo.currentIndexChanged.connect(lambda _i: self._apply_filters())
 
         # Sugestão do Rafael: texturas que acompanham um .blend/.fbx são
         # dependências dele — poluem a grade e o Blender. Ocultas por padrão.
@@ -148,37 +143,18 @@ class MainWindow(QMainWindow):
         self.rescan_btn.setIcon(icons.icon("refresh", theme.ON_ACCENT))
         self.rescan_btn.clicked.connect(self.start_scan)
 
-        # Duas fileiras, estilo Connecter (Fatia 28): busca em cima (é a ação
-        # mais usada), filtros embaixo — em vez de 11 widgets crus na mesma
-        # linha, o que o Rafael descreveu como "amontoado".
-        search_row = QHBoxLayout()
-        search_row.addWidget(self.search_box, stretch=1)
-        search_row.addWidget(self.progress)
-        search_row.addWidget(self.rescan_btn)
-
-        filters_row = QHBoxLayout()
-        filters_row.setSpacing(10)
-        filters_row.addWidget(self.type_filter)
-        filters_row.addWidget(self.rating_combo)
-        filters_row.addWidget(self.fav_check)
-        filters_row.addWidget(self.res_combo)
-        filters_row.addWidget(self.subdirs_check)
-        filters_row.addWidget(self.group_check)
-        filters_row.addWidget(self.deps_check)
-        filters_row.addWidget(self.hidden_check)
-        filters_row.addStretch(1)
-
-        # objectName próprio: deixa os controles desta fileira mais baixos
-        # (padding menor) sem afetar botão/combo em nenhum outro lugar do
-        # app — pedido do Rafael de enxutar a barra de filtros verticalmente.
-        filters_widget = QWidget()
-        filters_widget.setObjectName("filterBar")
-        filters_widget.setLayout(filters_row)
-
-        top = QVBoxLayout()
-        top.setSpacing(6)
-        top.addLayout(search_row)
-        top.addWidget(filters_widget)
+        # Uma linha só (pedido do Rafael, Fatia 28c): busca + os quatro
+        # filtros mais usados no dia a dia + reindexar. "Incluir subpastas"
+        # saiu de vez (ele não via caso de uso pra desligar) e Tipos/Nota/
+        # Resolução foram pra linha do breadcrumb, como ícone.
+        top = QHBoxLayout()
+        top.addWidget(self.search_box, stretch=1)
+        top.addWidget(self.fav_check)
+        top.addWidget(self.group_check)
+        top.addWidget(self.deps_check)
+        top.addWidget(self.hidden_check)
+        top.addWidget(self.progress)
+        top.addWidget(self.rescan_btn)
 
         # --- pastas + grid + detalhes ---
         self.model = AssetGridModel(conn, self._library_root, self._pipeline, parent=self)
@@ -263,8 +239,14 @@ class MainWindow(QMainWindow):
         self.size_slider.setToolTip("Tamanho das miniaturas")
         self.size_slider.valueChanged.connect(self.grid.set_icon_size)
 
+        # Tipos / Nota / Resolução moram AQUI (pedido do Rafael, Fatia 28c):
+        # entre o título da pasta e o slider, como ícone compacto — não mais
+        # na barra de filtros de cima.
         breadcrumb_row = QHBoxLayout()
         breadcrumb_row.addWidget(self.breadcrumb, stretch=1)
+        breadcrumb_row.addWidget(self.type_filter)
+        breadcrumb_row.addWidget(self.rating_filter)
+        breadcrumb_row.addWidget(self.res_filter)
         breadcrumb_row.addWidget(self.size_slider)
 
         grid_container = QWidget()
@@ -342,11 +324,13 @@ class MainWindow(QMainWindow):
             search=self.search_box.text().strip(),
             asset_types=self.type_filter.selected(),
             dir_prefix=dir_prefix,
-            include_subdirs=self.subdirs_check.isChecked(),
+            # "Incluir subpastas" saiu da UI (pedido do Rafael, Fatia 28c —
+            # ele não via caso de uso pra desligar). Sempre True agora.
+            include_subdirs=True,
             tag_id=self.tags.current_tag_id(),
-            min_rating=self.rating_combo.currentData(),
+            min_rating=self.rating_filter.value(),
             starred_only=self.fav_check.isChecked(),
-            min_resolution=self.res_combo.currentData(),
+            min_resolution=self.res_filter.value(),
             include_hidden=self.hidden_check.isChecked(),
             include_dependencies=self.deps_check.isChecked(),
             collection_id=self.collections.current_collection_id(),
@@ -413,7 +397,7 @@ class MainWindow(QMainWindow):
         texto = f"{'★' * rating}" if rating else "nota removida"
         sufixo = f" em {len(alvos)} assets" if len(alvos) > 1 else ""
         self.statusBar().showMessage(f"Nota: {texto}{sufixo}")
-        if self.rating_combo.currentData():
+        if self.rating_filter.value():
             self._apply_filters()
 
     def _on_starred_changed(self, starred: bool) -> None:
@@ -572,13 +556,15 @@ class MainWindow(QMainWindow):
     def _restore_filters(self, query: dict) -> None:
         """Reescreve os widgets de filtro a partir de uma query salva e
         reaplica — a partir daí, a reatividade que já existe (nota, tags,
-        reindexação) mantém a visão sempre recalculada."""
+        reindexação) mantém a visão sempre recalculada.
+
+        `include_subdirs` de uma Smart Collection antiga (salva antes da
+        Fatia 28c) é ignorado — o toggle saiu da UI, agora é sempre True."""
         self.search_box.setText(query.get("search") or "")
         self.type_filter.set_selected(query.get("asset_types") or [])
-        self.subdirs_check.setChecked(bool(query.get("include_subdirs", True)))
-        self._set_combo_value(self.rating_combo, query.get("min_rating"))
+        self.rating_filter.set_value(query.get("min_rating"))
         self.fav_check.setChecked(bool(query.get("starred_only")))
-        self._set_combo_value(self.res_combo, query.get("min_resolution"))
+        self.res_filter.set_value(query.get("min_resolution"))
         self.hidden_check.setChecked(bool(query.get("include_hidden")))
         self.deps_check.setChecked(bool(query.get("include_dependencies")))
         dir_prefix = query.get("dir_prefix") or ""
@@ -587,11 +573,6 @@ class MainWindow(QMainWindow):
         self.tags.select(query.get("tag_id"))
         self.collections.select(query.get("collection_id"))
         self._apply_filters()
-
-    @staticmethod
-    def _set_combo_value(combo, value) -> None:
-        idx = combo.findData(value)
-        combo.setCurrentIndex(idx if idx >= 0 else 0)
 
     def _selected_asset_ids(self) -> list[int]:
         rows = [self.model.row_at(i)
