@@ -498,11 +498,54 @@ com o quadradinho; tag com ícone inexistente no banco não derruba nada.
 507 testes verdes (os 26 SVGs somam 78 casos sozinhos em `test_icons.py`,
 que varre a pasta desde a Fatia 32).
 
-### ☐ Fatia 34 — Visualizador avançado de HDRI/EXR
-Preview com rotação (esfera), visualização de reflexos — como o
-Connecter tem. Maior escopo técnico da lista (provavelmente precisa de
-render 3D real, não só um QLabel com imagem); avaliar viabilidade com
-Qt/OpenGL na hora de fatiar.
+### ☑ Fatia 34 — Visualizador avançado de HDRI/EXR
+Duplo clique num `.hdr`/`.exr` abre um visualizador OpenGL com dois
+modos — **Ambiente** (estar dentro do HDRI, arrastar gira) e **Esfera de
+reflexo** (bola espelhada flutuando na cena). Todo o resto continua no
+`PreviewPopup`; o desvio reusa `thumbs/hdr.can_hdr()`.
+
+**Viabilidade medida antes de planejar**, não presumida: OpenGL 4.6
+(RTX 3070), pipeline completo (shader → VAO → textura → draw) validado
+num experimento isolado, e **nenhuma dependência nova** — PySide6 6.11.1
+já traz `QOpenGLShaderProgram`/`QOpenGLTexture`/`QOpenGLFunctions_3_3_Core`
+(PyOpenGL não é preciso). O Rafael escolheu OpenGL sabendo do custo.
+
+- **Os dois modos são só fragment shader sobre um triângulo de tela
+  cheia** — sem malha de esfera, sem índices, sem biblioteca de
+  geometria. Ambiente: direção do raio por pixel → equirretangular.
+  Esfera: interseção raio×esfera → `reflect()` → mesma textura.
+- `ui/hdri_camera.py` — yaw/pitch, clamp nos polos, base ortonormal.
+  **Sem Qt de propósito:** o `QOpenGLWidget` não roda offscreen, então a
+  matemática mora fora dele e fica coberta pelo pytest normal.
+- `app.py` chama `ensure_gl_format()` ANTES do `QApplication`: o formato
+  padrão é imutável depois, e sem 3.3 Core o `#version 330` não compila.
+- Visualizador criado sob demanda — quem nunca abre HDRI não paga o
+  contexto GL.
+- Textura liberada no `closeEvent` com o contexto corrente (senão o Qt
+  reclama e vaza 32MB de GPU por HDRI 4K).
+
+**Dois bugs achados vendo na tela** (o que os testes não pegariam):
+cena de cabeça pra baixo por um `mirrored()` indevido (o Qt já envia a
+scanline 0 como primeira linha da textura), e a esfera de reflexo presa a
+um ponto do mundo, escapando da tela ao girar — agora acompanha a câmera,
+para o ambiente girar EM VOLTA dela. Ambos travados em teste.
+
+**Limite honesto de cobertura:** o desenho GL em si não roda no pytest
+("QOpenGLWidget is not supported on this platform"). O que dá é testado
+(câmera, preparo de textura, roteamento, e o shader não sair de sincronia
+com a matemática Python); o render é verificado com `DISPLAY=:0` +
+`.grab()`, que captura o framebuffer de verdade.
+
+**Deu certo quando:** duplo clique em `belvedere_4k.hdr` e
+`belfast_farmhouse_4k.exr` (leitores diferentes) abre a cena navegável
+com horizonte reto e sem costura na emenda 360°; alternar pra Esfera
+mostra a bola refletindo o ambiente; girar mantém a bola centrada.
+542 testes verdes.
+
+**Candidato barato se o Rafael sentir falta ao usar:** controle de
+exposição (oferecido e não escolhido) — com esta arquitetura é um
+`uniform` de uma linha, mas exige trocar a textura de 8-bit para float32.
+Zoom/campo de visão idem (`tan_half_fov` já é uniform).
 
 ### ☐ Fatia 35 — Templates de tags prontos
 Presets de estrutura de tags por área de atuação (arquitetura, filmagem,
