@@ -76,6 +76,60 @@ def test_item_com_icone_escolhido(qapp, conn):
     assert not _por_nome(t, "Madeira").icon(0).isNull()
 
 
+def test_primeira_carga_abre_a_arvore_inteira(qapp, conn):
+    materiais = tags_repo.create(conn, "Materiais")
+    tags_repo.create(conn, "Madeira", parent_id=materiais)
+    t = TagTree()
+    t.reload(conn)
+
+    assert _por_nome(t, "Materiais").isExpanded() is True
+
+
+def test_reload_preserva_ramo_que_o_usuario_fechou(qapp, conn):
+    """Relatado pelo Rafael: criar/apagar uma tag reabria a árvore
+    inteira e ele tinha que fechar tudo de novo, um por um."""
+    materiais = tags_repo.create(conn, "Materiais")
+    tags_repo.create(conn, "Madeira", parent_id=materiais)
+    vegetacao = tags_repo.create(conn, "Vegetação")
+    tags_repo.create(conn, "Árvores", parent_id=vegetacao)
+
+    t = TagTree()
+    t.reload(conn)  # primeira carga: tudo aberto
+    _por_nome(t, "Materiais").setExpanded(False)  # o Rafael fecha este
+
+    tags_repo.create(conn, "Metal", parent_id=materiais)  # ex.: nova tag
+    t.reload(conn)
+
+    assert _por_nome(t, "Materiais").isExpanded() is False
+    assert _por_nome(t, "Vegetação").isExpanded() is True  # este ele deixou aberto
+
+
+def test_ramo_fechado_continua_fechado_apos_varios_reloads(qapp, conn):
+    materiais = tags_repo.create(conn, "Materiais")
+    tags_repo.create(conn, "Madeira", parent_id=materiais)
+    t = TagTree()
+    t.reload(conn)
+    _por_nome(t, "Materiais").setExpanded(False)
+
+    for _ in range(3):
+        t.reload(conn)
+
+    assert _por_nome(t, "Materiais").isExpanded() is False
+
+
+def test_tag_nova_sem_estado_previo_comeca_fechada(qapp, conn):
+    """Depois da primeira carga, uma categoria que ganha filho pela
+    primeira vez não é forçada a abrir sozinha."""
+    materiais = tags_repo.create(conn, "Materiais")
+    t = TagTree()
+    t.reload(conn)  # primeira carga, Materiais sem filhos ainda
+
+    tags_repo.create(conn, "Madeira", parent_id=materiais)
+    t.reload(conn)
+
+    assert _por_nome(t, "Materiais").isExpanded() is False
+
+
 def test_reload_nao_explode_com_icone_que_sumiu(qapp, conn, caplog):
     """Cenário real: SVG renomeado/removido numa versão nova do app. Uma
     tag não pode derrubar a árvore inteira."""
