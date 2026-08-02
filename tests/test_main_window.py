@@ -41,7 +41,7 @@ def janela(qapp, tmp_path, monkeypatch):
 def test_janela_abre_com_todos_os_paineis(janela):
     assert janela.model.rowCount() == 2
     for atributo in ("grid", "details", "folders", "tags", "collections",
-                     "smart_collections", "type_filter",
+                     "smart_collections", "categories",
                      "search_box", "deps_check", "hidden_check", "group_check"):
         assert getattr(janela, atributo) is not None
 
@@ -128,13 +128,13 @@ def test_painel_de_detalhes_tem_sinais_de_propriedades(janela):
 def test_smart_collection_salva_e_aplica_filtros(janela):
     """Ciclo completo pela janela real: marcar filtros, salvar, mudar os
     filtros para outra coisa e aplicar a coleção inteligente salva."""
-    janela.type_filter.set_selected(["texture"])
+    janela.categories.set_selection_from_types(["texture"])
     janela._apply_filters()
     assert janela.model.rowCount() == 1  # só a textura.jpg
 
     janela._on_save_smart_collection("Só texturas")
 
-    janela.type_filter.set_selected(["model"])
+    janela.categories.set_selection_from_types(["model"])
     janela._apply_filters()
     assert janela.model.rowCount() == 1  # só o modelo.blend
 
@@ -142,7 +142,7 @@ def test_smart_collection_salva_e_aplica_filtros(janela):
     assert salva.text() == "Só texturas"
     janela.smart_collections.setCurrentItem(salva)
 
-    assert janela.type_filter.selected() == ["texture"]
+    assert [g["asset_types"] for g in janela.categories.selection()] == [["texture", "cutout"]]
     assert janela.model.rowCount() == 1
     assert janela.model.row_at(janela.model.index(0))["name"] == "textura"
 
@@ -150,20 +150,20 @@ def test_smart_collection_salva_e_aplica_filtros(janela):
 def test_smart_collection_nenhuma_aplicada_reseta_filtros(janela):
     """Relatado pelo Rafael: voltar pro '(nenhuma aplicada)' deixava os
     filtros da Smart Collection anterior parados em vez de mostrar tudo."""
-    janela.type_filter.set_selected(["texture"])
+    janela.categories.set_selection_from_types(["texture"])
     janela._apply_filters()
     janela._on_save_smart_collection("Só texturas")  # já deixa o painel na raiz
     assert janela.model.rowCount() == 1
 
     salva = janela.smart_collections.item(1)
     janela.smart_collections.setCurrentItem(salva)  # sai da raiz de propósito
-    assert janela.type_filter.selected() == ["texture"]
+    assert [g["asset_types"] for g in janela.categories.selection()] == [["texture", "cutout"]]
 
     raiz = janela.smart_collections.item(0)
     assert raiz.text() == "(nenhuma aplicada)"
     janela.smart_collections.setCurrentItem(raiz)  # volta pra raiz — dispara o reset
 
-    assert janela.type_filter.selected() == []
+    assert janela.categories.selection() == []
     assert janela.model.rowCount() == 2  # volta a mostrar tudo
 
 
