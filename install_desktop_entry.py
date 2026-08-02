@@ -30,6 +30,7 @@ Icon={icon}
 Terminal=false
 Categories=Graphics;3DGraphics;
 StartupNotify=true
+StartupWMClass=assetdeck
 """
 
 
