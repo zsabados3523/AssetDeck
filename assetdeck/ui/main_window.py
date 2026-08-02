@@ -50,7 +50,8 @@ from assetdeck.ui.smart_collection_panel import SmartCollectionPanel
 from assetdeck.ui import icons, theme
 from assetdeck.ui.tag_dialogs import QuickTagDialog
 from assetdeck.ui.tag_tree import TagTree
-from assetdeck.ui.type_filter import TypeFilter
+from assetdeck.ui.categories import CATEGORIES
+from assetdeck.ui.category_bar import CategoryBar
 
 log = logging.getLogger(__name__)
 
@@ -87,10 +88,8 @@ class MainWindow(QMainWindow):
             lambda _t: self._search_debounce.start()
         )
 
-        self.type_filter = TypeFilter()
-        self.type_filter.setIcon(icons.icon("filter", theme.TEXT_MUTED))
-        self.type_filter.setIconSize(QSize(14, 14))
-        self.type_filter.changed.connect(self._apply_filters)
+        self.categories = CategoryBar()
+        self.categories.changed.connect(self._apply_filters)
 
         # Nota mínima e resolução mínima (Fatia 9) — eram QComboBox longos
         # ("Nota: todas") na barra de filtros; viraram botão de ícone
@@ -244,7 +243,7 @@ class MainWindow(QMainWindow):
         # na barra de filtros de cima.
         breadcrumb_row = QHBoxLayout()
         breadcrumb_row.addWidget(self.breadcrumb, stretch=1)
-        breadcrumb_row.addWidget(self.type_filter)
+        breadcrumb_row.addWidget(self.categories)
         breadcrumb_row.addWidget(self.rating_filter)
         breadcrumb_row.addWidget(self.res_filter)
         breadcrumb_row.addWidget(self.size_slider)
@@ -317,9 +316,15 @@ class MainWindow(QMainWindow):
         self.tags.reload(self._conn)
         self.collections.reload(self._conn)
         self.smart_collections.reload(self._conn)
-        self.type_filter.reload(assets_repo.distinct_types(self._conn))
+        self.categories.reload(self._conn, self._category_counts())
         self.model.reload()
         self._apply_filters()
+
+    def _category_counts(self) -> dict:
+        """Contagem por categoria respeitando os filtros ativos (menos o de
+        categoria) — é o número que cada botão da barra exibe."""
+        return assets_repo.count_by_category(
+            self._conn, CATEGORIES, **self._current_filters_dict())
 
     def _current_filters_dict(self) -> dict:
         """O dicionário de filtros ativos — o mesmo que `list_for_grid`
@@ -329,7 +334,7 @@ class MainWindow(QMainWindow):
         dir_prefix = current.data(0, 32) if current else ""
         return dict(
             search=self.search_box.text().strip(),
-            asset_types=self.type_filter.selected(),
+            category_filters=self.categories.selection(),
             dir_prefix=dir_prefix,
             # "Incluir subpastas" saiu da UI (pedido do Rafael, Fatia 28c —
             # ele não via caso de uso pra desligar). Sempre True agora.
@@ -345,6 +350,7 @@ class MainWindow(QMainWindow):
 
     def _apply_filters(self) -> None:
         self.model.set_filters(**self._current_filters_dict())
+        self.categories.update_counts(self._category_counts())
         self.refresh_count()
 
     def _update_breadcrumb(self, dir_prefix: str) -> None:
@@ -568,7 +574,11 @@ class MainWindow(QMainWindow):
         `include_subdirs` de uma Smart Collection antiga (salva antes da
         Fatia 28c) é ignorado — o toggle saiu da UI, agora é sempre True."""
         self.search_box.setText(query.get("search") or "")
-        self.type_filter.set_selected(query.get("asset_types") or [])
+        if query.get("category_filters"):
+            self.categories.set_selection(query["category_filters"])
+        else:
+            # Salva antes da Fatia 31: só tinha `asset_types` crus.
+            self.categories.set_selection_from_types(query.get("asset_types") or [])
         self.rating_filter.set_value(query.get("min_rating"))
         self.fav_check.setChecked(bool(query.get("starred_only")))
         self.res_filter.set_value(query.get("min_resolution"))
