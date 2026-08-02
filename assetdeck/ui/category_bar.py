@@ -46,8 +46,10 @@ class CategoryButton(QToolButton):
         self._total = 0
 
         self.setIcon(icons.icon(categoria.icon, theme.TEXT_MUTED))
-        self.setIconSize(QSize(16, 16))
-        self.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.setIconSize(QSize(18, 18))
+        # Só ícone + setinha (pedido do Rafael depois de ver a barra com os
+        # rótulos): nome e contagem vivem no tooltip.
+        self.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
         self.setPopupMode(QToolButton.ToolButtonPopupMode.MenuButtonPopup)
         self.setCheckable(True)
         self.toggled.connect(self._on_toggled)
@@ -130,13 +132,12 @@ class CategoryButton(QToolButton):
         self.changed.emit()
 
     def _sync_label(self) -> None:
-        self.setText(f"{self.categoria.label}  {self._total}")
+        """Sem texto no botão: o tooltip é o único lugar que diz qual
+        categoria é e quantos assets ela tem."""
         exts = self.selected_extensions()
-        if exts:
-            self.setToolTip(f"{self.categoria.label}: "
-                            + ", ".join(f".{e}" for e in exts))
-        else:
-            self.setToolTip(f"{self.categoria.label} — todas as extensões")
+        detalhe = (", ".join(f".{e}" for e in exts) if exts
+                   else "todas as extensões")
+        self.setToolTip(f"{self.categoria.label} — {self._total} assets ({detalhe})")
 
 
 class CategoryBar(QWidget):

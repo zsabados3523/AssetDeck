@@ -26,8 +26,15 @@ def test_um_botao_por_categoria(barra):
     assert list(barra.buttons) == [c.key for c in CATEGORIES]
 
 
-def test_rotulo_mostra_nome_e_contagem(barra):
-    assert barra.buttons["modelos"].text() == "Modelos  85"
+def test_botao_e_so_icone_com_nome_e_contagem_no_tooltip(barra):
+    botao = barra.buttons["modelos"]
+    assert botao.text() == ""  # sem rótulo escrito (pedido do Rafael)
+    assert botao.toolTip() == "Modelos — 85 assets (todas as extensões)"
+
+
+def test_tooltip_lista_as_extensoes_marcadas(barra):
+    barra.buttons["imagens"]._ext_checks["jpg"].setChecked(True)
+    assert barra.buttons["imagens"].toolTip() == "Imagens — 148 assets (.jpg)"
 
 
 def test_categoria_vazia_fica_desabilitada(barra):
@@ -99,7 +106,7 @@ def test_update_counts_so_mexe_no_numero(barra):
     barra.buttons["imagens"]._ext_checks["jpg"].setChecked(True)
     barra.update_counts({**CONTAGEM, "imagens": 3})
 
-    assert barra.buttons["imagens"].text() == "Imagens  3"
+    assert barra.buttons["imagens"].toolTip() == "Imagens — 3 assets (.jpg)"
     assert barra.buttons["imagens"].selected_extensions() == ["jpg"]
 
 
