@@ -553,10 +553,53 @@ exposição (oferecido e não escolhido) — com esta arquitetura é um
 `uniform` de uma linha, mas exige trocar a textura de 8-bit para float32.
 Zoom/campo de visão idem (`tan_half_fov` já é uniform).
 
-### ☐ Fatia 35 — Templates de tags prontos
-Presets de estrutura de tags por área de atuação (arquitetura, filmagem,
-gamedev...), com níveis de complexidade (básico / resumido / complexo),
-inspirado no Connecter.
+### ☑ Fatia 35 — Templates de tags prontos
+Template de **Arquitetura/Visualização** em três níveis, aplicado pelo
+menu de contexto da árvore de tags ("Aplicar template…"). O Rafael pediu
+só a área dele — filmagem e gamedev saíram do escopo por não serem o
+trabalho dele.
+
+| Nível | Tags | Forma |
+|---|---|---|
+| Resumido | 8 | só as categorias-raiz |
+| Balanceado | 49 | categoria > tipo |
+| Completo | 102 | 3 níveis onde faz sentido (Materiais > Madeira > Carvalho) |
+
+Raízes: Materiais · Vegetação · Mobiliário · Iluminação · Escala ·
+Ambiente · Acabamento · Referência — desenhadas em cima das pastas reais
+da biblioteca dele. Já vêm **com cor e ícone** (reaproveitando os 26 da
+Fatia 33).
+
+- **Os três níveis são o mesmo tronco podado em profundidades
+  diferentes**, não três listas soltas — é o que garante que aplicar o
+  balanceado depois do resumido só acrescenta folhas. Travado em teste
+  (`resumido < balanceado < completo` como conjuntos de caminhos).
+- **Aplicar SOMA, nunca substitui.** Saiu de graça: `tags_repo.create()`
+  já devolvia a tag existente sem tocar em cor/ícone. Teste prova que uma
+  tag pré-existente mantém cor, ícone E os assets marcados.
+- `previa()` não escreve nada; alimenta o diálogo mostrando o que é novo
+  vs. o que já existe antes de aplicar.
+- Zero DDL.
+
+**Bug achado vendo na tela:** marcar "já existe" com `setDisabled` apagava
+os FILHOS junto (comportamento do Qt) — "Materiais (já existe)" fazia
+Madeira/Pedra/Vidro parecerem que também não viriam. Trocado por cor
+esmaecida só no item; travado em teste.
+
+**Deu certo quando** (verificado numa CÓPIA do banco real, sem tocar no
+dele): aplicar o balanceado sobre as 2 tags que ele tinha reporta
+"47 criadas, 2 já existiam", e "Materiais"/"Metal" saem com cor e ícone
+idênticos aos de antes. 565 testes verdes.
+
+**Ajuste pós-tela (2026-08-02):** o Rafael reportou que criar/apagar
+qualquer tag reabria a árvore INTEIRA — `reload()` chamava `expandAll()`
+sem olhar o que já estava aberto/fechado. Corrigido: `_tags_expandidas()`
+captura o estado antes do `clear()` e restaura depois. Só a primeira
+carga (árvore vazia/recém-aberta) expande tudo; dali em diante o Rafael
+manda. Detalhe achado no caminho: `expandAll()` marca até FOLHA como
+"expandida" — sem filtrar por `childCount()`, uma tag sem filho hoje
+apareceria aberta sozinha no dia em que ganhasse o primeiro filho.
+9 testes novos em `test_tag_tree.py`; 569 no total.
 
 ### ☐ Fatia 36 — Barra de menus
 Arquivo, Editar, Ferramentas, Configurações, Janela — o app hoje não tem
