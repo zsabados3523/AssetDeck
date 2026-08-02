@@ -23,8 +23,18 @@ QWidget {
     font-size: $font_size;
 }
 
-QMainWindow, QDialog {
+QMainWindow {
     background-color: $bg;
+}
+
+/* Diálogo é uma janela PRÓPRIA, sem barra de título do gerenciador de
+ * janelas (ao contrário da janela principal) — cantos arredondados fazem
+ * sentido aqui. O corte de verdade da janela (pra não sobrar quina quadrada
+ * atrás do arredondado do QSS) é `install_popup_corner_mask()` em theme.py. */
+QDialog {
+    background-color: $bg;
+    border: 1px solid $hairline;
+    border-radius: $radius_panel;
 }
 
 /* Superfície de fundo da janela. É o widget central que recebe o fundo, e não
@@ -222,13 +232,14 @@ QCheckBox::indicator:disabled, QRadioButton::indicator:disabled {
     background-color: $bg_tint;
 }
 
-/* O MESMO indicador, mas para os checkboxes DENTRO de árvores/listas (tags do
- * painel de detalhes, TagTree lateral). É um subcontrole diferente de
- * QCheckBox::indicator — sem esta regra ele cai no desenho genérico do
- * QStyleSheetStyle assim que QUALQUER stylesheet está ativo, que sai um
- * quadrado preto sólido, marcado ou não (bug relatado pelo Rafael, visto na
- * tela: tags_tree do painel de detalhes). */
-QTreeView::indicator, QListView::indicator {
+/* O MESMO indicador, mas para os checkboxes DENTRO de árvores/listas/tabelas
+ * (tags do painel de detalhes, TagTree lateral, DuplicatesDialog). É um
+ * subcontrole diferente de QCheckBox::indicator — sem esta regra ele cai no
+ * desenho genérico do QStyleSheetStyle assim que QUALQUER stylesheet está
+ * ativo, que sai um quadrado preto sólido, marcado ou não (bug relatado pelo
+ * Rafael, visto na tela: tags_tree do painel de detalhes). QTableView entrou
+ * junto — mesmo bug, achado no DuplicatesDialog. */
+QTreeView::indicator, QListView::indicator, QTableView::indicator {
     width: 15px;
     height: 15px;
     border: 1px solid $border_strong;
@@ -236,27 +247,15 @@ QTreeView::indicator, QListView::indicator {
     border-radius: 4px;
 }
 
-QTreeView::indicator:checked, QListView::indicator:checked {
+QTreeView::indicator:checked, QListView::indicator:checked, QTableView::indicator:checked {
     background-color: $accent;
     border: 1px solid $accent;
     image: url($check_icon);
 }
 
-QTreeView::indicator:disabled, QListView::indicator:disabled {
+QTreeView::indicator:disabled, QListView::indicator:disabled, QTableView::indicator:disabled {
     border: 1px solid $border;
     background-color: $bg_tint;
-}
-
-/* Barra de filtros (Fatia 28): mesmos controles, padding menor — pedido do
- * Rafael para enxutar a altura sem esconder nenhum filtro. objectName
- * próprio pra não afetar botão/combo em nenhum outro lugar do app. */
-#filterBar QToolButton, #filterBar QComboBox {
-    padding: 3px 8px;
-}
-
-#filterBar QCheckBox {
-    padding: 0;
-    spacing: 5px;
 }
 
 QComboBox {
@@ -450,6 +449,33 @@ QProgressBar {
 QProgressBar::chunk {
     background-color: $accent;
     border-radius: 5px;
+}
+
+/* Slider de tamanho da miniatura (Fatia 28c): trilho fino, alça pequena e
+ * redonda, trecho preenchido na cor de destaque — minimalista, sem o relevo
+ * 3D padrão do Fusion. */
+QSlider::groove:horizontal {
+    height: 4px;
+    background: $bg_tint;
+    border-radius: 2px;
+}
+
+QSlider::sub-page:horizontal {
+    background: $accent;
+    border-radius: 2px;
+}
+
+QSlider::handle:horizontal {
+    width: 14px;
+    height: 14px;
+    margin: -5px 0;
+    background: #FFFFFF;
+    border: 1px solid $border_strong;
+    border-radius: 7px;
+}
+
+QSlider::handle:horizontal:hover {
+    border: 1px solid $accent;
 }
 
 QSplitter::handle {

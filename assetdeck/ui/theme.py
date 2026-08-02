@@ -453,7 +453,97 @@ def apply_theme(app, variant: Variant = DEFAULT) -> None:
 
     app.setPalette(build_palette(variant))
     app.setStyleSheet(build_qss(variant))
+    install_popup_corner_mask(app, variant)
     log.info(
         "Tema aplicado (fundo=%s, separação=%s, cantos=%s, fonte=%s).",
         variant.background, variant.separation, variant.radius, variant.font,
     )
+
+
+class _PopupCornerMask:
+    """Recorta QMenu/QDialog num retângulo arredondado de verdade.
+
+    `WA_TranslucentBackground` foi testado e DESCARTADO: com ele ativo, o
+    `background-color` do QSS simplesmente parou de ser pintado (sonda
+    mostrou o meio da janela como `#00000000`) — o mesmo risco de depender
+    do compositor que a Fatia 24 já tinha evitado pra janela principal, só
+    que agora se confirmou na prática. `setMask()` com um `QRegion`
+    arredondado não depende de compositor (usa a X-Shape extension) e,
+    testado, manteve o fundo do QSS pintado normalmente.
+
+    Não mexe em `QFileDialog`/`QColorDialog` — são diálogos nativos
+    complexos, arredondar a janela deles é mais risco que ganho.
+    """
+
+    def __init__(self, radius_dialog: int, radius_menu: int) -> None:
+        self._radius_dialog = radius_dialog
+        self._radius_menu = radius_menu
+
+    def __call__(self, obj, event) -> bool:
+        from PySide6.QtCore import QEvent
+        from PySide6.QtWidgets import QColorDialog, QDialog, QFileDialog, QMenu
+
+        if event.type() not in (QEvent.Type.Show, QEvent.Type.Resize):
+            return False
+        if isinstance(obj, (QFileDialog, QColorDialog)):
+            return False
+        if isinstance(obj, QMenu):
+            self._mask(obj, self._radius_menu)
+        elif isinstance(obj, QDialog):
+            self._mask(obj, self._radius_dialog)
+        return False
+
+    @staticmethod
+    def _mask(widget, radius: int) -> None:
+        from PySide6.QtCore import QRectF
+        from PySide6.QtGui import QPainterPath, QRegion
+
+        if widget.width() <= 0 or widget.height() <= 0:
+            return
+        # Defesa extra: `setMask()` pode disparar outro Resize de volta pro
+        # widget (o gerenciador de janelas confirma a mudança de geometria).
+        # Sem este corte, isso reentraria no filtro e recalcularia a máscara
+        # de novo pro MESMO tamanho, sem necessidade.
+        tamanho = widget.size()
+        if widget.property("_assetdeck_masked_size") == tamanho:
+            return
+        widget.setProperty("_assetdeck_masked_size", tamanho)
+
+        path = QPainterPath()
+        path.addRoundedRect(QRectF(0, 0, widget.width(), widget.height()), radius, radius)
+        widget.setMask(QRegion(path.toFillPolygon().toPolygon()))
+
+
+_popup_filter_ref = None  # installEventFilter não segura referência sozinho
+
+
+def install_popup_corner_mask(app, variant: Variant = DEFAULT) -> None:
+    """Instala (ou REINSTALA, se o tema for reaplicado) o recorte de cantos
+    de QMenu/QDialog. Ver `_PopupCornerMask` para o porquê de `setMask()`
+    em vez de `WA_TranslucentBackground`.
+
+    Bug pego rodando a suíte inteira: `apply_theme()` é chamado várias vezes
+    em sequência em teste (`test_todas_as_variantes_aplicam_sem_erro` chama
+    24x seguidas). Sem remover o filtro ANTERIOR antes de instalar o novo,
+    eles se acumulavam no `QApplication` — que dura a sessão inteira de
+    testes — e cada Show/Resize passava a ser reprocessado por dezenas de
+    filtros ao mesmo tempo, travando a suíte por minutos. Por isso remove o
+    filtro velho primeiro: nunca mais de um instalado.
+    """
+    global _popup_filter_ref
+    from PySide6.QtCore import QObject
+
+    if _popup_filter_ref is not None:
+        app.removeEventFilter(_popup_filter_ref)
+        _popup_filter_ref.deleteLater()
+        _popup_filter_ref = None
+
+    raio_painel, raio_card, _raio_controle = RADII[variant.radius]
+    mask = _PopupCornerMask(radius_dialog=raio_painel, radius_menu=raio_card)
+
+    class _Filter(QObject):
+        def eventFilter(self, obj, event) -> bool:  # noqa: N802
+            return mask(obj, event)
+
+    _popup_filter_ref = _Filter(app)
+    app.installEventFilter(_popup_filter_ref)

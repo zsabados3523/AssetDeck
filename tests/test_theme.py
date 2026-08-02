@@ -272,6 +272,32 @@ def tema_isolado(qapp):
     qapp.setFont(fonte)
 
 
+def test_mascara_de_cantos_nao_quebra_menu_nem_dialogo(tema_isolado):
+    """`install_popup_corner_mask` (aplicado por `apply_theme`) não pode
+    lançar exceção ao mostrar um QMenu/QDialog — e o QSS continua sendo
+    pintado por baixo da máscara (o offscreen recusa `setMask()` de verdade,
+    então isto é o que dá pra provar automatizado; o corte em si só é
+    verificável na tela real, ver REDESIGN.md)."""
+    from PySide6.QtGui import QColor
+    from PySide6.QtWidgets import QDialog, QMenu
+
+    theme.apply_theme(tema_isolado)
+
+    dialogo = QDialog()
+    dialogo.resize(200, 120)
+    dialogo.show()
+    tema_isolado.processEvents()
+    img = dialogo.grab().toImage()
+    assert QColor(img.pixelColor(100, 60)).name().upper() == theme.BG.upper()
+    dialogo.close()
+
+    menu = QMenu()
+    menu.addAction("Item de teste")
+    menu.popup(dialogo.mapToGlobal(dialogo.rect().center()))
+    tema_isolado.processEvents()
+    menu.close()  # não travou, não lançou exceção
+
+
 def test_apply_theme_configura_o_app(tema_isolado):
     from PySide6.QtGui import QFontDatabase
 
