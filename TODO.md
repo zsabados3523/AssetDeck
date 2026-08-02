@@ -10,8 +10,8 @@ Rafael (650GB, ~72 mil arquivos, sem erros graves — ver sessão de
 2026-08-02) e depois desanexada de novo a pedido dele; app voltou a
 apontar para a testlib para a próxima fase de desenvolvimento.
 
-Próxima fase: levantamento de bugs/funcionalidades em andamento com o
-Rafael, roadmap detalhado a ser montado a partir dessa lista.
+Próxima fase: **F5 — v2.0**, roadmap fechado com o Rafael em 2026-08-02
+(13 fatias, 31 a 43 — ver seção própria abaixo). Ainda sem fatia iniciada.
 
 ## Estado atual (2026-08-02)
 
@@ -94,14 +94,15 @@ critério de "deu certo" verificado pelo Rafael na tela, e commit. O merge na
 
 ## F3 — Power user (a fazer)
 
-### ☐ Fatia 17 — Collections manuais  ← **COMEÇAR AQUI**
+### ☑ Fatia 17 — Collections manuais
 As tabelas `collections` e `collection_items` existem desde o schema v1 e
-nunca ganharam UI. Painel lateral (junto de pastas e tags), criar / renomear /
+ganharam UI: painel lateral (junto de pastas e tags), criar / renomear /
 excluir, arrastar assets para dentro, subpastas de coleção, ordem manual.
-**Reusar:** `ui/tag_tree.py` (o drag-and-drop com `MIME_ASSETS` já funciona)
-e `db/repos/tags.py` (hierarquia, soft delete, `descendants`).
-**Deu certo quando:** criar "Projeto Casa X", arrastar 5 assets, clicar nela
-e ver só esses 5; fechar e reabrir mantém tudo.
+**Reusa:** `ui/tag_tree.py` (o drag-and-drop com `MIME_ASSETS`) e
+`db/repos/tags.py` (hierarquia, soft delete, `descendants`).
+**Nota de processo (2026-08-02):** checkbox ficou desatualizado — o Rafael
+confirmou que esta fatia já estava implementada quando as Fatias 17b/18/19
+(que dependem dela) foram feitas; só o `☐` não tinha sido corrigido.
 
 ### ☑ Fatia 17b — Preview agrupado ao arrastar múltiplos assets
 Feedback do Rafael depois de usar a Fatia 17: arrastando vários assets
@@ -363,10 +364,95 @@ aparecia um ícone genérico na barra de tarefas/alt-tab.
 **Deu certo quando:** o AssetDeck aparece no menu de aplicativos do Zorin
 com ícone próprio e abre com duplo clique, sem terminal.
 
-### Resto da F4 (ainda sem direção definida)
-Auto-tagging local via Ollama (Qwen2.5-VL 7B) · checagem seamless/tileable ·
-render de previews em lote com cena de estúdio configurável · busca por cor
-dominante · listar texturas faltando de um .blend · múltiplas bibliotecas na UI.
+### Resto da F4
+Levantado como candidato solto, sem direção — o Rafael revisou em
+2026-08-02 e organizou junto com a lista dele; foi pra **F5 — v2.0**
+abaixo (auto-tagging e checagem seamless/tileable saíram da lista, os
+outros seguiram).
+
+### Fatia 30 — Acabamento (ainda pendente)
+Plano detalhado em `REDESIGN.md`: diálogos, `QMenu`, `QToolTip`,
+`QScrollBar`, `QSplitter::handle` ainda não confirmados 100% dentro do
+tema Craft. Vai ser feita junto com a Fatia 43 (overhaul visual do v2.0,
+abaixo) pra não retocar tema duas vezes.
+
+---
+
+## F5 — v2.0 (a fazer)
+
+Lista fechada com o Rafael em 2026-08-02, a partir do que sobrou da F4
+("Resto da F4" acima, menos auto-tagging e checagem seamless/tileable,
+tirados por decisão dele) + pedidos novos dele. Ordem abaixo é sugestão de
+sequência, a confirmar antes de começar cada fatia (uma por vez, como
+sempre). Nenhuma tem direção técnica definida ainda — isso é decidido na
+hora de fatiar cada uma.
+
+### ☐ Fatia 31 — Filtro por extensão dentro do tipo de asset
+Hoje o filtro é só por `asset_type` (Modelos, Texturas...). Pedido do
+Rafael: dentro de "Modelos 3D", poder restringir por extensão (só `.fbx`,
+só `.obj`, ou os dois) — generalizar para todos os `asset_type` que têm
+mais de uma extensão possível.
+
+### ☐ Fatia 32 — Navegação de pastas com histórico
+Controles tipo navegador (voltar / avançar) na área de visualização de
+assets, além da árvore de pastas atual.
+
+### ☐ Fatia 33 — Ícones pré-definidos para tags
+Conjunto de ícones prontos (preset) que o Rafael pode escolher ao criar ou
+editar uma tag, além da cor que já existe hoje.
+
+### ☐ Fatia 34 — Visualizador avançado de HDRI/EXR
+Preview com rotação (esfera), visualização de reflexos — como o
+Connecter tem. Maior escopo técnico da lista (provavelmente precisa de
+render 3D real, não só um QLabel com imagem); avaliar viabilidade com
+Qt/OpenGL na hora de fatiar.
+
+### ☐ Fatia 35 — Templates de tags prontos
+Presets de estrutura de tags por área de atuação (arquitetura, filmagem,
+gamedev...), com níveis de complexidade (básico / resumido / complexo),
+inspirado no Connecter.
+
+### ☐ Fatia 36 — Barra de menus
+Arquivo, Editar, Ferramentas, Configurações, Janela — o app hoje não tem
+menu de topo nenhum. Definir o conteúdo de cada menu na hora de fatiar.
+
+### ☐ Fatia 37 — Compatibilidade com outros formatos
+Revit, Maya, SketchUp, USD, Alembic etc. Maior escopo da lista depois da
+34 — cada formato pode precisar de abordagem própria (metadados, preview,
+dependências). Avaliar prioridade por formato com o Rafael antes de
+começar.
+
+### ☐ Fatia 38 — Render de previews em lote
+Cena de estúdio configurável pra gerar capas de vários assets de uma vez
+(hoje é um por um, via Blender).
+
+### ☐ Fatia 39 — Busca por cor dominante
+Filtrar/buscar assets pela cor predominante da textura/preview.
+
+### ☐ Fatia 40 — Listar texturas faltando de um `.blend`
+Detectar e listar mapas que um `.blend` espera mas não encontra na
+biblioteca (caminho quebrado, textura removida etc).
+
+### ☐ Fatia 41 — Múltiplas bibliotecas na UI
+Suportar mais de uma `library_root` ativa ao mesmo tempo, com seleção na
+UI — a `libraries` table já suporta isso desde o schema v1, só a UI
+(grid, árvore de pastas) nunca filtrou por biblioteca ativa. É a causa
+raiz do bug de pastas duplicadas que resolvemos em 2026-08-02 quando a
+testlib e a biblioteca real ficaram indexadas ao mesmo tempo.
+
+### ☐ Fatia 42 — Miniaturas faltando em alguns formatos de imagem
+Achado testando a biblioteca real (2026-08-02): 163 arquivos `.tif`
+("Silhuetas") e pelo menos 1 arquivo com modo de cor não suportado pelo
+Pillow ficam sem preview (asset é indexado normal, só sem miniatura).
+Investigar se dá pra ampliar o resgate que já existe pra PNG corrompido
+(`thumbs/raster.py`) pra esses casos.
+
+### ☐ Fatia 43 — Overhaul visual (fecha o v2.0)
+Por último, de propósito (pedido do Rafael): depois que as fatias 31-42
+adicionarem telas/controles novos (menu, navegação de pastas, visualizador
+de HDRI...), passar o tema Craft por cima de tudo de uma vez — evita
+retocar duas vezes. Absorve também a Fatia 30 (Acabamento) que ficou
+pendente da F4.
 
 ---
 
