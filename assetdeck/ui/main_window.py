@@ -49,7 +49,8 @@ from assetdeck.ui.property_defs_dialog import PropertyDefsDialog
 from assetdeck.ui.relocate_dialog import RelocateDialog
 from assetdeck.ui.scan_worker import ScanController
 from assetdeck.ui.smart_collection_panel import SmartCollectionPanel
-from assetdeck.ui import icons, theme
+from assetdeck.ui import icons, sidebar as sidebar_mod, theme
+from assetdeck.ui.sidebar import Sidebar
 from assetdeck.ui.tag_dialogs import QuickTagDialog
 from assetdeck.ui.tag_tree import TagTree
 from assetdeck.ui.categories import CATEGORIES
@@ -191,26 +192,29 @@ class MainWindow(QMainWindow):
             lambda: self.smart_collections.reload(self._conn)
         )
 
-        # Cada painel é um QFrame#card translúcido em volta de uma view
-        # transparente — o viewport de uma QTreeWidget/QListView pinta
-        # retângulo no canto e vaza por cima de qualquer border-radius posto
-        # nela diretamente, então o card por fora é obrigatório (Fatia 24).
-        self._folders_card = theme.make_card(self.folders, titulo="Pastas")
-        self._tags_card = theme.make_card(self.tags, titulo="Tags")
-        self._collections_card = theme.make_card(self.collections, titulo="Coleções")
-        self._smart_card = theme.make_card(self.smart_collections, titulo="Smart Collections")
-
-        left = QSplitter(Qt.Orientation.Vertical)
-        left.setHandleWidth(10)
-        left.addWidget(self._folders_card)
-        left.addWidget(self._tags_card)
-        left.addWidget(self._collections_card)
-        left.addWidget(self._smart_card)
+        # Lateral (Fatia 45): rail de ícones + UM painel com as quatro seções,
+        # cada uma com contador e recolhível pelo cabeçalho. Antes eram quatro
+        # QFrame#card empilhados num splitter, todos do mesmo tamanho e sem
+        # contador — não dava pra saber, olhando, o que tinha conteúdo.
+        # O card em volta continua obrigatório pelo mesmo motivo da Fatia 24:
+        # o viewport de uma QTreeWidget/QListView pinta retângulo no canto e
+        # vaza por cima de qualquer border-radius posto nela diretamente.
+        # Agora é um card só, envolvendo o splitter inteiro (ver ui/sidebar.py).
+        self.sidebar = Sidebar([
+            ("pastas", "Pastas", "nav-pastas", self.folders),
+            ("tags", "Tags", "nav-tags", self.tags),
+            ("colecoes", "Coleções", "nav-colecoes", self.collections),
+            ("smart", "Smart Collections", "nav-smart", self.smart_collections),
+        ])
+        left = self.sidebar
         self._left_default_sizes = [280, 200, 200, 200]
-        left.setSizes(self._left_default_sizes)
-        left.setMinimumWidth(200)
-        left.setMaximumWidth(340)
-        self._left_splitter = left
+        self.sidebar.splitter.setSizes(self._left_default_sizes)
+        # O piso vem do próprio Sidebar (cabeçalho mais largo + rail); aqui só
+        # o teto, que é escolha de proporção da janela.
+        left.setMaximumWidth(340 + sidebar_mod.LARGURA_RAIL)
+        # Segue exposto com o nome antigo: é o splitter DAS SEÇÕES, que
+        # `_restaurar_layout` redimensiona e o teste de layout confere.
+        self._left_splitter = self.sidebar.splitter
 
         # DetailsPanel é o próprio card (objectName="card" nele mesmo) — não
         # precisa de embrulho extra, então o min/max width fica nele direto.
@@ -293,7 +297,10 @@ class MainWindow(QMainWindow):
         splitter.setStretchFactor(0, 0)
         splitter.setStretchFactor(1, 1)
         splitter.setStretchFactor(2, 0)
-        self._main_default_sizes = [240, 740, 300]
+        # A lateral abre no próprio piso (rail + o cabeçalho mais largo). Antes
+        # da Fatia 45 era 240 fixo — o rail sairia desse orçamento e o
+        # cabeçalho "SMART COLLECTIONS" aparecia cortado.
+        self._main_default_sizes = [self.sidebar.minimumWidth(), 740, 300]
         splitter.setSizes(self._main_default_sizes)
         self._main_splitter = splitter
 
@@ -710,6 +717,7 @@ class MainWindow(QMainWindow):
         self.res_filter.refresh_theme()
         self.color_filter.refresh_theme()
         self.details.refresh_theme()
+        self.sidebar.refresh_theme()
 
         self._search_icon_action.setIcon(icons.icon("search", pal["text_muted"]))
         self.rescan_btn.setIcon(icons.icon("refresh", pal["on_accent"]))
@@ -723,20 +731,46 @@ class MainWindow(QMainWindow):
     def _setup_window_menu(self):
         menu = self.menuBar().addMenu("Janela")
         self._top_menus.append(menu)
-        self._panel_toggles = [
-            (self._folders_card, "Pastas"),
-            (self._tags_card, "Tags"),
-            (self._collections_card, "Coleções"),
-            (self._smart_card, "Smart Collections"),
-            (self.details, "Painel de detalhes"),
+        # Seções da lateral passam pelo Sidebar (Fatia 45) em vez de esconder o
+        # widget direto: assim o rail e o menu ficam sincronizados nos dois
+        # sentidos — clicar no ícone desmarca o item do menu e vice-versa.
+        # O painel de detalhes não é seção da lateral, então continua sendo um
+        # `setVisible` no widget.
+        # `_panel_toggles` continua sendo (widget, rótulo): o painel de uma
+        # seção da lateral agora é o `SidebarSection`, não um QFrame#card
+        # solto. A chave anda junto porque esconder uma seção precisa passar
+        # pelo Sidebar (para o rail acompanhar), e o painel de detalhes — que
+        # não é seção — segue com `setVisible` direto.
+        self._secoes_do_menu = [
+            ("pastas", "Pastas"),
+            ("tags", "Tags"),
+            ("colecoes", "Coleções"),
+            ("smart", "Smart Collections"),
         ]
+        self._panel_toggles = [
+            (self.sidebar.section_widget(chave), rotulo)
+            for chave, rotulo in self._secoes_do_menu
+        ] + [(self.details, "Painel de detalhes")]
+
         self._window_menu_actions = []
-        for widget, rotulo in self._panel_toggles:
+        self._acoes_por_secao: dict[str, object] = {}
+        chaves = [chave for chave, _r in self._secoes_do_menu] + [None]
+        for chave, (widget, rotulo) in zip(chaves, self._panel_toggles):
             acao = menu.addAction(rotulo)
             acao.setCheckable(True)
             acao.setChecked(True)
-            acao.toggled.connect(lambda checked, w=widget: w.setVisible(checked))
+            if chave is None:
+                acao.toggled.connect(widget.setVisible)
+            else:
+                acao.toggled.connect(
+                    lambda visivel, k=chave: self.sidebar.set_section_visible(k, visivel)
+                )
+                self._acoes_por_secao[chave] = acao
             self._window_menu_actions.append(acao)
+
+        # O caminho de volta: rail → menu. Sem isto, desligar uma seção pelo
+        # ícone deixaria o item do menu marcado, mentindo sobre o estado.
+        self.sidebar.rail.section_toggled.connect(self._on_secao_alternada_pelo_rail)
         menu.addSeparator()
 
         # Filtros que saíram da barra de busca (Fatia 43) — mesmo padrão
@@ -773,13 +807,31 @@ class MainWindow(QMainWindow):
         menu.addAction("Restaurar layout padrão", self._restaurar_layout)
         return menu
 
+    def _on_secao_alternada_pelo_rail(self, chave: str, visivel: bool) -> None:
+        """Rail → menu Janela. `blockSignals` evita o laço de volta (o menu
+        chamaria `set_section_visible`, que remarcaria o rail)."""
+        acao = self._acoes_por_secao.get(chave)
+        if acao is None:
+            log.error("Seção '%s' alternada pelo rail não tem ação no menu.", chave)
+            return
+        acao.blockSignals(True)
+        acao.setChecked(visivel)
+        acao.blockSignals(False)
+
     def _restaurar_layout(self) -> None:
         # Mostra os widgets DIRETO (não só via `setChecked(True)`): se o
         # painel tivesse sido ocultado por outro caminho que não o próprio
         # toggle, a ação já estaria "checked" e setChecked(True) seria
         # no-op — sem emitir `toggled`, o painel continuaria escondido.
-        for widget, _rotulo in self._panel_toggles:
-            widget.setVisible(True)
+        self.details.setVisible(True)
+        for chave, _rotulo in self._secoes_do_menu:
+            self.sidebar.set_section_visible(chave, True)
+            # Recolhida é estado independente de escondida: uma seção visível
+            # mas fechada continuaria só com a linha do título depois de
+            # "restaurar layout", que não é restaurar nada.
+            secao = self.sidebar.section_widget(chave)
+            if secao is not None:
+                secao.set_collapsed(False)
         for acao in self._window_menu_actions:
             acao.setChecked(True)
         self._left_splitter.setSizes(self._left_default_sizes)
