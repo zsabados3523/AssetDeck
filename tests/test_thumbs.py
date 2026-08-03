@@ -114,6 +114,27 @@ def test_16bit_grayscale_e_suportado(tmp_path):
         assert t.width == 256
 
 
+@pytest.mark.parametrize("mode", ["1", "P", "CMYK", "L", "RGB"])
+def test_tif_em_varios_modos_de_cor_gera_thumbnail(tmp_path, mode):
+    """Fatia 42: 163 `.tif` ("Silhuetas", tipicamente máscaras 1-bit/paleta)
+    ficavam sem thumbnail na biblioteca real. `_to_safe_mode` agora
+    converte o modo ANTES do resize (não depois) — cobre qualquer modo
+    exótico, não só os que apareceram na testlib.
+
+    Nesta versão do Pillow (12.3.1) nenhum desses modos falha na ordem
+    ANTIGA (testado à parte) — não dá pra provar red→green sem os
+    arquivos reais do Rafael. Fica como cobertura de regressão."""
+    src = tmp_path / f"silhueta_{mode}.tif"
+    Image.new(mode, (300, 200)).save(src)
+    dest = tmp_path / "thumb.png"
+
+    make_thumbnail(src, dest)
+
+    assert dest.exists()
+    with Image.open(dest) as t:
+        assert t.width == 256
+
+
 def test_geracao_concorrente_do_mesmo_destino_nao_quebra(tmp_path):
     """Packs diferentes com o MESMO arquivo → mesmo hash → mesmo destino.
     Oito threads gerando a mesma thumb ao mesmo tempo não podem se atropelar."""
