@@ -119,3 +119,17 @@ def test_todo_asset_type_do_schema_cai_em_uma_categoria():
 
     cobertos = [t for c in CATEGORIES for t in c.asset_types]
     assert sorted(cobertos) == sorted(do_schema)  # nenhum tipo em duas categorias
+
+
+def test_outros_programas_caem_em_modelos(qapp):
+    """Fatia 37: .rvt/.skp/.usd*/.abc entram como asset_type='model' no
+    scanner — prova de ponta a ponta que caem na categoria certa sem
+    precisar tocar em categories.py."""
+    from pathlib import Path
+
+    from assetdeck.indexer.scanner import classify
+
+    for nome in ("Projeto.rvt", "fachada.skp", "cena.usd", "cena.usda",
+                 "cena.usdc", "cena.usdz", "anim.abc"):
+        tipo = classify(Path(nome))
+        assert category_of(tipo).key == "modelos", f"{nome} -> {tipo}"

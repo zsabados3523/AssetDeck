@@ -67,6 +67,14 @@ EXT_MAP = {
     # modelos 3D
     "blend": "model", "fbx": "model", "obj": "model", "gltf": "model",
     "glb": "model", "dae": "model", "stl": "model",
+    # outros programas (Fatia 37): só reconhecer e catalogar — sem
+    # preview real, sem SDK do fabricante. Entram como 'model' de
+    # propósito: categoria, dependências e chip de extensão já
+    # funcionam automático, sem valor novo no enum (evita migration).
+    "rvt": "model",   # Revit
+    "skp": "model",   # SketchUp
+    "usd": "model", "usda": "model", "usdc": "model", "usdz": "model",
+    "abc": "model",   # Alembic
     # vetores (dwg incluído a pedido do Rafael — desenhos CAD)
     "svg": "vector", "ai": "vector", "eps": "vector", "cdr": "vector",
     "dwg": "vector",

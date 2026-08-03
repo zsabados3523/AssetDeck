@@ -42,3 +42,17 @@ def test_chaves_novas_sao_completadas_em_config_antigo(tmp_path, monkeypatch):
     cfg = config.load_config()
     assert cfg["library_root"] == "/outro/lugar"  # valor do usuário vence
     assert cfg["backup_keep"] == config.DEFAULTS["backup_keep"]  # default completa
+
+
+def test_cena_de_render_tem_defaults(tmp_path, monkeypatch):
+    """Fatia 38: um config.json de antes desta fatia não tinha essas 3
+    chaves — o mecanismo genérico de completar defaults já cobre, mas
+    nomeando aqui documenta o contrato e pega erro de digitação."""
+    monkeypatch.setenv("ASSETDECK_CONFIG_DIR", str(tmp_path))
+    (tmp_path / "config.json").write_text(json.dumps({}), encoding="utf-8")
+
+    cfg = config.load_config()
+
+    assert cfg["render_bg_color"] == config.DEFAULTS["render_bg_color"]
+    assert cfg["render_bg_strength"] == config.DEFAULTS["render_bg_strength"]
+    assert cfg["render_sun_energy"] == config.DEFAULTS["render_sun_energy"]
