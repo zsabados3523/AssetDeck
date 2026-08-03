@@ -67,6 +67,46 @@ def test_texturas_de_modelo_viram_dependencia(env):
     assert linha["is_dependency"] == 1
 
 
+def test_texturas_de_outros_programas_tambem_viram_dependencia(tmp_path):
+    """Fatia 37: .rvt/.skp/.usdz/.abc entram como asset_type='model' (só
+    reconhecer e catalogar) — prova que o mecanismo de dependência, que
+    olha só asset_type e não a extensão, funciona pra eles sem mudança
+    nenhuma em dependencies.py."""
+    root = tmp_path / "lib"
+    for nome_pasta, nome_arquivo in [
+        ("Projeto_Revit", "Projeto.rvt"),
+        ("Fachada_SketchUp", "fachada.skp"),
+        ("Cena_USD", "cena.usdz"),
+        ("Anim_Alembic", "anim.abc"),
+    ]:
+        pasta = root / "MODELOS" / nome_pasta
+        (pasta / "textures").mkdir(parents=True)
+        (pasta / nome_arquivo).write_bytes(b"x" * 30)
+        (pasta / "textures" / "mapa_Color.jpg").write_bytes(b"c" * 30)
+
+    conn = connect(tmp_path / "t.db")
+    apply_migrations(conn)
+    lib_id = libraries_repo.get_or_create(conn, root)
+    scan_library(conn, lib_id, root)
+    detect(conn, lib_id)
+
+    todas = assets_repo.list_for_grid(conn)
+    # o nome "mapa_Color" se repete nas 4 pastas — não pode virar dict por
+    # nome, senão 3 das 4 linhas somem silenciosamente da checagem
+    por_caminho = {r["rel_path"]: r for r in todas}
+
+    for nome_pasta, nome_arquivo in [
+        ("Projeto_Revit", "Projeto.rvt"), ("Fachada_SketchUp", "fachada.skp"),
+        ("Cena_USD", "cena.usdz"), ("Anim_Alembic", "anim.abc"),
+    ]:
+        modelo = por_caminho[f"MODELOS/{nome_pasta}/{nome_arquivo}"]
+        assert modelo["asset_type"] == "model"
+        assert modelo["is_dependency"] == 0
+
+        mapa = por_caminho[f"MODELOS/{nome_pasta}/textures/mapa_Color.jpg"]
+        assert mapa["is_dependency"] == 1
+
+
 def test_pack_com_blend_e_mapas_em_pastas_irmas(tmp_path):
     """Caso REAL (Maxtree): .blend e mapas em subpastas irmãs do mesmo pack."""
     root = tmp_path / "lib"

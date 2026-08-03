@@ -36,6 +36,19 @@ class RenderWorker(QObject):
     @Slot()
     def run(self) -> None:
         try:
+            # Config FRESCO a cada rodada (não uma vez só no __init__): o
+            # Rafael pode mudar a cor em Preferências e clicar em "Gerar
+            # capas" de novo sem reiniciar o app — diferente de
+            # bridge_port/bridge_enabled, que só valem depois de reabrir
+            # (aquele já está com um servidor de pé; render é sob demanda).
+            from assetdeck import config as _cfg
+            from assetdeck.blender.render import hex_to_linear_rgb
+
+            cfg = _cfg.load_config()
+            bg_color = hex_to_linear_rgb(cfg.get("render_bg_color", "#959599"))
+            bg_strength = float(cfg.get("render_bg_strength", 1.8))
+            sun_energy = float(cfg.get("render_sun_energy", 3.0))
+
             conn = connect(self._db_path)
             try:
                 lib_id = libraries_repo.get_or_create(conn, self._library_root)
@@ -53,7 +66,10 @@ class RenderWorker(QObject):
                         break
                     self.progress.emit(i, total, nome)
                     destino = self._previews_dir / f"render_{asset_id}.png"
-                    resultado = render_thumbnail(Path(caminho), destino, self._size)
+                    resultado = render_thumbnail(
+                        Path(caminho), destino, self._size,
+                        bg_color=bg_color, bg_strength=bg_strength, sun_energy=sun_energy,
+                    )
                     if resultado.ok:
                         # Registra como preview 'blender' e vira a capa
                         previews_repo.add(conn, asset_id, destino,
