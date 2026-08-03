@@ -47,8 +47,12 @@ QWidget#appSurface {
 
 /* --------------------------------------------------------------- cards -- */
 
-/* Fundo e painel são os DOIS brancos: o que separa é uma linha de contorno
- * quase invisível mais uma sombra de opacidade baixa (estilo Craft).
+/* Até a Fatia 43 fundo e painel eram os DOIS brancos, separados só por uma
+ * linha quase invisível — e a tela saía chapada. Na Fatia 44 o painel
+ * ($surface) passou a ser um degrau mais claro que o fundo ($bg) no modo
+ * claro, e mais claro que o quase-preto no escuro. A linha e a sombra
+ * continuam, agora reforçando um degrau que já existe em vez de o inventarem
+ * sozinhas.
  * Toda view (árvore, lista, grade) mora DENTRO de um destes, porque o
  * viewport de uma view pinta retângulo no canto e vaza por cima de qualquer
  * border-radius aplicado nela diretamente. */
@@ -150,13 +154,23 @@ QPushButton:hover, QToolButton:hover {
     border: 1px solid $hairline;
 }
 
-/* Ativo/pressionado é pastilha de cinza claro com o texto normal. Tudo
- * monocromático: cor só onde ela carrega informação (tag, tipo de asset). */
-QPushButton:pressed, QToolButton:pressed,
-QPushButton:checked, QToolButton:checked {
+/* Pressionado (transitório) segue monocromático: é um flash de meio segundo,
+ * não vale acender o azul. */
+QPushButton:pressed, QToolButton:pressed {
     background-color: $selection;
     border: 1px solid transparent;
     color: $text;
+}
+
+/* Marcado (persistente) é pastilha azul com o texto no destaque — Fatia 44.
+ * É o estado que responde "qual filtro está ligado agora": era cinza sobre
+ * cinza, e o Rafael não conseguia dizer, olhando a barra de categorias, o que
+ * estava ativo. Aqui o azul carrega informação, que é a única condição em que
+ * este projeto gasta cor. */
+QPushButton:checked, QToolButton:checked {
+    background-color: $accent_soft;
+    border: 1px solid transparent;
+    color: $accent;
     font-weight: 600;
 }
 
@@ -219,13 +233,17 @@ QCheckBox:disabled, QRadioButton:disabled {
 /* Exceção consciente à regra "não estilizar subcontrole sem repor a image:".
  * Com a paleta clara, o indicador que o Fusion desenha usa a cor de botão —
  * quase branco sobre quase branco — e a caixa DESMARCADA fica invisível na
- * tela. Aqui o estado é legível pelo preenchimento: cheio de cinza escuro =
- * marcado, vazio com borda = desmarcado. */
+ * tela. Aqui o estado é legível pelo preenchimento: cheio da cor de destaque =
+ * marcado, vazio com borda = desmarcado.
+ *
+ * O fundo da caixa VAZIA era "#FFFFFF" cravado aqui — branco puro no meio de
+ * uma janela quase preta, um confete aceso em cada checkbox do modo escuro
+ * (Fatia 44). Agora é o token do campo, que acompanha o modo. */
 QCheckBox::indicator, QRadioButton::indicator {
     width: 15px;
     height: 15px;
     border: 1px solid $border_strong;
-    background-color: #FFFFFF;
+    background-color: $field;
 }
 
 QCheckBox::indicator {
@@ -269,7 +287,7 @@ QTreeView::indicator, QListView::indicator, QTableView::indicator {
     width: 15px;
     height: 15px;
     border: 1px solid $border_strong;
-    background-color: #FFFFFF;
+    background-color: $field;
     border-radius: 4px;
 }
 
@@ -491,11 +509,13 @@ QSlider::sub-page:horizontal {
     border-radius: 2px;
 }
 
+/* A alça era "#FFFFFF" cravada — mesma história do checkbox: uma bolinha
+ * branca acesa no rodapé escuro (Fatia 44). */
 QSlider::handle:horizontal {
     width: 16px;
     height: 16px;
     margin: -6px 0;
-    background: #FFFFFF;
+    background: $surface;
     border: 1px solid $border_strong;
     border-radius: 8px;
 }
