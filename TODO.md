@@ -648,23 +648,87 @@ Revit, Maya, SketchUp, USD, Alembic etc. Maior escopo da lista depois da
 dependências). Avaliar prioridade por formato com o Rafael antes de
 começar.
 
-### ☐ Fatia 38 — Render de previews em lote
+### ☐ Fatia 38 — Render de previews em lote (bloqueada nesta sessão — sem Blender)
 Cena de estúdio configurável pra gerar capas de vários assets de uma vez
-(hoje é um por um, via Blender).
+(hoje é um por um, via Blender). **Não avaliada/implementada nesta sessão
+automatizada:** o ambiente remoto não tem Flatpak nem Blender instalados
+(`flatpak`/`blender` ausentes) — o coração desta fatia é um script
+headless novo em `blender/scripts/` (irmão de `render_thumb.py`), e não
+dá pra escrever isso às cegas sem rodar contra o Blender de verdade pra
+validar a cena de estúdio, iluminação e enquadramento em lote. Fica pro
+Rafael confirmar o formato da cena (referência visual, quantos ângulos
+etc.) numa sessão com Blender disponível.
 
-### ☐ Fatia 39 — Busca por cor dominante
-Filtrar/buscar assets pela cor predominante da textura/preview.
+### ☐ Fatia 39 — Busca por cor dominante (bloqueada nesta sessão — schema + design)
+Filtrar/buscar assets pela cor predominante da textura/preview. **Não
+implementada nesta sessão automatizada** por dois motivos, cada um já
+suficiente sozinho:
+1. **Mexe no schema do banco** (precisa de uma coluna nova tipo
+   `files.dominant_color`, com migration 006) — regra absoluta do
+   CLAUDE.md: "antes de tocar no schema, leia SCHEMA.md e avise o
+   Rafael". Aqui não tem como ele ver e responder antes de eu prosseguir.
+2. **Sem spec de produto:** "cor predominante" pode significar várias
+   coisas (média de pixel, cor mais frequente via quantização/k-means,
+   quantos "baldes" de cor mostrar na UI, distância de cor pra
+   "parecido") e o app não tem nenhum precedente de filtro por cor pra
+   copiar — é decisão de UX do Rafael, do jeito que o redesign visual
+   (F4) foi decidido junto com ele na tela, não fatiar sozinho.
 
-### ☐ Fatia 40 — Listar texturas faltando de um `.blend`
+**Plano técnico pra quando ele confirmar** (pra não redescobrir nada):
+extrair a cor média (ou top-k via quantização, `Image.quantize`) no MESMO
+lugar que já abre a imagem pra thumb/phash (`thumbs/phash.py` já faz
+algo parecido pro dHash — dá pra ficar perto), migration 006 adicionando
+`files.dominant_color TEXT` (hex), filtro novo tipo `FilterButton` (Fatia
+28c) com paleta fixa de cores pra escolher, e `assets_repo._build_where`
+ganhando o termo de distância de cor.
+
+### ☐ Fatia 40 — Listar texturas faltando de um `.blend` (bloqueada nesta sessão — sem Blender)
 Detectar e listar mapas que um `.blend` espera mas não encontra na
-biblioteca (caminho quebrado, textura removida etc).
+biblioteca (caminho quebrado, textura removida etc). **Não implementada
+nesta sessão automatizada:** mesma limitação da Fatia 38 — sem Blender
+neste ambiente não dá pra escrever/testar o script headless que abre o
+`.blend` e lista os datablocks de imagem com caminho quebrado (o
+equivalente inverso da relocalização de texturas que `blender/render.py`
+já faz na Fatia 16 — dá pra reaproveitar bastante lógica de lá).
 
-### ☐ Fatia 41 — Múltiplas bibliotecas na UI
+### ☐ Fatia 41 — Múltiplas bibliotecas na UI (avaliada, não implementada — risco/escopo)
 Suportar mais de uma `library_root` ativa ao mesmo tempo, com seleção na
 UI — a `libraries` table já suporta isso desde o schema v1, só a UI
 (grid, árvore de pastas) nunca filtrou por biblioteca ativa. É a causa
 raiz do bug de pastas duplicadas que resolvemos em 2026-08-02 quando a
 testlib e a biblioteca real ficaram indexadas ao mesmo tempo.
+
+**Avaliada e adiada de propósito nesta sessão automatizada** — não é
+"não coube o tempo", é risco real demais pra fazer sozinho, sem o Rafael
+podendo confirmar na tela e sem a biblioteca real (SSD NTFS) disponível
+pra testar de verdade:
+- `library_root: Path` é um parâmetro passado por CONSTRUÇÃO (não lido do
+  banco por asset) em praticamente todo módulo que toca em caminho de
+  arquivo — `MainWindow`, `AssetGridModel`, `FolderTree`,
+  `DetailsPanel`, `batch_rename.py` (a ÚNICA exceção ao somente-leitura
+  — um bug de resolução de caminho ali escreve no lugar errado de
+  verdade), `sidecar/writer.py`, `indexer/scanner.py`, a ponte com o
+  Blender e o render de capas. Suportar VÁRIAS ao mesmo tempo exige virar
+  cada `library_root / rel_path` em "olhar o `library_id` do asset e
+  resolver a raiz DELE" — mudança sistêmica, não uma tela nova.
+- **Decisão de UX que só o Rafael pode dar:** grade combinada mostrando
+  as duas bibliotecas juntas, ou trocar de biblioteca como quem troca de
+  aba? Onde entra o seletor? Isso é do mesmo tipo de decisão que o
+  redesign visual (F4) — iterada com ele olhando a tela, não fatiada
+  sozinho.
+- Testável só com sintético neste ambiente (sem a biblioteca real de
+  650GB); um bug de resolução de caminho tocando `batch_rename` (escreve
+  no disco de verdade) tem custo alto demais pra arriscar sem validação
+  real.
+
+**Plano técnico pra quando ele confirmar a UX** (pra não redescobrir
+nada): `config.json` ganha `library_roots: list[str]` (migração suave a
+partir do `library_root` singular hoje, mesmo padrão de "chaves novas
+completadas" que `config.load_config` já usa); cada módulo que hoje
+recebe `library_root: Path` passa a receber uma função
+`resolve_root(library_id) -> Path` ou um dict `{library_id: Path}`;
+seletor na UI (provável: perto da árvore de pastas, como mais um filtro,
+reaproveitando o padrão do `CategoryBar`/`FilterButton` da Fatia 31/28c).
 
 ### ☐ Fatia 42 — Miniaturas faltando em alguns formatos de imagem (parcial)
 Achado testando a biblioteca real (2026-08-02): 163 arquivos `.tif`
@@ -695,12 +759,20 @@ log (`~/.local/share/assetdeck/logs/assetdeck.log`, procurar "Thumbnail
 falhou") — o traceback tem o tipo exato de exceção do Pillow, que é o que
 falta pra mirar a correção certa em vez de generalizar no escuro.
 
-### ☐ Fatia 43 — Overhaul visual (fecha o v2.0)
+### ☐ Fatia 43 — Overhaul visual (fecha o v2.0) — PULADA DE PROPÓSITO
 Por último, de propósito (pedido do Rafael): depois que as fatias 31-42
 adicionarem telas/controles novos (menu, navegação de pastas, visualizador
 de HDRI...), passar o tema Craft por cima de tudo de uma vez — evita
 retocar duas vezes. Absorve também a Fatia 30 (Acabamento) que ficou
 pendente da F4.
+
+**Confirmado de novo em 2026-08-03** (sessão automatizada noturna): o
+Rafael pediu explicitamente pra pular esta fatia e deixar na fila —
+espera aprovação e orientação dele na tela antes de começar, do mesmo
+jeito que o resto do redesign visual (F4) foi decidido junto com ele.
+Menu novo (Fatia 36), navegação (32), categorias (31) etc. entraram TODOS
+sem tocar em `theme.py`/`theme.qss` — a regra "nenhum setStyleSheet fora
+do theme.py" segue valendo, só o acabamento final é que fica pra depois.
 
 Itens já anotados para esta fatia:
 - **Botões de navegação grandes demais** (Fatia 32) — o Rafael viu na tela
