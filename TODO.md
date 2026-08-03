@@ -707,17 +707,28 @@ chega no app; testar também com `QT_QPA_PLATFORM=xcb` (descarta
 Wayland-specific). Cobertura de teste também falta: nenhum teste hoje
 simula um `QDropEvent` com `hasUrls()` real contra `AssetGridView`.
 
-### ☐ Fatia 46 — Teste da ponte falha com o app aberto
-`tests/test_main_window.py::test_ponte_e_render_ficam_prontos` afirma que
-a ponte do Blender está escutando, mas ela usa a porta FIXA 45017
+### ☑ Fatia 46 — Teste da ponte falha com o app aberto
+`tests/test_main_window.py::test_ponte_e_render_ficam_prontos` afirmava que
+a ponte do Blender está escutando, mas ela usava a porta FIXA 45017
 (`config.DEFAULTS["bridge_port"]`). Com o AssetDeck de verdade aberto na
-máquina, a porta já está tomada e o teste falha — aconteceu duas vezes
+máquina, a porta já estava tomada e o teste falhava — aconteceu duas vezes
 durante o desenvolvimento, e nas duas o "erro" era só o app do Rafael
 rodando.
 
-Não é regressão de código, é teste sem isolamento. Correção: o teste
-pedir porta 0 (o SO escolhe uma livre) ou pular explicitamente quando a
-porta estiver ocupada — nunca afrouxar a asserção.
+Não era regressão de código, era teste sem isolamento. Corrigido como o
+TODO já sugeria: a fixture `janela` (usada por TODOS os testes de
+`test_main_window.py`, não só este) agora escreve `bridge_port: 0` no
+config.json isolado ANTES de instanciar a `MainWindow` — porta 0 pede pro
+SO escolher uma livre, então nunca colide com uma instância real aberta.
+Zero asserção enfraquecida; `test_ponte_e_render_ficam_prontos` ganhou uma
+checagem a mais (`_bridge.port > 0`, confere que o Qt realmente subiu numa
+porta de verdade, não só que `listening` ficou True).
+
+**Verificado propositalmente** (não só teoria): um `QTcpServer` de teste
+ocupou a 45017 de propósito ANTES de rodar a suíte — sem o fix o teste
+falhava do jeito descrito; com o fix, passa igual.
+**Deu certo quando:** `pytest -q` continua verde mesmo com algo ocupando a
+porta 45017. 577 testes verdes.
 
 ### ☐ Fatia 45 — Cor e ícone de tag não sobrevivem ao sidecar
 Achado ao fatiar a 33. O sidecar grava tags como lista plana de caminhos
