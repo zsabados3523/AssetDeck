@@ -112,8 +112,8 @@ class DetailsPanel(QWidget):
 
         from assetdeck.ui import icons as _icons
 
-        self._star_filled = _icons.icon("star-filled", theme.ACCENT)
-        self._star_outline = _icons.icon("star-outline", theme.TEXT_MUTED)
+        self._star_filled = _icons.icon("star-filled", theme.current_colors()["accent"])
+        self._star_outline = _icons.icon("star-outline", theme.current_colors()["text_muted"])
 
         self._rating: int | None = None
         stars_row = _QHBox()
@@ -319,6 +319,16 @@ class DetailsPanel(QWidget):
         """n>1: avisa que as edições valem para todos os selecionados."""
         self.multi_label.setText(f"⚠ Editando {n} assets selecionados de uma vez")
         self.multi_label.setVisible(n > 1)
+
+    def refresh_theme(self) -> None:
+        """Reconstrói os ícones de estrela com a cor do modo atual (Fatia
+        43) e redesenha o estado atual de nota/favorito com eles."""
+        from assetdeck.ui import icons as _icons
+
+        self._star_filled = _icons.icon("star-filled", theme.current_colors()["accent"])
+        self._star_outline = _icons.icon("star-outline", theme.current_colors()["text_muted"])
+        self._paint_stars()
+        self.fav_btn.setIcon(self._star_filled if self.fav_btn.isChecked() else self._star_outline)
 
     def _paint_stars(self) -> None:
         for i, b in enumerate(self.star_btns, start=1):

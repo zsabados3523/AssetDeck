@@ -888,27 +888,73 @@ log (`~/.local/share/assetdeck/logs/assetdeck.log`, procurar "Thumbnail
 falhou") — o traceback tem o tipo exato de exceção do Pillow, que é o que
 falta pra mirar a correção certa em vez de generalizar no escuro.
 
-### ☐ Fatia 43 — Overhaul visual (fecha o v2.0) — PULADA DE PROPÓSITO
-Por último, de propósito (pedido do Rafael): depois que as fatias 31-42
-adicionarem telas/controles novos (menu, navegação de pastas, visualizador
-de HDRI...), passar o tema Craft por cima de tudo de uma vez — evita
-retocar duas vezes. Absorve também a Fatia 30 (Acabamento) que ficou
-pendente da F4.
+### ☑ Fatia 43 — Overhaul visual (fecha o v2.0)
+Desbloqueada em 2026-08-03: o Rafael trouxe 3 referências visuais (uma DAM
+clara com roxo, MuseDAM e TextureLibrary, escuras) e, depois de eu apontar
+que isso contradiz a decisão monocromática da F4, decidiu: **continua
+monocromático** (sem cor de destaque nova), mas quer **modo escuro de
+verdade** (toggle manual persistido) e cantos/sombra mais generosos.
+Escopo cresceu no caminho com um bug real e um combinado anterior que não
+tinha sido registrado — ver abaixo.
 
-**Confirmado de novo em 2026-08-03** (sessão automatizada noturna): o
-Rafael pediu explicitamente pra pular esta fatia e deixar na fila —
-espera aprovação e orientação dele na tela antes de começar, do mesmo
-jeito que o resto do redesign visual (F4) foi decidido junto com ele.
-Menu novo (Fatia 36), navegação (32), categorias (31) etc. entraram TODOS
-sem tocar em `theme.py`/`theme.qss` — a regra "nenhum setStyleSheet fora
-do theme.py" segue valendo, só o acabamento final é que fica pra depois.
+**Parte 1 — bug + reorganização, sem tocar em paleta:**
+- **Bug corrigido:** desligar todos os painéis pelo menu Janela fazia a
+  barra de busca inchar até quase tomar a tela (medido: 356px de altura,
+  deveria ser ~46px). Causa: `top_card`/`splitter` disputavam o espaço
+  extra do `QVBoxLayout` central sem prioridade nenhuma entre eles —
+  `layout.setStretchFactor(splitter, 1)` resolve, splitter sempre ganha.
+- `fav_check`/`group_check`/`deps_check`/`hidden_check` saíram da barra de
+  busca e viraram `QAction` marcável no menu **Janela** (combinado
+  anterior que não estava escrito aqui) — mesmos nomes de atributo,
+  `QAction` tem a mesma API de `QCheckBox` que o resto do código já usava.
+- Barra do breadcrumb, **opção C** (dos 3 esboços mostrados na tela,
+  antes de tocar em código): botões de navegação viram "ghost" (sem
+  moldura), divisor fino entre grupos (navegação+caminho / categorias /
+  filtros), slider de tamanho saiu da barra e foi pro rodapé.
+- Fatia 30 (Acabamento): a maior parte já estava pronta (`QMenu`/
+  `QToolTip`/`QScrollBar`/`QSplitter::handle` já tinham regra no
+  `theme.qss` — nota antiga do REDESIGN.md estava desatualizada).
+  `PreferencesDialog`/`PreviewPopup` conferidos por screenshot, nenhum
+  precisou de mudança.
 
-Itens já anotados para esta fatia:
-- **Botões de navegação grandes demais** (Fatia 32) — o Rafael viu na tela
-  e pediu pra deixar pro overhaul em vez de ajustar na hora.
-- A `breadcrumb_row` está lotada (3 botões de navegação + 6 de categoria +
-  nota + resolução + slider); repensar o arranjo inteiro em vez de só
-  encolher peça por peça.
+**Parte 2 — modo escuro (infraestrutura nova do zero):**
+- `theme.py` ganhou uma paleta `_DARK` completa (mesma lógica
+  monocromática, luminância invertida; `WARNING`/`DANGER` mais claros pra
+  manter contraste). `Variant` ganhou o campo `mode` (claro/escuro).
+  `build_tokens`/`build_palette`/`surface_solid` escolhem a paleta certa
+  por um dict interno (`_paleta()`), sem duplicar as funções.
+- **Achado tarde, mas corrigido:** vários widgets pintam cor "à mão" em
+  Python (delegate da grade, ícones pré-tingidos de nav/busca/categoria/
+  filtro/estrela/tag) — isso NÃO passa pelo QSS, então continuavam
+  sempre na cor clara mesmo em modo escuro (o card "sem miniatura" saía
+  branco num fundo escuro). `theme.current_colors()` novo (lê o último
+  `Variant` aplicado) + `refresh_theme()` em `AssetCardDelegate`,
+  `AssetGridModel`, `FilterButton`, `CategoryBar`/`CategoryButton`,
+  `DetailsPanel`, chamados de `MainWindow._refresh_theme_dependent_widgets`
+  depois de cada troca — sem isso, o toggle ao vivo ficaria pela metade.
+- Vitrine (`--theme-preview`) ganhou um 5º combo "Modo" — reaproveita o
+  mecanismo de troca ao vivo que já existia (`apply_theme(app, variant)`
+  de novo já re-renderiza tudo, sem `unpolish`/`polish` manual).
+- Toggle real: `QAction` marcável "Modo escuro" no menu Configurações,
+  aplica na hora (sem precisar reabrir o app) e persiste em
+  `config.json: theme_mode`.
+- Cantos: `DEFAULT.radius` virou `"marcante"` (16/12/9px, já existia como
+  opção). Sombra: mais presença (blur 18→24, alfa 28→42) — sobretudo
+  efeito de modo claro; no escuro a elevação vem mais do contorno/
+  `$popover` do que da sombra, que quase não aparece em fundo escuro
+  (esperado).
+
+**Deu certo quando:** 650 testes verdes (`pytest -q`, ~20 novos: bug do
+resize, checks no menu, contraste WCAG do modo escuro nos mesmos pares já
+testados no claro). Rodei o app real contra a testlib nos dois modos —
+screenshot confirma barra de busca normal mesmo com painéis desligados,
+cards com fundo correto nos dois modos, diálogos OK sem código extra.
+
+**Falta o Rafael confirmar na tela** — mais que qualquer outra fatia,
+porque cor/modo escuro é decisão de gosto: a paleta escura foi calibrada
+com as fórmulas de contraste (WCAG), não olhando pra tela de verdade.
+Bem provável que precise de ajuste fino, como aconteceu com a paleta
+clara na F4 (três rodadas de correção).
 
 ### ☐ Fatia 44 — Bug: preview customizado não aceita imagem externa via drag-and-drop
 Relatado pelo Rafael (2026-08-02): arrastar um `.png`/`.jpeg` do

@@ -51,19 +51,12 @@ class AssetCardDelegate(QStyledItemDelegate):
         self._font_chip.setBold(True)
         self._fm_chip = QFontMetrics(self._font_chip)
 
-        self._pen_name = QPen(QColor(theme.TEXT))
-        self._pen_chip = QPen(QColor("#FFFFFF"))
-
-        self._brush_surface = QColor("#FFFFFF")
-        self._brush_hover = QColor(theme.blend(theme.HOVER, "#FFFFFF"))
-        self._brush_selected = QColor(theme.blend(theme.SELECTION, "#FFFFFF"))
-        self._pen_border = self._qcolor(theme.BORDER)
-        self._pen_selected_border = QColor(theme.ACCENT)
-
+        self._pen_chip = QPen(QColor("#FFFFFF"))  # texto do chip sobre o selo escuro — fixo
         self._icon_star = icons.pixmap("star-filled", "#FFFFFF", 12)
         self._icon_hidden = icons.pixmap("eye-off", "#FFFFFF", 12)
 
         self._cell = CELL  # tamanho devolvido por sizeHint(); ver set_icon_size
+        self.refresh_theme()
 
     @staticmethod
     def _qcolor(rgba: tuple[int, int, int, float]) -> QColor:
@@ -71,6 +64,20 @@ class AssetCardDelegate(QStyledItemDelegate):
         c = QColor(r, g, b)
         c.setAlphaF(a)
         return c
+
+    def refresh_theme(self) -> None:
+        """Recalcula as cores em cache a partir de `theme.current_colors()`
+        (Fatia 43) — chamado no `__init__` e de novo sempre que o modo
+        claro/escuro trocar ao vivo. Continua tudo pré-computado FORA de
+        `paint()`, só que agora pode ser refeito, não só computado uma vez."""
+        pal = theme.current_colors()
+        self._pen_name = QPen(QColor(pal["text"]))
+        self._brush_surface = QColor(pal["bg"])
+        self._brush_hover = QColor(theme.blend(pal["hover"], pal["bg"]))
+        self._brush_selected = QColor(theme.blend(pal["selection"], pal["bg"]))
+        self._pen_border = self._qcolor(pal["border"])
+        self._pen_selected_border = QColor(pal["accent"])
+        self._type_tint_color = QColor(pal["type_tint"])
 
     def set_icon_size(self, px: int) -> None:
         """Chamado pela AssetGridView quando o slider de tamanho muda."""
@@ -140,7 +147,7 @@ class AssetCardDelegate(QStyledItemDelegate):
             painter.drawPixmap(x, y, pix)
         else:
             painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(QColor(theme.TYPE_TINT))
+            painter.setBrush(self._type_tint_color)
             painter.drawRoundedRect(QRectF(rect), _RADIUS - 2, _RADIUS - 2)
 
         if bool(index.data(HIDDEN_ROLE)):

@@ -58,7 +58,7 @@ def _quadradinho(color: str | None, tam: int) -> QPixmap:
     """O visual de sempre (pré-Fatia 33): quadrado da cor da tag. Continua
     sendo o padrão de quem não escolheu ícone."""
     pix = QPixmap(tam, tam)
-    pix.fill(QColor(color) if color else QColor(theme.TEXT_MUTED))
+    pix.fill(QColor(color) if color else QColor(theme.current_colors()["text_muted"]))
     return pix
 
 
@@ -68,7 +68,7 @@ def pixmap_for(icon: str | None, color: str | None, tam: int = 12) -> QPixmap:
     if not icon:
         return _quadradinho(color, tam)
     try:
-        return icons.pixmap(icon, cor=color or theme.TEXT_MUTED, tam=tam)
+        return icons.pixmap(icon, cor=color or theme.current_colors()["text_muted"], tam=tam)
     except FileNotFoundError:
         # Ícone gravado no banco que não existe mais como arquivo (SVG
         # removido/renomeado). Sem esta guarda, o reload da árvore INTEIRA

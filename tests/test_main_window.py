@@ -287,6 +287,47 @@ def test_restaurar_layout_reexibe_paineis_ocultos(janela, qapp):
     assert all(tamanho > 0 for tamanho in janela._left_splitter.sizes())
 
 
+def test_desligar_todos_os_paineis_nao_incha_a_barra_de_busca(janela, qapp):
+    """Bug relatado pelo Rafael (Fatia 43): desligar os painéis pelo menu
+    Janela fazia a barra de busca inchar até quase tomar a tela — os dois
+    itens do QVBoxLayout central disputavam o espaço sobrando sem
+    prioridade nenhuma entre eles. `setStretchFactor` garante que o
+    splitter (painéis + grade) sempre fica com o espaço extra."""
+    janela.resize(1200, 800)
+    janela.show()
+    qapp.processEvents()
+
+    for acao in janela._window_menu_actions:
+        acao.setChecked(False)
+    qapp.processEvents()
+    qapp.processEvents()
+
+    barra_de_busca = janela.search_box.parentWidget()
+    # Nunca deveria passar de umas poucas dezenas de pixels — bem longe dos
+    # 356px medidos com o bug presente.
+    assert barra_de_busca.height() < 100
+
+
+def test_checks_de_filtro_moraram_no_menu_janela(janela):
+    """Fatia 43: fav_check/group_check/deps_check/hidden_check saíram da
+    barra de busca e viram QAction marcável no menu Janela."""
+    from PySide6.QtGui import QAction
+
+    for atributo in ("fav_check", "group_check", "deps_check", "hidden_check"):
+        acao = getattr(janela, atributo)
+        assert isinstance(acao, QAction)
+        assert acao.isCheckable()
+        assert acao in janela._menu_janela.actions()
+
+
+def test_size_slider_mora_na_status_bar_nao_no_breadcrumb(janela):
+    """Fatia 43, opção C: o slider de tamanho saiu da barra do breadcrumb
+    (lotada) e virou widget permanente do rodapé."""
+    from PySide6.QtWidgets import QStatusBar
+
+    assert isinstance(janela.size_slider.parentWidget(), QStatusBar)
+
+
 def test_filtros_nao_quebram_a_grid(janela, qapp):
     janela.search_box.setText("textura")
     janela._apply_filters()

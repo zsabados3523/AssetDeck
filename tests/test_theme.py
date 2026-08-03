@@ -125,6 +125,58 @@ def test_contraste_do_rotulo_sobre_o_card_sem_miniatura():
     assert theme.contrast_ratio(theme.ON_TYPE_TINT, theme.TYPE_TINT) >= 4.5
 
 
+# ------------------------------------------------------ modo escuro (F43) --
+
+@pytest.mark.parametrize("separation", list(theme.SEPARATION))
+def test_contraste_do_texto_sobre_o_painel_escuro(separation):
+    """Mesma régua do modo claro (WCAG, pedido do Rafael) — só a paleta
+    escura precisa passar no mesmo mínimo, luminância invertida."""
+    variant = theme.Variant(separation=separation, mode="escuro")
+    superficie = theme.surface_solid(variant)
+    assert theme.contrast_ratio(theme.TEXT_DARK, superficie) >= 4.5
+    assert theme.contrast_ratio(theme.TEXT_MUTED_DARK, superficie) >= 3.0
+    assert theme.contrast_ratio(theme.WARNING_DARK, superficie) >= 4.5
+    assert theme.contrast_ratio(theme.DANGER_DARK, superficie) >= 4.5
+    assert theme.contrast_ratio(theme.ACCENT_DARK, superficie) >= 4.5
+
+
+@pytest.mark.parametrize("separation", list(theme.SEPARATION))
+def test_contraste_do_texto_selecionado_escuro(separation):
+    """Seleção no escuro é branco translúcido sobre o fundo escuro (o
+    inverso do preto translúcido sobre fundo claro) — mesma legibilidade
+    mínima."""
+    variant = theme.Variant(separation=separation, mode="escuro")
+    pastilha = theme.blend(theme.SELECTION_DARK, theme.surface_solid(variant))
+    assert theme.contrast_ratio(theme.TEXT_DARK, pastilha) >= 4.5
+    assert theme.contrast_ratio(theme.TEXT_MUTED_DARK, pastilha) >= 3.0
+
+
+def test_contraste_do_texto_sobre_o_destaque_e_sobre_o_popup_escuro():
+    assert theme.contrast_ratio(theme.ON_ACCENT_DARK, theme.ACCENT_DARK) >= 4.5
+    assert theme.contrast_ratio(theme.TEXT_DARK, theme.POPOVER_DARK) >= 4.5
+    assert theme.contrast_ratio(theme.TEXT_DARK, theme.BG_DARK) >= 4.5
+
+
+def test_contraste_do_rotulo_sobre_o_card_sem_miniatura_escuro():
+    assert theme.contrast_ratio(theme.ON_TYPE_TINT_DARK, theme.TYPE_TINT_DARK) >= 4.5
+
+
+def test_apply_theme_no_modo_escuro_nao_lanca_key_error(qapp):
+    """`build_qss`/`Template.substitute` são estritos de propósito — token
+    faltando levanta na hora. Roda os dois modos pra pegar qualquer token
+    de cor que eu tenha esquecido de mapear em `_paleta()`."""
+    theme.apply_theme(qapp, theme.Variant(mode="escuro"))
+    theme.apply_theme(qapp, theme.Variant(mode="claro"))  # devolve pro padrão
+
+
+def test_current_colors_reflete_o_ultimo_apply_theme(qapp):
+    theme.apply_theme(qapp, theme.Variant(mode="escuro"))
+    assert theme.current_colors()["bg"] == theme.BG_DARK
+
+    theme.apply_theme(qapp, theme.Variant(mode="claro"))
+    assert theme.current_colors()["bg"] == theme.BG
+
+
 # ---------------------------------------------------------- fundo (grão) --
 
 def test_fundo_liso_nao_gera_ladrilho():
@@ -376,7 +428,7 @@ def test_vitrine_abre_com_as_amostras(tema_isolado):
     janela.show()
     tema_isolado.processEvents()
 
-    assert set(janela._combos) == {"background", "separation", "radius", "font"}
+    assert set(janela._combos) == {"background", "separation", "radius", "font", "mode"}
     assert "contraste" in janela.rodape.text()
 
     janela._combos["separation"].setCurrentIndex(2)  # dispara o reaplicar

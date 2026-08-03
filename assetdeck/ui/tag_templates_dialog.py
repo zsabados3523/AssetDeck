@@ -91,7 +91,7 @@ class TagTemplateDialog(QDialog):
                 # Cor esmaecida em vez de setDisabled: no Qt, desabilitar um
                 # item apaga os FILHOS junto, e aí "Materiais (já existe)"
                 # fazia parecer que Madeira/Pedra/Vidro também não viriam.
-                item.setForeground(0, QBrush(QColor(theme.TEXT_MUTED)))
+                item.setForeground(0, QBrush(QColor(theme.current_colors()["text_muted"])))
                 existentes += 1
             else:
                 novas += 1

@@ -45,7 +45,7 @@ class CategoryButton(QToolButton):
         self._ext_checks: dict[str, QCheckBox] = {}
         self._total = 0
 
-        self.setIcon(icons.icon(categoria.icon, theme.TEXT_MUTED))
+        self.setIcon(icons.icon(categoria.icon, theme.current_colors()["text_muted"]))
         self.setIconSize(QSize(18, 18))
         # Só ícone + setinha (pedido do Rafael depois de ver a barra com os
         # rótulos): nome e contagem vivem no tooltip.
@@ -57,6 +57,10 @@ class CategoryButton(QToolButton):
         self._menu = QMenu(self)
         self.setMenu(self._menu)
         self._sync_label()
+
+    def refresh_theme(self) -> None:
+        """Reaplica o ícone com a cor do modo atual (Fatia 43)."""
+        self.setIcon(icons.icon(self.categoria.icon, theme.current_colors()["text_muted"]))
 
     def reload(self, ext_counts: dict[str, int], total: int) -> None:
         """Reconstrói o checklist de extensões preservando o que estava
@@ -156,6 +160,12 @@ class CategoryBar(QWidget):
             b.changed.connect(self.changed)
             layout.addWidget(b)
             self.buttons[categoria.key] = b
+
+    def refresh_theme(self) -> None:
+        """Reaplica os ícones de todos os botões com a cor do modo atual
+        (Fatia 43)."""
+        for b in self.buttons.values():
+            b.refresh_theme()
 
     def reload(self, conn: sqlite3.Connection, counts: dict[str, int]) -> None:
         """`counts`: contagem por categoria (de `assets_repo.count_by_category`)."""
