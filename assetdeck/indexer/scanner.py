@@ -275,11 +275,13 @@ def _process_file(conn, library_id, root, path, known, seen, stats) -> None:
              campos["rating"], campos["starred"], campos["notes"]),
         )
         if side:
-            # Tags do sidecar voltam como caminhos ('Materiais/Madeira')
+            # Tags do sidecar voltam com cor/ícone de cada elo (Fatia 45) —
+            # `_restorable_tags` já normalizou formato 1 (sem cor/ícone) e
+            # formato 2 (com) pro mesmo formato de cadeia.
             from assetdeck.db.repos import tags as tags_repo
 
-            for caminho in restorable_fields(side).get("tags", []):
-                tid = tags_repo.get_or_create_path(conn, caminho)
+            for item in restorable_fields(side).get("tags", []):
+                tid = tags_repo.get_or_create_chain(conn, item["chain"])
                 if tid is not None:
                     conn.execute(
                         "INSERT OR IGNORE INTO asset_tags (asset_id, tag_id, source) "

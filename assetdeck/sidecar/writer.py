@@ -16,10 +16,17 @@ from pathlib import Path
 from uuid import uuid4
 
 from assetdeck.db.repos import assets as assets_repo
+from assetdeck.db.repos import tags as tags_repo
 
 log = logging.getLogger(__name__)
 
-FORMAT_VERSION = 1
+# Fatia 45: formato 2 grava cada tag como {"path", "chain":[{"name","color",
+# "icon"}, ...]} em vez de só a string do caminho — sem isso, apagar o banco
+# e reindexar devolvia as tags cinzas e sem ícone (a cor tinha esse buraco
+# desde a Fatia 8; o ícone só herdou o mesmo problema na Fatia 33).
+# `sidecar/reader.py` ainda lê sidecars formato 1 (Rafael tem sidecars
+# antigos na biblioteca real) — só perde cor/ícone dos elos que ele trazia.
+FORMAT_VERSION = 2
 
 
 def sidecar_path(primary_abs: Path) -> Path:
@@ -41,6 +48,16 @@ def write_for_asset(conn: sqlite3.Connection, library_root: Path, asset_id: int)
                     asset_id, primary.parent)
         return None
 
+    # Formato 2 (Fatia 45): cada tag do asset com o caminho E a cadeia
+    # completa de {name, color, icon} da raiz até ela — não só o nome, como
+    # o formato 1 fazia (`bundle["tags"]`, ainda usado pela ponte com o
+    # Blender em bridge/handlers.py, que não precisa de cor/ícone).
+    tag_ids = [t["id"] for t in tags_repo.tags_of(conn, asset_id)]
+    tags_detalhado = [
+        {"path": tags_repo.tag_path(conn, tid), "chain": tags_repo.tag_chain(conn, tid)}
+        for tid in tag_ids
+    ]
+
     data = {
         "assetdeck": FORMAT_VERSION,
         "uuid": bundle["uuid"],
@@ -49,7 +66,7 @@ def write_for_asset(conn: sqlite3.Connection, library_root: Path, asset_id: int)
         "rating": bundle["rating"],
         "starred": bool(bundle["starred"]),
         "notes": bundle["notes"],
-        "tags": bundle["tags"],       # preenchido de verdade na Fatia 8
+        "tags": tags_detalhado,
         "custom": bundle["custom"],   # preenchido quando houver EAV na UI (F3)
         "files": bundle["files"],
     }

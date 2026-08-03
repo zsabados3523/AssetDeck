@@ -752,20 +752,40 @@ falhava do jeito descrito; com o fix, passa igual.
 **Deu certo quando:** `pytest -q` continua verde mesmo com algo ocupando a
 porta 45017. 577 testes verdes.
 
-### ☐ Fatia 45 — Cor e ícone de tag não sobrevivem ao sidecar
-Achado ao fatiar a 33. O sidecar grava tags como lista plana de caminhos
-(`sidecar/writer.py:52` → `["Materiais/Madeira"]`) e `reader.py:52-56`
-valida como `list[str]`; a restauração em `indexer/scanner.py` chama
-`get_or_create_path`, que recria a hierarquia **sem cor e sem ícone**.
-Ou seja: apagar o banco e reindexar devolve as tags, mas cinzas e sem
-ícone.
+### ☑ Fatia 45 — Cor e ícone de tag não sobrevivem ao sidecar
+Achado ao fatiar a 33. O sidecar gravava tags como lista plana de caminhos
+(`["Materiais/Madeira"]`) e a restauração em `indexer/scanner.py` chamava
+`get_or_create_path`, que recria a hierarquia **sem cor e sem ícone**. Ou
+seja: apagar o banco e reindexar devolvia as tags, mas cinzas e sem ícone
+— buraco que existia desde a Fatia 8 (cor); o ícone só herdou o mesmo
+problema na Fatia 33.
 
-**A cor tem esse buraco desde a Fatia 8** — o ícone só herdou o mesmo
-problema, por isso não foi consertado dentro da 33. Resolver os dois
-juntos: exige mudar o formato de `tags` de string para objeto, o que
-quebra o `FORMAT_VERSION = 1` do sidecar (`writer.py:22`) e o validador
-do reader — precisa de versionamento de formato com leitura das duas
-formas.
+**Sidecar formato 2** (`sidecar/writer.py`, `FORMAT_VERSION = 2`): `tags`
+virou lista de `{"path", "chain": [{"name","color","icon"}, ...]}` — a
+cadeia INTEIRA (raiz até a folha), não só o nome de cada elo. Precisava
+ser a cadeia toda, não só a folha: um ancestral como "Materiais" tem cor
+própria mesmo sem ser a tag diretamente atribuída ao asset, e só aparece
+em sidecars onde alguma folha descende dele.
+
+- `db/repos/tags.py`: `tag_chain()` (lê a cadeia com cor/ícone) e
+  `get_or_create_chain()` (recria com cor/ícone — um elo que já existe no
+  banco NÃO é sobrescrito, mesma regra "soma, nunca substitui" da Fatia 35).
+- `sidecar/reader.py::_restorable_tags` normaliza os DOIS formatos (1 e 2)
+  pro mesmo formato de saída — `scanner.py` não precisa saber de qual
+  veio. Sidecars formato 1 (os que já existem na biblioteca real do
+  Rafael) continuam sendo lidos, só sem cor/ícone — nunca existiu neles.
+- `read_sidecar` aceita `assetdeck` 1 OU 2 (só uma versão 3+ desconhecida
+  é rejeitada).
+- **Bridge com o Blender não mudou:** `bridge/handlers.py` usa
+  `assets_repo.get_bundle()["tags"]`, que continua `list[str]` — só o
+  sidecar (`sidecar/writer.py`) busca a cadeia detalhada direto via
+  `tags_repo`, sem tocar no formato usado pela ponte.
+- Zero DDL: `tags.color`/`tags.icon` já existiam desde o schema v1.
+
+**Deu certo quando:** setar cor numa tag raiz e ícone numa subtag,
+taggear um asset com a folha, apagar o banco e reindexar — cor e ícone de
+TODOS os elos da cadeia voltam idênticos (não só o nome). 588 testes
+verdes (era 582).
 
 ---
 

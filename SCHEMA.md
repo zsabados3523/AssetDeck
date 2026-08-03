@@ -206,14 +206,22 @@ Um por asset, criado ao lado do arquivo principal:
 
 ```json
 {
-  "assetdeck": 1,
+  "assetdeck": 2,
   "uuid": "9f3c…",
   "name": "Concreto Rústico 4K",
   "asset_type": "pbr_set",
   "rating": 4,
   "starred": true,
   "notes": "usei na fachada do projeto X",
-  "tags": ["Materiais/Concreto", "Rústico"],
+  "tags": [
+    {
+      "path": "Materiais/Concreto",
+      "chain": [
+        {"name": "Materiais", "color": "#7a8c99", "icon": null},
+        {"name": "Concreto", "color": null, "icon": "tag-concreto"}
+      ]
+    }
+  ],
   "custom": {"Fornecedor": "ambientCG"},
   "files": ["ConcreteRustic_4K_basecolor.jpg", "…"]
 }
@@ -224,6 +232,12 @@ Regras:
 - Escrito de forma atômica (arquivo temporário + rename) para nunca ficar pela metade.
 - Na reindexação, um sidecar encontrado **restaura** os metadados para o banco
   (é o seguro contra corrupção do .db, junto com o backup rotativo diário).
+- **Formato 2 (Fatia 45):** `tags` virou lista de `{path, chain}` — cada elo
+  da cadeia (raiz até a folha) carrega a própria cor/ícone, não só o nome.
+  Sem isso, apagar o banco e reindexar devolvia as tags cinzas e sem ícone.
+  Sidecars formato 1 (`"tags": ["Materiais/Concreto"]`, sem cor/ícone)
+  escritos por versões anteriores do app continuam sendo lidos —
+  `sidecar/reader.py::_restorable_tags` normaliza os dois formatos.
 
 ## Estratégia de relocalização (resumo)
 1. Rescan acha o arquivo no `rel_path` esperado com mesmo tamanho+mtime → OK.

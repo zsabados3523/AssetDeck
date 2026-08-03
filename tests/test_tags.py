@@ -47,6 +47,54 @@ def test_criar_tag_duplicada_devolve_a_existente(env):
     assert a == b
 
 
+def test_tag_chain_traz_cor_e_icone_de_cada_elo(env):
+    """Fatia 45: `tag_chain` é o que o sidecar usa pra não perder cor/ícone
+    dos ANCESTRAIS de uma tag, não só da folha."""
+    conn, _, _ = env
+    materiais = tags_repo.create(conn, "Materiais", color="#111111")
+    madeira = tags_repo.create(conn, "Wood", parent_id=materiais, icon="tag-madeira")
+    nogueira = tags_repo.create(conn, "Oak", parent_id=madeira)
+
+    cadeia = tags_repo.tag_chain(conn, nogueira)
+
+    assert cadeia == [
+        {"name": "Materiais", "color": "#111111", "icon": None},
+        {"name": "Wood", "color": None, "icon": "tag-madeira"},
+        {"name": "Oak", "color": None, "icon": None},
+    ]
+
+
+def test_get_or_create_chain_cria_com_cor_e_icone(env):
+    conn, _, _ = env
+    cadeia = [
+        {"name": "Materiais", "color": "#a1b2c3", "icon": None},
+        {"name": "Concreto", "color": None, "icon": "tag-concreto"},
+    ]
+
+    tid = tags_repo.get_or_create_chain(conn, cadeia)
+
+    assert tags_repo.tag_path(conn, tid) == "Materiais/Concreto"
+    folha = conn.execute("SELECT icon FROM tags WHERE id = ?", (tid,)).fetchone()
+    assert folha["icon"] == "tag-concreto"
+    raiz = conn.execute("SELECT color FROM tags WHERE name = 'Materiais'").fetchone()
+    assert raiz["color"] == "#a1b2c3"
+
+
+def test_get_or_create_chain_nao_sobrescreve_tag_existente(env):
+    """Mesma regra da Fatia 35: aplicar SOMA, nunca substitui — um elo que
+    já existe no banco mantém a cor/ícone que já tinha."""
+    conn, _, _ = env
+    materiais = tags_repo.create(conn, "Materiais", color="#original")
+
+    tid = tags_repo.get_or_create_chain(
+        conn, [{"name": "Materiais", "color": "#viria-do-sidecar", "icon": None}]
+    )
+
+    assert tid == materiais
+    row = conn.execute("SELECT color FROM tags WHERE id = ?", (tid,)).fetchone()
+    assert row["color"] == "#original"
+
+
 def test_filtro_por_tag_inclui_subtags(env):
     conn, _, _ = env
     madeira = tags_repo.create(conn, "Wood")

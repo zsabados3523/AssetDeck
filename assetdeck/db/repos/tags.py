@@ -118,11 +118,52 @@ def tag_path(conn: sqlite3.Connection, tag_id: int) -> str:
 
 def get_or_create_path(conn: sqlite3.Connection, path: str) -> int | None:
     """'Materiais/Madeira' → id da folha, criando o caminho se preciso.
-    (É como o sidecar restaura tags num banco renascido.)"""
+    (É como o sidecar restaura tags num banco renascido.)
+
+    Sem cor/ícone (Fatia 45: esse é o motivo de eles não sobreviverem a
+    apagar o banco com sidecars ANTIGOS — formato 1 só guardava o nome).
+    Sidecars novos (formato 2) usam `get_or_create_chain` abaixo."""
     parent: int | None = None
     tag_id: int | None = None
     for parte in [p.strip() for p in path.split("/") if p.strip()]:
         tag_id = create(conn, parte, parent_id=parent)
+        parent = tag_id
+    return tag_id
+
+
+def tag_chain(conn: sqlite3.Connection, tag_id: int) -> list[dict]:
+    """Da raiz até `tag_id`: [{"name","color","icon"}, ...] (Fatia 45) —
+    o que o sidecar precisa pra CADA elo do caminho sobreviver a apagar o
+    banco, não só o nome (`tag_path` já fazia isso, mas descartava cor e
+    ícone no meio do caminho)."""
+    partes: list[dict] = []
+    atual: int | None = tag_id
+    while atual is not None:
+        row = conn.execute(
+            "SELECT name, color, icon, parent_id FROM tags WHERE id = ?", (atual,)
+        ).fetchone()
+        if row is None:
+            break
+        partes.append({"name": row["name"], "color": row["color"], "icon": row["icon"]})
+        atual = row["parent_id"]
+    return list(reversed(partes))
+
+
+def get_or_create_chain(conn: sqlite3.Connection, chain: list[dict]) -> int | None:
+    """Como `get_or_create_path`, mas cada elo carrega cor/ícone (Fatia 45).
+
+    Um elo que JÁ existe no banco não é alterado — `create()` devolve a
+    tag existente sem tocar em cor/ícone (mesma regra de "soma, nunca
+    substitui" da Fatia 35). Só um elo criado DO ZERO herda a cor/ícone do
+    sidecar."""
+    parent: int | None = None
+    tag_id: int | None = None
+    for elo in chain:
+        nome = (elo.get("name") or "").strip()
+        if not nome:
+            continue
+        tag_id = create(conn, nome, parent_id=parent,
+                        color=elo.get("color"), icon=elo.get("icon"))
         parent = tag_id
     return tag_id
 
