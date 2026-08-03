@@ -642,11 +642,33 @@ montada): os 5 menus aparecem na barra, "Ferramentas → Blender" mostra as
 mesmas 4 ações de antes, "Janela" desliga/religa cada painel, "Restaurar
 layout padrão" devolve os painéis escondidos. 577 testes verdes (era 569).
 
-### ☐ Fatia 37 — Compatibilidade com outros formatos
-Revit, Maya, SketchUp, USD, Alembic etc. Maior escopo da lista depois da
-34 — cada formato pode precisar de abordagem própria (metadados, preview,
-dependências). Avaliar prioridade por formato com o Rafael antes de
-começar.
+### ☑ Fatia 37 — Compatibilidade com outros formatos
+Decisão do Rafael (2026-08-03), depois de eu mapear custo por formato:
+**Revit (.rvt), SketchUp (.skp), USD (.usd/.usda/.usdc/.usdz) e Alembic
+(.abc)** — Maya ficou de fora. **Só reconhecer e catalogar**, sem tentar
+extrair preview embutido (só o `.skp` teria essa convenção, sem lib
+pronta no projeto). Entram junto de "Modelos", sem categoria própria.
+
+**7 linhas no `EXT_MAP`** (`indexer/scanner.py`), mapeando pra
+`asset_type='model'` — já existente no enum, **zero migration**. Todo o
+resto do pipeline decide comportamento pelo `asset_type`, não pela
+extensão, então isso resolve de graça: categoria "Modelos"
+(`categories.py:21`), detecção de dependência de texturas vizinhas
+(`dependencies.py:28`, mesma convenção do `.blend`) e chip de extensão
+no card — nenhum dos três precisou de código novo.
+
+**Deu certo quando** (verificado com a `MainWindow` real, biblioteca
+sintética): `.rvt`/`.skp`/`.usdz`/`.abc` aparecem na grade com chip
+certo e pastilha genérica (igual ao `.blend` hoje); uma textura vizinha
+de um deles some da visão padrão (virou dependência, mesmo mecanismo do
+`.blend`, sem mudar `dependencies.py`); os 4 formatos caem em "Modelos"
+na barra de categoria. 596 testes verdes.
+
+**Nota**: não dá pra testar com arquivo real de Revit/SketchUp/USD/
+Alembic (binários proprietários complexos, nenhum na testlib) — os
+testes usam extensão certa em conteúdo dummy, suficiente porque o
+scanner só olha o sufixo pra classificar. Vale o Rafael confirmar com um
+arquivo de verdade se tiver algum à mão.
 
 ### ☐ Fatia 38 — Render de previews em lote (bloqueada nesta sessão — sem Blender)
 Cena de estúdio configurável pra gerar capas de vários assets de uma vez

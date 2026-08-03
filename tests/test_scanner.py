@@ -63,6 +63,18 @@ def test_classify_mapeia_tipos_certos():
     assert classify(Path("x.xyz")) is None
 
 
+def test_classify_outros_programas_vira_model():
+    """Fatia 37: Revit/SketchUp/USD/Alembic — só reconhecer e catalogar,
+    sem preview real (sem SDK do fabricante). Entram como 'model' de
+    propósito: categoria, dependências e chip de extensão já funcionam
+    automático, sem precisar de valor novo no enum."""
+    assert classify(Path("Projeto.RVT")) == "model"     # Revit
+    assert classify(Path("fachada.skp")) == "model"      # SketchUp
+    for ext in ("usd", "usda", "usdc", "usdz"):
+        assert classify(Path(f"cena.{ext}")) == "model", ext
+    assert classify(Path("anim.abc")) == "model"          # Alembic
+
+
 def test_fingerprint_estavel_e_sensivel(tmp_path):
     a = tmp_path / "a.bin"
     b = tmp_path / "b.bin"
