@@ -9,7 +9,7 @@ from pathlib import Path
 from PySide6.QtCore import QModelIndex, QSize, Qt, QTimer
 from PySide6.QtGui import QPixmapCache
 from PySide6.QtWidgets import (
-    QCheckBox,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -98,8 +98,8 @@ class MainWindow(QMainWindow):
             "Buscar por nome…  (ex.: concreto, wood 4k, madeira E rústico, pedra OU metal)"
         )
         self.search_box.setClearButtonEnabled(True)
-        self.search_box.addAction(
-            icons.icon("search", theme.TEXT_MUTED),
+        self._search_icon_action = self.search_box.addAction(
+            icons.icon("search", theme.current_colors()["text_muted"]),
             QLineEdit.ActionPosition.LeadingPosition,
         )
         self._search_debounce = QTimer(self)
@@ -133,52 +133,25 @@ class MainWindow(QMainWindow):
         self.color_filter = FilterButton("palette", PALETA_CORES, swatch=True)
         self.color_filter.changed.connect(self._apply_filters)
 
-        # Toggle do Rafael: ver sets PBR como 1 card (ligado) ou cada mapa
-        # separado (desligado). Só visualização — o banco não muda.
-        self.group_check = QCheckBox("Agrupar PBR")
-        self.group_check.setChecked(True)
-        self.group_check.toggled.connect(
-            lambda c: (self.model.set_expand_sets(not c), self.refresh_count())
-        )
-
-        self.fav_check = QCheckBox("Só favoritos")
-        self.fav_check.setToolTip("Mostrar só favoritos")
-        self.fav_check.toggled.connect(lambda _c: self._apply_filters())
-
-        # Sugestão do Rafael: texturas que acompanham um .blend/.fbx são
-        # dependências dele — poluem a grade e o Blender. Ocultas por padrão.
-        self.deps_check = QCheckBox("Mostrar dependências")
-        self.deps_check.setToolTip(
-            "Texturas que acompanham um .blend/.fbx irmão (mapas de um material\n"
-            "convertido, texturas de um modelo). Desmarcado, você vê só o .blend."
-        )
-        self.deps_check.setChecked(False)
-        self.deps_check.toggled.connect(lambda _c: self._apply_filters())
-
-        self.hidden_check = QCheckBox("Mostrar ocultos")
-        self.hidden_check.setToolTip(
-            "Inclui imagens ocultadas por terem virado preview de um modelo"
-        )
-        self.hidden_check.toggled.connect(lambda _c: self._apply_filters())
-
+        # fav_check/group_check/deps_check/hidden_check saíram daqui (Fatia
+        # 43) — viram QAction marcável no menu Janela, junto dos toggles de
+        # painel (_setup_window_menu). QAction tem isChecked()/setChecked()/
+        # toggled igual QCheckBox, então nada que já lê esses 4 atributos
+        # precisou mudar, só o tipo do widget.
         self.progress = QProgressBar()
         self.progress.setVisible(False)
         self.progress.setMaximumWidth(220)
         self.rescan_btn = QPushButton("Reindexar")
         self.rescan_btn.setObjectName("primary")
-        self.rescan_btn.setIcon(icons.icon("refresh", theme.ON_ACCENT))
+        self.rescan_btn.setIcon(icons.icon("refresh", theme.current_colors()["on_accent"]))
         self.rescan_btn.clicked.connect(self.start_scan)
 
-        # Uma linha só (pedido do Rafael, Fatia 28c): busca + os quatro
-        # filtros mais usados no dia a dia + reindexar. "Incluir subpastas"
-        # saiu de vez (ele não via caso de uso pra desligar) e Tipos/Nota/
-        # Resolução foram pra linha do breadcrumb, como ícone.
+        # Busca + reindexar (Fatia 28d/43). "Incluir subpastas" saiu de vez
+        # (ele não via caso de uso pra desligar), Tipos/Nota/Resolução foram
+        # pra linha do breadcrumb como ícone (Fatia 28c), e os 4 checkboxes
+        # de filtro foram pro menu Janela (Fatia 43).
         top = QHBoxLayout()
         top.addWidget(self.search_box, stretch=1)
-        top.addWidget(self.fav_check)
-        top.addWidget(self.group_check)
-        top.addWidget(self.deps_check)
-        top.addWidget(self.hidden_check)
         top.addWidget(self.progress)
         top.addWidget(self.rescan_btn)
 
@@ -283,19 +256,22 @@ class MainWindow(QMainWindow):
         self.up_btn = self._nav_button("arrow-up", "Subir um nível (Alt+↑)",
                                        self._go_up)
 
-        # Tipos / Nota / Resolução moram AQUI (pedido do Rafael, Fatia 28c):
-        # entre o título da pasta e o slider, como ícone compacto — não mais
-        # na barra de filtros de cima.
+        # Tipos / Nota / Resolução / Cor moram AQUI (Fatia 28c/39): entre o
+        # título da pasta e os filtros, como ícone compacto — não mais na
+        # barra de busca de cima. Opção C do overhaul visual (Fatia 43):
+        # navegação/caminho, categorias e filtros ficam agrupados com um
+        # traço fino entre cada grupo, em vez de tudo solto na mesma linha.
         breadcrumb_row = QHBoxLayout()
         breadcrumb_row.addWidget(self.back_btn)
         breadcrumb_row.addWidget(self.fwd_btn)
         breadcrumb_row.addWidget(self.up_btn)
         breadcrumb_row.addWidget(self.breadcrumb, stretch=1)
+        breadcrumb_row.addWidget(self._breadcrumb_divider())
         breadcrumb_row.addWidget(self.categories)
+        breadcrumb_row.addWidget(self._breadcrumb_divider())
         breadcrumb_row.addWidget(self.rating_filter)
         breadcrumb_row.addWidget(self.res_filter)
         breadcrumb_row.addWidget(self.color_filter)
-        breadcrumb_row.addWidget(self.size_slider)
 
         grid_container = QWidget()
         grid_layout = QVBoxLayout(grid_container)
@@ -337,6 +313,13 @@ class MainWindow(QMainWindow):
         layout.setSpacing(12)
         layout.addWidget(top_card)
         layout.addWidget(splitter)
+        # Bug relatado pelo Rafael: sem isso, desligar os painéis pelo menu
+        # Janela deixava a barra de busca inchar até quase tomar a tela
+        # inteira — os dois itens do QVBoxLayout disputavam o espaço extra
+        # sem prioridade nenhuma entre eles. O splitter (painéis + grade)
+        # SEMPRE fica com o espaço sobrando; a barra de busca nunca cresce
+        # além do próprio conteúdo.
+        layout.setStretchFactor(splitter, 1)
         self.setCentralWidget(central)
 
         # Navegação de pastas (Fatia 32), mesmas teclas de um navegador.
@@ -356,6 +339,9 @@ class MainWindow(QMainWindow):
         # QLabel solto na barra de filtros, junto de mais 10 widgets.
         self.footer_count = QLabel()
         self.statusBar().addPermanentWidget(self.footer_count)
+        # Slider de tamanho saiu da barra do breadcrumb pro rodapé (Fatia 43,
+        # opção C): libera espaço horizontal sem esconder a função.
+        self.statusBar().addPermanentWidget(self.size_slider)
         # É uma linha de status, não precisa da altura padrão do Fusion
         # (pedido do Rafael de enxutar o rodapé).
         self.statusBar().setMaximumHeight(24)
@@ -451,9 +437,20 @@ class MainWindow(QMainWindow):
 
     # ---- navegação de pastas (Fatia 32) ----
 
+    def _breadcrumb_divider(self) -> QFrame:
+        """Traço fino de 1px separando os grupos da barra do breadcrumb
+        (navegação+caminho / categorias / filtros) — Fatia 43, opção C
+        escolhida pelo Rafael entre os 3 esboços mostrados na tela."""
+        linha = QFrame()
+        linha.setObjectName("breadcrumbDivider")
+        linha.setFixedWidth(1)
+        return linha
+
     def _nav_button(self, icone: str, dica: str, slot) -> QToolButton:
         b = QToolButton()
-        b.setIcon(icons.icon(icone, theme.TEXT_MUTED))
+        b.setObjectName("ghost")  # sem moldura (Fatia 43) — pedido do Rafael,
+        # os botões de voltar/avançar/subir estavam pesados demais na tela
+        b.setIcon(icons.icon(icone, theme.current_colors()["text_muted"]))
         b.setIconSize(QSize(16, 16))
         b.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
         b.setToolTip(dica)
@@ -663,13 +660,65 @@ class MainWindow(QMainWindow):
         return menu
 
     def _setup_settings_menu(self):
+        from assetdeck import config
+
         menu = self.menuBar().addMenu("Configurações")
         self._top_menus.append(menu)
         menu.addAction("Preferências…", self._open_preferences)
         menu.addSeparator()
+
+        # Modo escuro (Fatia 43) — aplica na hora, mesmo padrão checkable
+        # do menu Janela; não precisa reabrir o app (diferente de
+        # bridge_port/bridge_enabled, que já estão de pé quando o app abre).
+        self.dark_mode_action = menu.addAction("Modo escuro")
+        self.dark_mode_action.setCheckable(True)
+        self.dark_mode_action.setChecked(config.load_config().get("theme_mode") == "escuro")
+        self.dark_mode_action.toggled.connect(self._toggle_dark_mode)
+
+        menu.addSeparator()
         menu.addAction("Abrir pasta de configuração", self._abrir_pasta_config)
         menu.addAction("Abrir pasta de logs", self._abrir_pasta_logs)
         return menu
+
+    def _toggle_dark_mode(self, escuro: bool) -> None:
+        from PySide6.QtWidgets import QApplication
+
+        from assetdeck import config
+        from assetdeck.ui import theme
+
+        modo = "escuro" if escuro else "claro"
+        theme.apply_theme(QApplication.instance(), theme.Variant(mode=modo))
+        self._refresh_theme_dependent_widgets()
+        cfg = config.load_config()
+        cfg["theme_mode"] = modo
+        config.save_config(cfg)
+        self.statusBar().showMessage(f"Modo {modo} aplicado.")
+
+    def _refresh_theme_dependent_widgets(self) -> None:
+        """Widgets que pintam cor "à mão" (fora do QSS) precisam ser
+        avisados na hora de trocar de modo claro/escuro — o QSS/paleta do
+        Qt já se atualiza sozinho com `apply_theme()`, mas um ícone
+        pré-tingido ou um QBrush cacheado, não (Fatia 43)."""
+        pal = theme.current_colors()
+
+        self.grid.itemDelegate().refresh_theme()
+        self.model.refresh_theme()
+        self.grid.viewport().update()
+
+        self.categories.refresh_theme()
+        self.rating_filter.refresh_theme()
+        self.res_filter.refresh_theme()
+        self.color_filter.refresh_theme()
+        self.details.refresh_theme()
+
+        self._search_icon_action.setIcon(icons.icon("search", pal["text_muted"]))
+        self.rescan_btn.setIcon(icons.icon("refresh", pal["on_accent"]))
+        for botao, nome_icone in (
+            (self.back_btn, "arrow-left"),
+            (self.fwd_btn, "arrow-right"),
+            (self.up_btn, "arrow-up"),
+        ):
+            botao.setIcon(icons.icon(nome_icone, pal["text_muted"]))
 
     def _setup_window_menu(self):
         menu = self.menuBar().addMenu("Janela")
@@ -688,6 +737,38 @@ class MainWindow(QMainWindow):
             acao.setChecked(True)
             acao.toggled.connect(lambda checked, w=widget: w.setVisible(checked))
             self._window_menu_actions.append(acao)
+        menu.addSeparator()
+
+        # Filtros que saíram da barra de busca (Fatia 43) — mesmo padrão
+        # marcável dos toggles de painel acima, não entram no "Restaurar
+        # layout padrão" (são filtro de conteúdo, não layout de painel).
+        self.group_check = menu.addAction("Agrupar PBR")
+        self.group_check.setCheckable(True)
+        self.group_check.setChecked(True)
+        self.group_check.toggled.connect(
+            lambda c: (self.model.set_expand_sets(not c), self.refresh_count())
+        )
+
+        self.fav_check = menu.addAction("Só favoritos")
+        self.fav_check.setCheckable(True)
+        self.fav_check.setToolTip("Mostrar só favoritos")
+        self.fav_check.toggled.connect(lambda _c: self._apply_filters())
+
+        self.deps_check = menu.addAction("Mostrar dependências")
+        self.deps_check.setCheckable(True)
+        self.deps_check.setToolTip(
+            "Texturas que acompanham um .blend/.fbx irmão (mapas de um material\n"
+            "convertido, texturas de um modelo). Desmarcado, você vê só o .blend."
+        )
+        self.deps_check.toggled.connect(lambda _c: self._apply_filters())
+
+        self.hidden_check = menu.addAction("Mostrar ocultos")
+        self.hidden_check.setCheckable(True)
+        self.hidden_check.setToolTip(
+            "Inclui imagens ocultadas por terem virado preview de um modelo"
+        )
+        self.hidden_check.toggled.connect(lambda _c: self._apply_filters())
+
         menu.addSeparator()
         menu.addAction("Restaurar layout padrão", self._restaurar_layout)
         return menu

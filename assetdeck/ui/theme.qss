@@ -64,6 +64,12 @@ QFrame#cardFlat {
     border-radius: $radius_card;
 }
 
+/* Traço fino separando grupos na barra do breadcrumb (Fatia 43) — largura
+ * fixa 1px definida em Python, aqui só a cor. */
+QFrame#breadcrumbDivider {
+    background-color: $hairline;
+}
+
 /* QScrollArea em si (moldura/fundo do viewport é responsabilidade do Python
  * — ver `scroll.viewport().setAutoFillBackground(False)` em details_panel.py;
  * o seletor `QScrollArea > QWidget` do QSS NÃO alcança o viewport de forma

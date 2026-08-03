@@ -313,9 +313,16 @@ class AssetGridModel(QAbstractListModel):
         pix = self._placeholders.get(chave)
         if pix is None:
             pix = QPixmap(self._icon_px, self._icon_px)
-            pix.fill(QColor(theme.TYPE_TINT))
+            pix.fill(QColor(theme.current_colors()["type_tint"]))
             self._placeholders[chave] = pix
         return pix
+
+    def refresh_theme(self) -> None:
+        """Limpa o cache de pastilhas "sem miniatura" (Fatia 43) — elas
+        guardam a cor já pintada num QPixmap, então trocar de modo claro/
+        escuro precisa esvaziar o cache pra próxima pintura pegar a cor
+        certa, em vez de continuar servindo a antiga."""
+        self._placeholders.clear()
 
 
 def _stacked_preview(model: AssetGridModel, rows: list) -> QPixmap:
