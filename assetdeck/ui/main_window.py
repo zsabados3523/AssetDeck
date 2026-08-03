@@ -230,6 +230,7 @@ class MainWindow(QMainWindow):
         self.details.preview_remove_requested.connect(self._on_preview_remove)
         self.details.property_value_changed.connect(self._on_property_value_changed)
         self.details.manage_properties_requested.connect(self._manage_properties)
+        self.details.check_textures_requested.connect(self._check_textures)
 
         # Caminho navegável acima da grade (Fatia 28, estilo Connecter): a
         # única pista de "onde estou" antes disso era o item selecionado na
@@ -892,6 +893,48 @@ class MainWindow(QMainWindow):
         dlg.exec()
         if dlg.changed:
             self._refresh_details_tags()  # recarrega o painel (inclui propriedades)
+
+    # ---- texturas faltando de um .blend (Fatia 40) ----
+
+    def _check_textures(self, _asset_id: int, caminho: str) -> None:
+        from PySide6.QtCore import Qt
+        from PySide6.QtWidgets import QApplication, QMessageBox
+
+        from assetdeck.blender.missing_textures import list_missing_textures
+        from assetdeck.blender.render import blender_command
+        from assetdeck.ui.missing_textures_dialog import MissingTexturesDialog
+
+        if blender_command() is None:
+            QMessageBox.warning(
+                self, "Blender não encontrado",
+                "Não achei o Blender nesta máquina. Instale com:\n\n"
+                "flatpak install flathub org.blender.Blender",
+            )
+            return
+
+        # Ação sob demanda de 1 asset, alguns segundos — cursor de espera
+        # em vez da infraestrutura de fila/progresso da Fatia 38 (só vale
+        # a pena pra job em lote pela biblioteca inteira).
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        try:
+            resultado = list_missing_textures(Path(caminho))
+        finally:
+            QApplication.restoreOverrideCursor()
+
+        if not resultado.ok:
+            QMessageBox.warning(self, "Checagem falhou", resultado.erro)
+            return
+        if not resultado.perdidas:
+            recado = "Nenhuma textura faltando."
+            if resultado.recuperadas_auto:
+                recado += (f" ({resultado.recuperadas_auto} estavam com caminho "
+                          "quebrado, mas foram religadas automaticamente.)")
+            QMessageBox.information(self, "Texturas em ordem", recado)
+            return
+
+        dlg = MissingTexturesDialog(Path(caminho), resultado.perdidas,
+                                    resultado.recuperadas_auto, self)
+        dlg.exec()
 
     # ---- notas / sidecar ----
 

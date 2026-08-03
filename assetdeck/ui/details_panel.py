@@ -41,6 +41,7 @@ class DetailsPanel(QWidget):
     preview_remove_requested = Signal(int)  # preview_id
     property_value_changed = Signal(int, int, object)  # asset_id, property_id, valor
     manage_properties_requested = Signal()  # botão 'Gerenciar propriedades…'
+    check_textures_requested = Signal(int, str)  # asset_id, caminho absoluto (Fatia 40)
 
     def __init__(self, library_root: Path, parent=None) -> None:
         super().__init__(parent)
@@ -81,6 +82,11 @@ class DetailsPanel(QWidget):
         self.open_folder_btn.clicked.connect(self._open_folder)
         self.open_file_btn = QPushButton("Abrir com app padrão")
         self.open_file_btn.clicked.connect(self._open_file)
+        # Só faz sentido pra .blend (Fatia 40) — os outros formatos de
+        # modelo (.fbx/.obj/.rvt/.skp/.usd*/.abc, Fatia 37) não têm esse
+        # conceito de textura religável por caminho dentro do arquivo.
+        self.check_textures_btn = QPushButton("Checar texturas…")
+        self.check_textures_btn.clicked.connect(self._request_check_textures)
         self._set_buttons(False)
 
         # Galeria de previews (Fatia 10): thumbs horizontais + capa
@@ -175,6 +181,7 @@ class DetailsPanel(QWidget):
         layout.addLayout(form)
         layout.addWidget(self.open_folder_btn)
         layout.addWidget(self.open_file_btn)
+        layout.addWidget(self.check_textures_btn)
         layout.addLayout(stars_row)
         layout.addWidget(self.multi_label)
         gallery_label = QLabel("GALERIA DE PREVIEWS")
@@ -215,9 +222,14 @@ class DetailsPanel(QWidget):
         self._paint_stars()
         self.fav_btn.setIcon(self._star_outline)
 
-    def _set_buttons(self, enabled: bool) -> None:
+    def _set_buttons(self, enabled: bool, path: Path | None = None) -> None:
         self.open_folder_btn.setEnabled(enabled)
         self.open_file_btn.setEnabled(enabled)
+        # "Checar texturas…" só faz sentido pra .blend (Fatia 40) — os
+        # outros formatos de modelo não têm textura religável por
+        # caminho dentro do próprio arquivo.
+        e_blend = enabled and path is not None and path.suffix.lower() == ".blend"
+        self.check_textures_btn.setVisible(e_blend)
 
     # ---- exibição ----
 
@@ -249,7 +261,7 @@ class DetailsPanel(QWidget):
         sumido = row["missing_since"] is not None
         if sumido:
             self.f_path.setText(f"{row['rel_path']}  ⚠ ARQUIVO SUMIDO")
-        self._set_buttons(not sumido)
+        self._set_buttons(not sumido, path)
 
     def _read_dims(self, path: Path) -> str:
         """Resolução lida na hora (só formatos raster; os demais mostram —)."""
@@ -440,3 +452,7 @@ class DetailsPanel(QWidget):
     def _open_file(self) -> None:
         if self._current:
             QDesktopServices.openUrl(QUrl.fromLocalFile(str(self._current)))
+
+    def _request_check_textures(self) -> None:
+        if self._current and self._current_asset_id is not None:
+            self.check_textures_requested.emit(self._current_asset_id, str(self._current))

@@ -755,14 +755,52 @@ algo parecido pro dHash — dá pra ficar perto), migration 006 adicionando
 28c) com paleta fixa de cores pra escolher, e `assets_repo._build_where`
 ganhando o termo de distância de cor.
 
-### ☐ Fatia 40 — Listar texturas faltando de um `.blend` (bloqueada nesta sessão — sem Blender)
-Detectar e listar mapas que um `.blend` espera mas não encontra na
-biblioteca (caminho quebrado, textura removida etc). **Não implementada
-nesta sessão automatizada:** mesma limitação da Fatia 38 — sem Blender
-neste ambiente não dá pra escrever/testar o script headless que abre o
-`.blend` e lista os datablocks de imagem com caminho quebrado (o
-equivalente inverso da relocalização de texturas que `blender/render.py`
-já faz na Fatia 16 — dá pra reaproveitar bastante lógica de lá).
+### ☑ Fatia 40 — Listar texturas faltando de um `.blend`
+Bloqueada pela sessão automatizada anterior por falta de Blender no
+ambiente dela — desbloqueada aqui, mesmo caso da Fatia 38.
+
+Decisões do Rafael (2026-08-03): reaproveita a mesma regra de
+`texturas_perdidas()` (toda imagem com caminho quebrado, sem filtrar por
+uso em material); sob demanda, um asset por vez (botão "Checar
+texturas…" no painel de detalhes, só pra `.blend`); sem persistência —
+calcula na hora, mostra num diálogo, nada grava no banco.
+
+- `blender/scripts/list_missing_textures.py` (novo) roda dentro do
+  Blender, **nunca escreve nada**. Roda a mesma relocalização automática
+  que o render já faz (`bpy.ops.file.find_missing_files`, só na cópia em
+  memória) e reporta **só o que continua quebrado depois** — é a
+  informação de fato acionável, já que o render (Fatia 16/38) resolve o
+  resto sozinho. Duplica ~15 linhas de `render_thumb.py` de propósito:
+  aquele script chama `main()` incondicionalmente no nível do módulo
+  (sem guarda de `__main__`), então importar de lá dispararia um render
+  por engano.
+- `blender/missing_textures.py` (novo): mesmo padrão de
+  `render.py::render_thumbnail` (subprocess + timeout, nunca levanta),
+  lendo uma linha `ASSETDECK_TEXTURAS_JSON {...}` isolada do stdout (uma
+  linha JSON só, não texto solto — o Blender imprime bastante ruído de
+  inicialização no mesmo stdout).
+- `DetailsPanel`: botão novo **visível só quando o arquivo é `.blend`**
+  e não está sumido — os formatos novos da Fatia 37 (`.rvt`/`.usd*`/
+  `.abc`) não são arquivos Blender, então o conceito nem se aplica.
+- `MissingTexturesDialog` (novo): tabela somente-leitura (textura +
+  caminho esperado) + resumo + "Abrir pasta do asset". Sem checkbox, sem
+  ação de aplicar — não há nada pra escrever: o que está quebrado é
+  referência interna do `.blend`, fora do alcance de escrita do app
+  (`relocator.py` só ajusta o banco do AssetDeck, nunca o conteúdo de um
+  `.blend`).
+
+**Descoberta rodando de verdade** (não achei escrevendo o teste, achei
+rodando contra o Blender real): criar uma imagem sintética via
+`bpy.data.images.new()` sem religar a nenhum material faz ela **sumir
+silenciosamente** do `.blend` ao salvar — precisa de
+`img.use_fake_user = True` pra sobreviver ao save. Sem isso os testes de
+integração real dariam "lista vazia" mesmo com a textura de propósito
+quebrada, um falso-negativo que passaria despercebido.
+
+**Deu certo quando:** 625 testes verdes (17 novos, incluindo 2 rodando o
+Blender de verdade). Verificado no app real: `.blend` sintético com uma
+imagem de caminho quebrado — botão aparece, checagem acha a textura
+certa (nome + caminho), diálogo mostra a tabela e o resumo.
 
 ### ☐ Fatia 41 — Múltiplas bibliotecas na UI (avaliada, não implementada — risco/escopo)
 Suportar mais de uma `library_root` ativa ao mesmo tempo, com seleção na
