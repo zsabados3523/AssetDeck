@@ -4,6 +4,13 @@ from __future__ import annotations
 
 import sqlite3
 
+# Tolerância do filtro de cor (Fatia 39): distância euclidiana máxima em RGB
+# (escala 0-441) pra considerar "da mesma cor". Calibrado olhando a grade
+# real, não só os testes sintéticos — larga o suficiente pra pegar variações
+# de iluminação/textura da MESMA cor, apertada o suficiente pra não misturar
+# cores vizinhas da paleta.
+COLOR_TOLERANCE = 90
+
 
 def count_active(conn: sqlite3.Connection) -> int:
     """Quantos assets existem (soft-deleted não contam)."""
@@ -27,6 +34,7 @@ def _build_where(
     include_dependencies: bool = True,
     collection_id: int | None = None,
     category_filters: list[dict] | None = None,
+    dominant_color: str | None = None,
 ) -> tuple[str, list]:
     """Trecho de WHERE + params compartilhado por `list_for_grid` e
     `count_by_category` — os dois precisam responder aos MESMOS filtros,
@@ -93,6 +101,10 @@ def _build_where(
         # Resolução do arquivo principal; sem dimensões conhecidas = fica de fora
         sql += " AND MAX(COALESCE(f.width, 0), COALESCE(f.height, 0)) >= ?"
         params.append(min_resolution)
+    if dominant_color:
+        sql += " AND color_distance(f.dominant_color, ?) <= ?"
+        params.append(dominant_color)
+        params.append(COLOR_TOLERANCE)
 
     if dir_prefix:
         if include_subdirs:
@@ -123,6 +135,7 @@ def list_for_grid(
     include_dependencies: bool = True,
     collection_id: int | None = None,
     category_filters: list[dict] | None = None,
+    dominant_color: str | None = None,
 ) -> list[dict]:
     """Assets para a grid (asset + arquivo principal), com filtros combináveis.
 
@@ -139,6 +152,9 @@ def list_for_grid(
       PBR vira um card próprio (só visualização; o banco não muda)
     - collection_id: só assets dentro dessa coleção, na ORDEM MANUAL em que
       foram arrastados para dentro (Fatia 17)
+    - dominant_color: cor (hex) escolhida na paleta fixa de busca por cor
+      (Fatia 39) — compara com `files.dominant_color` até `COLOR_TOLERANCE`
+      de distância; arquivo sem cor calculada (não-raster) fica de fora
     """
     join_files = ("JOIN files f ON f.asset_id = a.id" if expand_sets
                   else "JOIN files f ON f.asset_id = a.id AND f.is_primary = 1")
@@ -165,6 +181,7 @@ def list_for_grid(
         starred_only=starred_only, min_resolution=min_resolution,
         include_hidden=include_hidden, include_dependencies=include_dependencies,
         collection_id=collection_id, category_filters=category_filters,
+        dominant_color=dominant_color,
     )
     sql += where
 

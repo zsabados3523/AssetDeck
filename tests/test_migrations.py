@@ -43,18 +43,24 @@ def test_todas_as_tabelas_do_schema_v1_existem(conn):
     assert not faltando, f"Tabelas ausentes do schema v1: {faltando}"
 
 
-def test_versao_final_e_5(conn):
-    # 001 inicial + 002 group_locked + 003 hidden + 004 is_dependency + 005 phash
-    assert current_version(conn) == 5
+def test_versao_final_e_6(conn):
+    # 001 inicial + 002 group_locked + 003 hidden + 004 is_dependency +
+    # 005 phash + 006 dominant_color
+    assert current_version(conn) == 6
 
 
 def test_reaplicar_migrations_e_noop(conn):
-    assert apply_migrations(conn) == 5  # não explode nem duplica
+    assert apply_migrations(conn) == 6  # não explode nem duplica
 
 
 def test_files_ganha_coluna_phash(conn):
     colunas = {r["name"] for r in conn.execute("PRAGMA table_info(files)")}
     assert "phash" in colunas
+
+
+def test_files_ganha_coluna_dominant_color(conn):
+    colunas = {r["name"] for r in conn.execute("PRAGMA table_info(files)")}
+    assert "dominant_color" in colunas
 
 
 def test_migration_002_group_locked_default_zero(conn):

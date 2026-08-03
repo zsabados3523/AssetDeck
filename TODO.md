@@ -732,37 +732,93 @@ Blender); mudar a cor em Preferências e clicar em "Gerar capas" usa a
 cor nova sem reiniciar o app; as 3 cenas de teste saem visualmente
 diferentes no render real.
 
-### ☐ Fatia 39 — Busca por cor dominante (bloqueada nesta sessão — schema + design)
-Filtrar/buscar assets pela cor predominante da textura/preview. **Não
-implementada nesta sessão automatizada** por dois motivos, cada um já
-suficiente sozinho:
-1. **Mexe no schema do banco** (precisa de uma coluna nova tipo
-   `files.dominant_color`, com migration 006) — regra absoluta do
-   CLAUDE.md: "antes de tocar no schema, leia SCHEMA.md e avise o
-   Rafael". Aqui não tem como ele ver e responder antes de eu prosseguir.
-2. **Sem spec de produto:** "cor predominante" pode significar várias
-   coisas (média de pixel, cor mais frequente via quantização/k-means,
-   quantos "baldes" de cor mostrar na UI, distância de cor pra
-   "parecido") e o app não tem nenhum precedente de filtro por cor pra
-   copiar — é decisão de UX do Rafael, do jeito que o redesign visual
-   (F4) foi decidido junto com ele na tela, não fatiar sozinho.
+### ☑ Fatia 39 — Busca por cor dominante
+Desbloqueada nesta sessão: perguntei ao Rafael as duas coisas que faltavam
+e ele decidiu (2026-08-03): **cor média simples** (não quantização/k-means)
+e **paleta fixa de botões de cor** (não seletor livre). Confirmou também
+que podia mexer no schema.
 
-**Plano técnico pra quando ele confirmar** (pra não redescobrir nada):
-extrair a cor média (ou top-k via quantização, `Image.quantize`) no MESMO
-lugar que já abre a imagem pra thumb/phash (`thumbs/phash.py` já faz
-algo parecido pro dHash — dá pra ficar perto), migration 006 adicionando
-`files.dominant_color TEXT` (hex), filtro novo tipo `FilterButton` (Fatia
-28c) com paleta fixa de cores pra escolher, e `assets_repo._build_where`
-ganhando o termo de distância de cor.
+- `assetdeck/db/migrations/006_dominant_color.sql` — `files.dominant_color
+  TEXT`, NULL pra não-raster (mesmo padrão do phash). `SCHEMA.md`
+  atualizado.
+- `assetdeck/thumbs/dominant_color.py` (novo, espelha `thumbs/phash.py`):
+  cor média reamostrando a imagem inteira pra 1x1 pixel. Ligado no MESMO
+  lugar que já abre a imagem pro phash em `scanner.image_meta()` — não
+  abre o arquivo de novo.
+- `color_distance(hex_a, hex_b)` — função SQL customizada registrada em
+  `db/connection.py::connect()` (nenhuma função customizada existia antes
+  no projeto); comparar hex ficaria ilegível como expressão SQL inline.
+  `assets_repo._build_where` ganha `dominant_color` + `COLOR_TOLERANCE`
+  (constante, calibrada olhando a testlib real — ver nota abaixo).
+- UI: `FilterButton` ganhou um parâmetro `swatch=True` (ícone quadradinho
+  de cor por opção, via `QPixmap.fill` — mesmo precedente da cor de tag,
+  não é `setStyleSheet`) em vez de widget novo. Paleta de 11 cores fixas
+  na barra do breadcrumb, ícone novo `palette.svg`.
 
-### ☐ Fatia 40 — Listar texturas faltando de um `.blend` (bloqueada nesta sessão — sem Blender)
-Detectar e listar mapas que um `.blend` espera mas não encontra na
-biblioteca (caminho quebrado, textura removida etc). **Não implementada
-nesta sessão automatizada:** mesma limitação da Fatia 38 — sem Blender
-neste ambiente não dá pra escrever/testar o script headless que abre o
-`.blend` e lista os datablocks de imagem com caminho quebrado (o
-equivalente inverso da relocalização de texturas que `blender/render.py`
-já faz na Fatia 16 — dá pra reaproveitar bastante lógica de lá).
+**Nota sobre a testlib real:** rodando contra a biblioteca de teste, os
+baldes "Marrom" e "Preto" trazem MUITO mais assets (212 e 175 de 634 com
+cor) do que "Azul"/"Verde"/"Laranja" (0 cada). Não é bug — a testlib é
+pesada em madeira/pedra/vegetação, cores reais de material tendem pro
+terroso/escuro, e cor pura de vermelho/azul quase não aparece numa
+textura de verdade. É a ressalva que já estava registrada aqui antes
+("pode ficar 'lavada'") se confirmando na prática.
+
+**Deu certo quando:** 637 testes verdes (`pytest -q`, 12 novos:
+`test_dominant_color.py`, mais casos em `test_migrations.py`,
+`test_filter_button.py`, `test_search.py`); rodei a varredura completa
+contra a testlib real e
+conferi que o filtro por cor realmente muda a contagem de resultados por
+balde. Falta o Rafael confirmar na tela (abrir o app, clicar num botão de
+cor da paleta, ver a grade estreitar) — ambiente desta sessão não tem
+display interativo pra clicar de verdade, só screenshot + consulta direta
+no banco.
+
+### ☑ Fatia 40 — Listar texturas faltando de um `.blend`
+Bloqueada pela sessão automatizada anterior por falta de Blender no
+ambiente dela — desbloqueada aqui, mesmo caso da Fatia 38.
+
+Decisões do Rafael (2026-08-03): reaproveita a mesma regra de
+`texturas_perdidas()` (toda imagem com caminho quebrado, sem filtrar por
+uso em material); sob demanda, um asset por vez (botão "Checar
+texturas…" no painel de detalhes, só pra `.blend`); sem persistência —
+calcula na hora, mostra num diálogo, nada grava no banco.
+
+- `blender/scripts/list_missing_textures.py` (novo) roda dentro do
+  Blender, **nunca escreve nada**. Roda a mesma relocalização automática
+  que o render já faz (`bpy.ops.file.find_missing_files`, só na cópia em
+  memória) e reporta **só o que continua quebrado depois** — é a
+  informação de fato acionável, já que o render (Fatia 16/38) resolve o
+  resto sozinho. Duplica ~15 linhas de `render_thumb.py` de propósito:
+  aquele script chama `main()` incondicionalmente no nível do módulo
+  (sem guarda de `__main__`), então importar de lá dispararia um render
+  por engano.
+- `blender/missing_textures.py` (novo): mesmo padrão de
+  `render.py::render_thumbnail` (subprocess + timeout, nunca levanta),
+  lendo uma linha `ASSETDECK_TEXTURAS_JSON {...}` isolada do stdout (uma
+  linha JSON só, não texto solto — o Blender imprime bastante ruído de
+  inicialização no mesmo stdout).
+- `DetailsPanel`: botão novo **visível só quando o arquivo é `.blend`**
+  e não está sumido — os formatos novos da Fatia 37 (`.rvt`/`.usd*`/
+  `.abc`) não são arquivos Blender, então o conceito nem se aplica.
+- `MissingTexturesDialog` (novo): tabela somente-leitura (textura +
+  caminho esperado) + resumo + "Abrir pasta do asset". Sem checkbox, sem
+  ação de aplicar — não há nada pra escrever: o que está quebrado é
+  referência interna do `.blend`, fora do alcance de escrita do app
+  (`relocator.py` só ajusta o banco do AssetDeck, nunca o conteúdo de um
+  `.blend`).
+
+**Descoberta rodando de verdade** (não achei escrevendo o teste, achei
+rodando contra o Blender real): criar uma imagem sintética via
+`bpy.data.images.new()` sem religar a nenhum material faz ela **sumir
+silenciosamente** do `.blend` ao salvar — precisa de
+`img.use_fake_user = True` pra sobreviver ao save. Sem isso os testes de
+integração real dariam "lista vazia" mesmo com a textura de propósito
+quebrada, um falso-negativo que passaria despercebido.
+
+**Deu certo quando:** 625 testes verdes (17 novos, incluindo 2 rodando o
+Blender de verdade). Verificado no app real: `.blend` sintético com uma
+imagem de caminho quebrado — botão aparece, checagem acha a textura
+certa (nome + caminho), diálogo mostra a tabela e o resumo.
 
 ### ☐ Fatia 41 — Múltiplas bibliotecas na UI (avaliada, não implementada — risco/escopo)
 Suportar mais de uma `library_root` ativa ao mesmo tempo, com seleção na
