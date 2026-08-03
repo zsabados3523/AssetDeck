@@ -679,16 +679,58 @@ testes usam extensão certa em conteúdo dummy, suficiente porque o
 scanner só olha o sufixo pra classificar. Vale o Rafael confirmar com um
 arquivo de verdade se tiver algum à mão.
 
-### ☐ Fatia 38 — Render de previews em lote (bloqueada nesta sessão — sem Blender)
-Cena de estúdio configurável pra gerar capas de vários assets de uma vez
-(hoje é um por um, via Blender). **Não avaliada/implementada nesta sessão
-automatizada:** o ambiente remoto não tem Flatpak nem Blender instalados
-(`flatpak`/`blender` ausentes) — o coração desta fatia é um script
-headless novo em `blender/scripts/` (irmão de `render_thumb.py`), e não
-dá pra escrever isso às cegas sem rodar contra o Blender de verdade pra
-validar a cena de estúdio, iluminação e enquadramento em lote. Fica pro
-Rafael confirmar o formato da cena (referência visual, quantos ângulos
-etc.) numa sessão com Blender disponível.
+### ☑ Fatia 38 — Render de previews em lote (cena configurável)
+Bloqueada pela sessão automatizada anterior por falta de Blender no
+ambiente dela — **Blender + Flatpak estão instalados aqui**
+(`org.blender.Blender` 5.2, confirmado com `flatpak list`), o que
+desbloqueou a fatia de verdade.
+
+**Descoberta ao mapear:** a fila em lote **já existia** —
+`RenderWorker` (`ui/render_worker.py`) já pegava TODOS os modelos sem
+capa e renderizava um por vez (um processo Blender headless por asset,
+isolamento de crash proposital), sem travar a UI, com progresso e
+cancelamento. Só faltava a **cena configurável**, 100% hardcoded até
+aqui.
+
+Decisões do Rafael (2026-08-03): mantém fundo cinza + sol (sem HDRI) —
+só **cor do fundo**, **força do fundo** e **intensidade do sol** viram
+configuráveis; continua 1 ângulo por asset; continua "todos sem capa"
+(sem seletor de assets nesta fatia); campos ficam em Configurações →
+Preferências, preset global.
+
+- `hex_to_linear_rgb()` nova (`blender/render.py`) — o `QColorDialog`
+  devolve sRGB, o shader do Blender espera linear; sem a conversão a cor
+  sai mais clara do que a escolhida na amostra.
+- `render_thumbnail()` ganha `bg_color`/`bg_strength`/`sun_energy` com
+  defaults **idênticos aos valores hardcoded de sempre** — todo chamador
+  existente (inclusive os testes já escritos) continua funcionando sem
+  mudar uma linha.
+- `render_thumb.py` (roda dentro do Blender) lê os 3 valores extra do
+  `sys.argv`, com fallback pros mesmos hardcoded se não vierem — chamar
+  o script à mão continua funcionando.
+- `RenderWorker.run()` lê `config.load_config()` **a cada rodada**, não
+  uma vez só — mudar a preferência e clicar em "Gerar capas" de novo já
+  usa o valor novo, sem reiniciar o app (diferente de
+  `bridge_port`/`bridge_enabled`, que precisam de reabertura porque o
+  servidor já está de pé).
+- Amostra de cor no diálogo é **ícone** (`QPixmap` preenchido), nunca
+  `setStyleSheet` — regra do projeto, mesmo padrão do quadradinho de cor
+  de tag (`tag_icons.py`).
+
+**Verificado com Blender de verdade, não só teoria:**
+`test_render_de_verdade_gera_png` (já existia, pulado até aqui por
+`skipif`) passou de verdade (3,6s). Escrevi um teste diferencial novo —
+renderiza duas cores bem diferentes e compara o pixel de fundo do PNG
+final — em vez de comparar contra um valor absoluto exato, porque o
+Blender aplica view transform (AgX, padrão desde a 4.x) por cima da cor
+linear; reproduzir essa curva aqui seria escopo maior que a fatia pedia.
+Script manual comparando 3 cenas lado a lado (padrão / fundo azul forte
+/ sol fraco) confirma visualmente a diferença.
+
+**Deu certo quando:** 608 testes verdes (12 novos, incluindo o real de
+Blender); mudar a cor em Preferências e clicar em "Gerar capas" usa a
+cor nova sem reiniciar o app; as 3 cenas de teste saem visualmente
+diferentes no render real.
 
 ### ☐ Fatia 39 — Busca por cor dominante (bloqueada nesta sessão — schema + design)
 Filtrar/buscar assets pela cor predominante da textura/preview. **Não

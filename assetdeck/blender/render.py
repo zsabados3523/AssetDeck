@@ -20,6 +20,25 @@ log = logging.getLogger(__name__)
 FLATPAK_APP = "org.blender.Blender"
 TIMEOUT_S = 180  # um modelo pesado não pode travar a fila para sempre
 
+# Cena de hoje, hardcoded — vira o default de render_thumbnail() (Fatia 38).
+# Continua igual pra quem chama sem passar nada (inclusive os testes atuais).
+BG_COLOR_PADRAO = (0.30, 0.30, 0.32)
+BG_STRENGTH_PADRAO = 1.8
+SUN_ENERGY_PADRAO = 3.0
+
+
+def hex_to_linear_rgb(hex_str: str) -> tuple[float, float, float]:
+    """'#RRGGBB' (sRGB, o que sai do QColorDialog) → RGB linear (o que o
+    shader do Blender espera). Sem isso a cor escolhida sai mais clara do
+    que o Rafael viu na amostra."""
+    hex_str = hex_str.lstrip("#")
+    canais = (int(hex_str[i:i + 2], 16) / 255.0 for i in (0, 2, 4))
+
+    def _srgb_para_linear(c: float) -> float:
+        return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+
+    return tuple(_srgb_para_linear(c) for c in canais)
+
 
 def script_path() -> Path:
     return Path(__file__).parent / "scripts" / "render_thumb.py"
@@ -52,8 +71,16 @@ class RenderResult:
 
 
 def render_thumbnail(blend_path: Path, dest: Path, size: int = 512,
-                     comando: list[str] | None = None) -> RenderResult:
-    """Renderiza a capa de um .blend. Nunca levanta: devolve o resultado."""
+                     comando: list[str] | None = None,
+                     bg_color: tuple[float, float, float] = BG_COLOR_PADRAO,
+                     bg_strength: float = BG_STRENGTH_PADRAO,
+                     sun_energy: float = SUN_ENERGY_PADRAO) -> RenderResult:
+    """Renderiza a capa de um .blend. Nunca levanta: devolve o resultado.
+
+    `bg_color`/`bg_strength`/`sun_energy` já em LINEAR (converta hex do
+    config com `hex_to_linear_rgb` antes de chamar) — cena configurável
+    da Fatia 38, defaults iguais ao que já era hardcoded.
+    """
     cmd_base = comando or blender_command()
     if cmd_base is None:
         return RenderResult(False, erro="Blender não encontrado nesta máquina.")
@@ -62,7 +89,9 @@ def render_thumbnail(blend_path: Path, dest: Path, size: int = 512,
 
     dest.parent.mkdir(parents=True, exist_ok=True)
     cmd = [*cmd_base, "-b", "-P", str(script_path()), "--",
-           str(blend_path), str(dest), str(size)]
+           str(blend_path), str(dest), str(size),
+           str(bg_color[0]), str(bg_color[1]), str(bg_color[2]),
+           str(bg_strength), str(sun_energy)]
     try:
         proc = subprocess.run(cmd, capture_output=True, text=True,
                               timeout=TIMEOUT_S, check=False)
