@@ -37,47 +37,152 @@ QSS_FILE = Path(__file__).parent / "theme.qss"
 # --------------------------------------------------------------------------
 # Paleta base
 # --------------------------------------------------------------------------
-# Escolhas do Rafael (F4): tema claro lavanda, destaque azul-petróleo, fundo
-# liso. A primeira tentativa usou fundo lavanda e ele reprovou na tela: ficou
-# pesado. Direção corrigida, olhando a referência do Craft de novo — o fundo lá
-# NÃO tem cor: é cinza bem claro, e o que dá a sensação de acabamento é o
-# cartão BRANCO flutuando sobre ele, com sombra suave e nenhum contorno duro.
-# A cor aparece só em detalhe pequeno (seleção, foco, um botão principal).
+# Fatia 44 (overhaul visual): o Rafael escolheu a direção olhando mockups da
+# janela inteira, não em abstrato. Duas mudanças de fundo em relação ao que
+# havia aqui:
+#
+#  1. **Existe cor de destaque agora: azul.** O monocromático foi vetado na
+#     tela — as três referências que ele mandou têm destaque (roxo numa, azul
+#     em duas). O azul é um token só: trocar a identidade do app inteiro
+#     continua sendo mexer numa linha.
+#  2. **Fundo e superfície deixaram de ser a mesma cor.** Eram os dois brancos,
+#     separados só por uma linha quase invisível — o que sobrava era uma tela
+#     chapada. Agora o fundo é um degrau mais fundo que o painel, nos dois
+#     modos, e a hierarquia aparece sem depender de sombra (que no modo escuro
+#     praticamente não rende).
+#
+# O azul do modo claro NÃO é o mesmo do escuro: o claro precisa ser mais fundo
+# para segurar texto branco por cima e ainda passar em 4.5:1 sobre a pastilha
+# suave. Os dois foram calibrados por `contrast_ratio()`, não por olhômetro —
+# `tests/test_theme.py` falha se algum par cair abaixo do mínimo.
 
-BG = "#FFFFFF"          # fundo da janela: branco puro
-BG_TINT = "#F0F0F2"     # variação do fundo (trilho de barra de rolagem, cabeçalho)
+BG = "#F6F6F9"          # fundo da janela: cinza muito claro
+SURFACE = "#FFFFFF"     # painel/card/lateral: branco flutuando sobre o fundo
+BG_TINT = "#EDEDF1"     # variação do fundo (trilho de barra de rolagem, cabeçalho)
+FIELD = "#F2F2F6"       # campo de entrada: afunda em vez de sumir no branco
 
-# Monocromático: o "destaque" não é mais uma cor, é um cinza bem escuro. Serve
-# ao botão principal e à ênfase de texto. Cor de verdade sobrou só em dois
-# lugares onde ela CARREGA informação: a cor da tag e o tipo do asset.
-ACCENT = "#4A4A52"
-ACCENT_HOVER = "#5A5A63"
-ACCENT_PRESS = "#38383F"
+ACCENT = "#2A63CF"
+ACCENT_HOVER = "#3672E0"
+ACCENT_PRESS = "#1F4FAB"
 ON_ACCENT = "#FFFFFF"
+# Pastilha suave do estado ativo (categoria marcada, item da lateral
+# selecionado): fundo azul lavado com o próprio ACCENT escrito por cima.
+ACCENT_SOFT = "#EDF3FF"
 
-TITLE = "#111216"       # títulos: mais escuros que o corpo, é o que dá hierarquia
+TITLE = "#101116"       # títulos: mais escuros que o corpo, é o que dá hierarquia
 TEXT = "#1F2024"
 TEXT_MUTED = "#6B6C74"
 TEXT_DISABLED = "#A9AAB2"
 
 WARNING = "#8A5A12"     # substitui o "#b07d2b" que estava inline no details_panel
 DANGER = "#A32D2D"
+OK = "#1F8A53"          # LED do Blender conectado no rodapé (Fatia 46)
 
 POPOVER = "#FFFFFF"     # menus e popups são JANELAS separadas: sempre opacos
 BORDER = (0, 0, 0, 0.09)         # contorno de campo/botão
 BORDER_STRONG = (0, 0, 0, 0.28)  # contorno de controle (caixa de checkbox)
-FOCUS = "#8A8B93"                # foco monocromático: contorno mais escuro
+FOCUS = ACCENT                   # foco agora é o destaque, não um cinza
 
 # Seleção monocromática: pastilha de cinza claro com o texto normal por cima.
+# Continua sem cor de propósito — a seleção da GRADE compete com a miniatura,
+# e azul atrás de uma textura suja a leitura da imagem. Cor de estado ativo é
+# `ACCENT_SOFT`, usado onde não há imagem embaixo (lateral, filtros).
 SELECTION = (0, 0, 0, 0.065)
 HOVER = (0, 0, 0, 0.035)
 
-# Fundo do card quando o asset não tem miniatura. Decisão do Rafael: nada de
-# cor por tipo — uma pastilha cinza só, igual ao ACCENT dos botões, e o
-# reconhecimento do tipo passa a vir do rótulo de extensão no canto do card
-# (".fbx"/".exr"/...), não mais de cor. Consumido pelo delegate (Fatia 27).
-TYPE_TINT = ACCENT
+# Fundo do card quando o asset não tem miniatura. Segue NEUTRO de propósito,
+# mesmo agora que existe cor de destaque: é uma pastilha que aparece dezenas de
+# vezes na grade ao mesmo tempo, e pintá-la de azul transformaria a ausência de
+# miniatura no elemento mais gritante da tela. O reconhecimento do tipo vem do
+# rótulo de extensão no canto (".fbx"/".exr"/...), não de cor. Antes isto era
+# um apelido de ACCENT; virou constante própria justamente para o azul não
+# vazar até aqui. Consumido pelo delegate (Fatia 27).
+TYPE_TINT = "#4A4A52"
 ON_TYPE_TINT = "#FFFFFF"  # texto/glifo sobre a pastilha acima
+
+# --------------------------------------------------------------------------
+# Paleta escura (Fatia 43)
+# --------------------------------------------------------------------------
+# Nasceu na Fatia 43 como inversão monocromática da paleta clara. A Fatia 44
+# rebaseou os fundos: o modo escuro passou de cinza-chumbo (#1B1B1E) para um
+# quase-preto em camadas, que é o que a referência escolhida pelo Rafael faz —
+# fundo mais fundo que o painel, e o painel mais fundo que o campo. Sem esses
+# degraus, a lateral e a grade viravam uma mancha só.
+#
+# O destaque deixou de inverter polaridade (era um cinza CLARO com texto
+# escuro): agora é o MESMO azul da identidade, num tom mais luminoso porque
+# precisa brilhar sobre quase-preto em vez de sobre branco. O texto que vai por
+# cima dele é escuro — azul claro com branco em cima não passa em 4.5:1.
+# WARNING/DANGER seguem em tom mais claro que a versão clara: os tons escuros
+# ficam ilegíveis invertidos.
+
+BG_DARK = "#101114"
+SURFACE_DARK = "#1A1B1F"
+BG_TINT_DARK = "#232429"
+# No escuro o campo AFUNDA em vez de subir: um input mais claro que o painel
+# parece um botão. É o inverso do modo claro, onde o campo é o cinza e o painel
+# é o branco — por isso `field` é token próprio e não um apelido de `bg`.
+FIELD_DARK = "#131417"
+
+ACCENT_DARK = "#4D8DFF"
+ACCENT_HOVER_DARK = "#6BA0FF"
+ACCENT_PRESS_DARK = "#3B7AE8"
+ON_ACCENT_DARK = "#07111F"
+ACCENT_SOFT_DARK = "#13233F"
+
+TITLE_DARK = "#FFFFFF"
+TEXT_DARK = "#DEDEE3"
+TEXT_MUTED_DARK = "#8C8D95"
+TEXT_DISABLED_DARK = "#5C5C62"
+
+WARNING_DARK = "#E3B15C"
+DANGER_DARK = "#E2726F"
+OK_DARK = "#4EC98A"
+
+POPOVER_DARK = "#1F2024"
+BORDER_DARK = (255, 255, 255, 0.10)
+BORDER_STRONG_DARK = (255, 255, 255, 0.26)
+FOCUS_DARK = ACCENT_DARK
+
+SELECTION_DARK = (255, 255, 255, 0.09)
+HOVER_DARK = (255, 255, 255, 0.06)
+
+# Mesma decisão do modo claro: pastilha neutra, não azul (ver TYPE_TINT). Aqui
+# ela é ESCURA com texto claro por cima — no escuro, a pastilha cinza-clara que
+# havia antes acendia a grade inteira onde faltava miniatura.
+TYPE_TINT_DARK = "#2C2D33"
+ON_TYPE_TINT_DARK = "#DEDEE3"
+
+# Nomes internos (não $token do QSS) usados por `_paleta()` pra trocar de
+# bloco inteiro conforme `variant.mode`, sem duplicar build_tokens/
+# build_palette/surface_solid em duas versões.
+_PALETA_CLARA = {
+    "bg": BG, "surface": SURFACE, "bg_tint": BG_TINT, "field": FIELD,
+    "accent": ACCENT, "accent_hover": ACCENT_HOVER, "accent_press": ACCENT_PRESS,
+    "on_accent": ON_ACCENT, "accent_soft": ACCENT_SOFT,
+    "title": TITLE, "text": TEXT, "text_muted": TEXT_MUTED, "text_disabled": TEXT_DISABLED,
+    "warning": WARNING, "danger": DANGER, "ok": OK,
+    "popover": POPOVER, "border": BORDER, "border_strong": BORDER_STRONG, "focus": FOCUS,
+    "selection": SELECTION, "hover": HOVER,
+    "type_tint": TYPE_TINT, "on_type_tint": ON_TYPE_TINT,
+}
+_PALETA_ESCURA = {
+    "bg": BG_DARK, "surface": SURFACE_DARK, "bg_tint": BG_TINT_DARK, "field": FIELD_DARK,
+    "accent": ACCENT_DARK, "accent_hover": ACCENT_HOVER_DARK, "accent_press": ACCENT_PRESS_DARK,
+    "on_accent": ON_ACCENT_DARK, "accent_soft": ACCENT_SOFT_DARK,
+    "title": TITLE_DARK, "text": TEXT_DARK, "text_muted": TEXT_MUTED_DARK,
+    "text_disabled": TEXT_DISABLED_DARK,
+    "warning": WARNING_DARK, "danger": DANGER_DARK, "ok": OK_DARK,
+    "popover": POPOVER_DARK, "border": BORDER_DARK, "border_strong": BORDER_STRONG_DARK,
+    "focus": FOCUS_DARK,
+    "selection": SELECTION_DARK, "hover": HOVER_DARK,
+    "type_tint": TYPE_TINT_DARK, "on_type_tint": ON_TYPE_TINT_DARK,
+}
+
+
+def _paleta(mode: str) -> dict:
+    return _PALETA_ESCURA if mode == "escuro" else _PALETA_CLARA
+
 
 # Variações que o Rafael escolhe na tela (vitrine da Fatia 24).
 # Fundo e painel são os DOIS brancos: o que separa um do outro é uma linha de
@@ -94,6 +199,7 @@ FONTS = {
 }
 
 BACKGROUNDS = ("liso", "grao")
+MODES = ("claro", "escuro")
 
 
 @dataclass(frozen=True)
@@ -101,14 +207,16 @@ class Variant:
     """Uma combinação de escolhas visuais.
 
     O padrão é o que o Rafael pediu: fundo liso, translucidez média, cantos
-    discretos, fonte Inter. A vitrine (`theme_gallery.py`) troca estes campos ao
-    vivo para ele comparar as alternativas na tela antes de bater o martelo.
+    marcantes, fonte Inter, modo claro. A vitrine (`theme_gallery.py`) troca
+    estes campos ao vivo para ele comparar as alternativas na tela antes de
+    bater o martelo.
     """
 
     background: str = "liso"      # liso | grao
     separation: str = "media"     # sutil | media | forte (opacidade da linha)
-    radius: str = "discreto"      # discreto | marcante
+    radius: str = "marcante"      # discreto | marcante
     font: str = "inter"           # inter | sistema
+    mode: str = "claro"           # claro | escuro (Fatia 43)
 
     def __post_init__(self) -> None:
         for campo, valor, validos in (
@@ -116,6 +224,7 @@ class Variant:
             ("separation", self.separation, tuple(SEPARATION)),
             ("radius", self.radius, tuple(RADII)),
             ("font", self.font, tuple(FONTS)),
+            ("mode", self.mode, MODES),
         ):
             if valor not in validos:
                 raise ValueError(
@@ -124,6 +233,24 @@ class Variant:
 
 
 DEFAULT = Variant()
+
+# Widgets que pintam cor "à mão" em Python (delegate de item, ícones
+# pré-tingidos) não passam pelo QSS — o `$token` não alcança `QPainter`
+# direto. Pra esses casos saberem qual modo está ativo AGORA (sem cada um
+# ter que receber `Variant` por fora), `apply_theme()` guarda o último
+# aplicado aqui. Consumido por `current_colors()` abaixo (Fatia 43).
+_CURRENT_VARIANT = DEFAULT
+
+
+def current_variant() -> Variant:
+    """O último `Variant` passado pra `apply_theme()` nesta sessão."""
+    return _CURRENT_VARIANT
+
+
+def current_colors() -> dict:
+    """Paleta (claro/escuro) do `Variant` atualmente aplicado — pra código
+    Python que pinta cor direto (delegate, ícone pré-tingido), sem QSS."""
+    return _paleta(_CURRENT_VARIANT.mode)
 
 
 # --------------------------------------------------------------------------
@@ -209,7 +336,8 @@ def background_tile_path(variant: Variant = DEFAULT) -> Path | None:
     if variant.background != "grao":
         return None
 
-    assinatura = f"{BG}-{TILE}-{GRAIN_SIGMA}-{GRAIN_SEED}"
+    fundo = _paleta(variant.mode)["bg"]
+    assinatura = f"{fundo}-{TILE}-{GRAIN_SIGMA}-{GRAIN_SEED}"
     nome = f"bg-{hashlib.sha1(assinatura.encode()).hexdigest()[:12]}.png"
     destino = config.cache_dir() / "theme" / nome
     if destino.exists():
@@ -220,7 +348,7 @@ def background_tile_path(variant: Variant = DEFAULT) -> Path | None:
 
     destino.parent.mkdir(parents=True, exist_ok=True)
     rng = np.random.default_rng(GRAIN_SEED)
-    base = np.array(hex_to_rgb(BG), dtype=np.float32)
+    base = np.array(hex_to_rgb(fundo), dtype=np.float32)
     ruido = rng.normal(0.0, GRAIN_SIGMA, size=(TILE, TILE, 1)).astype(np.float32)
     pixels = np.clip(base + ruido, 0, 255).astype(np.uint8)
 
@@ -269,17 +397,20 @@ def separation_alpha(variant: Variant = DEFAULT) -> float:
 
 
 def surface_solid(variant: Variant = DEFAULT) -> str:
-    """Cor do painel. Branco — igual ao fundo, por decisão do Rafael.
+    """Cor do painel — a superfície onde o texto realmente cai.
 
-    Continua existindo como função porque é contra esta cor que o contraste do
-    texto é medido, e porque o dia em que o painel deixar de ser branco puro é
-    aqui que muda.
+    Até a Fatia 43 devolvia o próprio fundo: painel e janela eram a mesma cor,
+    separados só por uma linha. Na Fatia 44 passaram a diferir (branco sobre
+    cinza claro; #16171A sobre #101114), e é por isso que esta função existe
+    separada de `bg` — é contra ELA que `tests/test_theme.py` mede o contraste
+    de todo texto.
     """
-    return BG
+    return _paleta(variant.mode)["surface"]
 
 
 def build_tokens(variant: Variant = DEFAULT) -> dict[str, str]:
     """Todos os `$nome` que o theme.qss pode usar."""
+    pal = _paleta(variant.mode)
     raio_painel, raio_card, raio_controle = RADII[variant.radius]
     familia = FONTS[variant.font]
 
@@ -289,33 +420,40 @@ def build_tokens(variant: Variant = DEFAULT) -> dict[str, str]:
         # Caminho ABSOLUTO — url() relativo resolve contra o cwd e falha calado.
         bg_image = f"background-image: url({ladrilho});\n    background-repeat: repeat;"
 
+    # Hairline (linha de separação painel/fundo): preto translúcido sobre
+    # fundo claro, branco translúcido sobre fundo escuro — mesma ideia de
+    # SELECTION/HOVER, que já trocam de base por modo na paleta acima.
+    base_hairline = (0, 0, 0) if variant.mode == "claro" else (255, 255, 255)
+
     return {
-        "bg": BG,
-        "bg_tint": BG_TINT,
+        "bg": pal["bg"],
+        "bg_tint": pal["bg_tint"],
         "bg_image": bg_image,
 
-        "surface": BG,
-        "surface_hover": rgba_css(HOVER),
-        "selection": rgba_css(SELECTION),
-        "field": BG,
-        "popover": POPOVER,
+        "surface": pal["surface"],
+        "surface_hover": rgba_css(pal["hover"]),
+        "selection": rgba_css(pal["selection"]),
+        "field": pal["field"],
+        "popover": pal["popover"],
 
-        "border": rgba_css(BORDER),
-        "border_strong": rgba_css(BORDER_STRONG),
-        "hairline": rgba_css((0, 0, 0, separation_alpha(variant))),
-        "focus": FOCUS,
+        "border": rgba_css(pal["border"]),
+        "border_strong": rgba_css(pal["border_strong"]),
+        "hairline": rgba_css((*base_hairline, separation_alpha(variant))),
+        "focus": pal["focus"],
 
-        "accent": ACCENT,
-        "accent_hover": ACCENT_HOVER,
-        "accent_press": ACCENT_PRESS,
-        "on_accent": ON_ACCENT,
+        "accent": pal["accent"],
+        "accent_hover": pal["accent_hover"],
+        "accent_press": pal["accent_press"],
+        "on_accent": pal["on_accent"],
+        "accent_soft": pal["accent_soft"],
 
-        "title": TITLE,
-        "text": TEXT,
-        "text_muted": TEXT_MUTED,
-        "text_disabled": TEXT_DISABLED,
-        "warning": WARNING,
-        "danger": DANGER,
+        "title": pal["title"],
+        "text": pal["text"],
+        "text_muted": pal["text_muted"],
+        "text_disabled": pal["text_disabled"],
+        "warning": pal["warning"],
+        "danger": pal["danger"],
+        "ok": pal["ok"],
 
         "radius_panel": f"{raio_painel}px",
         "radius_card": f"{raio_card}px",
@@ -330,8 +468,8 @@ def build_tokens(variant: Variant = DEFAULT) -> dict[str, str]:
         "font_size_small": "12px",
         "font_size_title": "15px",
 
-        "check_icon": str(icon_asset_path("check", ON_ACCENT, 12)),
-        "chevron_icon": str(icon_asset_path("chevron-down", TEXT_MUTED, 12)),
+        "check_icon": str(icon_asset_path("check", pal["on_accent"], 12)),
+        "chevron_icon": str(icon_asset_path("chevron-down", pal["text_muted"], 12)),
     }
 
 
@@ -357,47 +495,53 @@ def build_palette(variant: Variant = DEFAULT):
     """
     from PySide6.QtGui import QColor, QPalette
 
+    pal = _paleta(variant.mode)
     p = QPalette()
     superficie = QColor(surface_solid(variant))
     C = QColor
 
-    p.setColor(QPalette.ColorRole.Window, C(BG))
-    p.setColor(QPalette.ColorRole.WindowText, C(TEXT))
+    p.setColor(QPalette.ColorRole.Window, C(pal["bg"]))
+    p.setColor(QPalette.ColorRole.WindowText, C(pal["text"]))
     p.setColor(QPalette.ColorRole.Base, superficie)
-    p.setColor(QPalette.ColorRole.AlternateBase, C(BG_TINT))
-    p.setColor(QPalette.ColorRole.Text, C(TEXT))
-    p.setColor(QPalette.ColorRole.PlaceholderText, C(TEXT_DISABLED))
+    p.setColor(QPalette.ColorRole.AlternateBase, C(pal["bg_tint"]))
+    p.setColor(QPalette.ColorRole.Text, C(pal["text"]))
+    p.setColor(QPalette.ColorRole.PlaceholderText, C(pal["text_disabled"]))
     p.setColor(QPalette.ColorRole.Button, superficie)
-    p.setColor(QPalette.ColorRole.ButtonText, C(TEXT))
-    p.setColor(QPalette.ColorRole.BrightText, C(DANGER))
-    p.setColor(QPalette.ColorRole.Highlight, C(ACCENT))
-    p.setColor(QPalette.ColorRole.HighlightedText, C(ON_ACCENT))
-    p.setColor(QPalette.ColorRole.ToolTipBase, C(POPOVER))
-    p.setColor(QPalette.ColorRole.ToolTipText, C(TEXT))
-    p.setColor(QPalette.ColorRole.Link, C(ACCENT))
+    p.setColor(QPalette.ColorRole.ButtonText, C(pal["text"]))
+    p.setColor(QPalette.ColorRole.BrightText, C(pal["danger"]))
+    p.setColor(QPalette.ColorRole.Highlight, C(pal["accent"]))
+    p.setColor(QPalette.ColorRole.HighlightedText, C(pal["on_accent"]))
+    p.setColor(QPalette.ColorRole.ToolTipBase, C(pal["popover"]))
+    p.setColor(QPalette.ColorRole.ToolTipText, C(pal["text"]))
+    p.setColor(QPalette.ColorRole.Link, C(pal["accent"]))
 
     for grupo in (QPalette.ColorGroup.Disabled,):
-        p.setColor(grupo, QPalette.ColorRole.Text, C(TEXT_DISABLED))
-        p.setColor(grupo, QPalette.ColorRole.WindowText, C(TEXT_DISABLED))
-        p.setColor(grupo, QPalette.ColorRole.ButtonText, C(TEXT_DISABLED))
+        p.setColor(grupo, QPalette.ColorRole.Text, C(pal["text_disabled"]))
+        p.setColor(grupo, QPalette.ColorRole.WindowText, C(pal["text_disabled"]))
+        p.setColor(grupo, QPalette.ColorRole.ButtonText, C(pal["text_disabled"]))
     return p
 
 
 def apply_card_shadow(widget) -> None:
-    """Sombra suave para o painel "flutuar" sobre o fundo.
+    """Sombra pro painel "flutuar" sobre o fundo.
 
     Custo medido: repaint ~2,3x mais caro. Por isso vale em painel estático,
     mas NUNCA no container da grade — ela rola com centenas de itens e o efeito
     força o Qt a renderizar a subárvore inteira fora da tela a cada quadro.
+
+    Presença aumentada na Fatia 43 (pedido do Rafael, "mais confiante" que o
+    sutil original) — mais notável sobretudo no modo claro; no escuro, sombra
+    preta sobre fundo já escuro quase não aparece, e a elevação ali vem mais
+    do contorno/tom do `$popover` do que da sombra (esperado, não é bug).
     """
     from PySide6.QtGui import QColor
     from PySide6.QtWidgets import QGraphicsDropShadowEffect
 
     efeito = QGraphicsDropShadowEffect(widget)
-    efeito.setBlurRadius(18)
+    efeito.setBlurRadius(24)
     efeito.setXOffset(0)
-    efeito.setYOffset(2)
-    efeito.setColor(QColor(0, 0, 0, 28))  # cinza neutro e discreto, sem cor
+    efeito.setYOffset(3)
+    efeito.setColor(QColor(0, 0, 0, 42))  # cinza neutro, sem cor
     widget.setGraphicsEffect(efeito)
 
 
@@ -454,9 +598,13 @@ def apply_theme(app, variant: Variant = DEFAULT) -> None:
     app.setPalette(build_palette(variant))
     app.setStyleSheet(build_qss(variant))
     install_popup_corner_mask(app, variant)
+
+    global _CURRENT_VARIANT
+    _CURRENT_VARIANT = variant
+
     log.info(
-        "Tema aplicado (fundo=%s, separação=%s, cantos=%s, fonte=%s).",
-        variant.background, variant.separation, variant.radius, variant.font,
+        "Tema aplicado (modo=%s, fundo=%s, separação=%s, cantos=%s, fonte=%s).",
+        variant.mode, variant.background, variant.separation, variant.radius, variant.font,
     )
 
 

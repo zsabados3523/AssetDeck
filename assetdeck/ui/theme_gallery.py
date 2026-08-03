@@ -46,6 +46,7 @@ OPCOES = {
     "separation": [("Quase nenhuma", "sutil"), ("Média", "media"), ("Marcada", "forte")],
     "radius": [("Discretos (12px)", "discreto"), ("Marcantes (18px)", "marcante")],
     "font": [("Inter", "inter"), ("Padrão do sistema", "sistema")],
+    "mode": [("Claro", "claro"), ("Escuro", "escuro")],  # Fatia 43
 }
 
 
@@ -86,14 +87,15 @@ class ThemeGallery(QWidget):
     # ------------------------------------------------------------------ ui --
 
     def _build_controls(self) -> QWidget:
-        """Barra de cima: os quatro eixos de escolha + recarregar."""
+        """Barra de cima: os cinco eixos de escolha + recarregar."""
         barra = QWidget()
         linha = QHBoxLayout(barra)
         linha.setContentsMargins(0, 0, 0, 0)
         linha.setSpacing(10)
 
         for campo, rotulo in (("background", "Fundo"), ("separation", "Separação"),
-                              ("radius", "Cantos"), ("font", "Fonte")):
+                              ("radius", "Cantos"), ("font", "Fonte"),
+                              ("mode", "Modo")):
             etiqueta = QLabel(rotulo)
             etiqueta.setObjectName("sectionTitle")
             linha.addWidget(etiqueta)
@@ -257,7 +259,10 @@ class ThemeGallery(QWidget):
             card.setAlignment(Qt.AlignmentFlag.AlignCenter)
             card.setFixedHeight(60)
             # Exceção consciente à regra "nada de setStyleSheet fora do
-            # theme.py": aqui a cor É o conteúdo sendo demonstrado.
+            # theme.py": aqui a cor É o conteúdo sendo demonstrado. Limitação
+            # conhecida (Fatia 43): usa sempre TYPE_TINT do modo claro — este
+            # card específico não se redesenha ao trocar pra escuro no
+            # combo "Modo" (só reconstrói uma vez, no __init__).
             card.setStyleSheet(
                 f"background-color: {theme.TYPE_TINT}; color: {theme.ON_TYPE_TINT};"
                 f" border-radius: 8px; font-size: 11px;"
@@ -287,12 +292,20 @@ class ThemeGallery(QWidget):
         """Reaplica o tema à aplicação inteira, relendo o theme.qss do disco."""
         theme.apply_theme(QApplication.instance(), self.variant)
 
+        # Fatia 43: o contraste tem que ser medido contra a cor de texto do
+        # MODO em exibição — theme.TEXT/TEXT_MUTED são sempre as do modo
+        # claro, não servem pra validar o escuro.
+        if self.variant.mode == "escuro":
+            texto, texto_muted = theme.TEXT_DARK, theme.TEXT_MUTED_DARK
+        else:
+            texto, texto_muted = theme.TEXT, theme.TEXT_MUTED
+
         superficie = theme.surface_solid(self.variant)
-        contraste = theme.contrast_ratio(theme.TEXT, superficie)
-        contraste_muted = theme.contrast_ratio(theme.TEXT_MUTED, superficie)
+        contraste = theme.contrast_ratio(texto, superficie)
+        contraste_muted = theme.contrast_ratio(texto_muted, superficie)
         self.rodape.setText(
             f"Painel sobre o fundo = {superficie}  ·  contraste do texto "
             f"{contraste:.1f}:1  ·  do texto secundário {contraste_muted:.1f}:1  ·  "
             f"Variant({self.variant.background}, {self.variant.separation}, "
-            f"{self.variant.radius}, {self.variant.font})"
+            f"{self.variant.radius}, {self.variant.font}, {self.variant.mode})"
         )

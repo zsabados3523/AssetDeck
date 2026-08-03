@@ -41,8 +41,9 @@ class FilterButton(QToolButton):
         self._options = options
         self._default = options[0][1]
         self._value = self._default
+        self._icon_name = icon_name  # guardado pra refresh_theme() (Fatia 43)
 
-        self.setIcon(icons.icon(icon_name, theme.TEXT_MUTED))
+        self.setIcon(icons.icon(icon_name, theme.current_colors()["text_muted"]))
         self.setIconSize(QSize(16, 16))
         self.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
         self.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
@@ -65,6 +66,11 @@ class FilterButton(QToolButton):
         self.setMenu(self._menu)
 
         self._sync_visual()
+
+    def refresh_theme(self) -> None:
+        """Reaplica o ícone com a cor do modo atual (Fatia 43) — chamado
+        depois de `theme.apply_theme()` trocar claro/escuro ao vivo."""
+        self.setIcon(icons.icon(self._icon_name, theme.current_colors()["text_muted"]))
 
     def value(self):
         return self._value

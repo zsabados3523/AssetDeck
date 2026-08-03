@@ -130,7 +130,7 @@ def run(argv: list[str]) -> int:
 
     from assetdeck.ui import theme
 
-    theme.apply_theme(app)
+    theme.apply_theme(app, theme.Variant(mode=cfg.get("theme_mode", "claro")))
     _set_app_icon(app)
 
     win = MainWindow(conn=conn, library_root=cfg["library_root"],

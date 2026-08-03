@@ -106,18 +106,46 @@ def test_tema_pinta_a_janela_e_os_cards_ficam_arredondados(qapp, janela):
         grid_card = janela.grid.parentWidget().parentWidget()
         assert grid_card.objectName() == "card"
 
-        img = grid_card.grab().toImage()
+        # Grab da JANELA, não do card sozinho. Grabar o card isolado renderiza
+        # só ele: o que aparece na quina de fora do arredondamento é o
+        # preenchimento padrão do pixmap, não o fundo do app. Isso passou
+        # despercebido até a Fatia 44 porque esse preenchimento era branco e o
+        # `$bg` de então também — o teste comparava branco com branco e teria
+        # passado mesmo com o card quadrado. Agora fundo e painel são cores
+        # diferentes, então a quina precisa vir da janela de verdade.
+        img = janela.grab().toImage()
         from PySide6.QtGui import QColor
 
         def px(x, y):
             return QColor(img.pixelColor(x, y)).name().upper()
 
+        def distancia(a: str, b: str) -> int:
+            """Distância entre duas cores, somando os três canais."""
+            ra, ga, ba = theme.hex_to_rgb(a)
+            rb, gb, bb = theme.hex_to_rgb(b)
+            return abs(ra - rb) + abs(ga - gb) + abs(ba - bb)
+
+        quina = grid_card.mapTo(janela, grid_card.rect().topLeft())
+        cor_quina = px(quina.x() + 1, quina.y() + 1)
+
         # A prova fina de curvatura (comparar quina x meio da aresta) já está
         # em test_theme.py numa sonda isolada, onde a geometria é controlada.
         # Aqui, na janela REAL, o que importa é que a quina do card mostra o
-        # fundo — se alguém voltar a arredondar a QListView direto (sem o
-        # QFrame#card em volta), o viewport pinta retângulo e isto quebra.
-        assert px(1, 1) == theme.BG.upper(), "a quina do card da grade não é curva"
+        # FUNDO e não o painel — se alguém voltar a arredondar a QListView
+        # direto (sem o QFrame#card em volta), o viewport pinta retângulo, a
+        # quina passa a ser a superfície, e isto quebra.
+        #
+        # Não dá pra exigir igualdade exata com `$bg`: a sombra do card
+        # escurece alguns pontos ao redor da quina (~2 níveis por canal). Ela
+        # só passou a aparecer na Fatia 44, quando o fundo deixou de ser
+        # branco puro — antes a sombra caía sobre branco e sumia.
+        assert distancia(cor_quina, theme.BG) < distancia(cor_quina, theme.SURFACE), \
+            f"a quina do card da grade não é curva (leu {cor_quina})"
+
+        # E o miolo do card é a superfície — prova que os dois tons de fato
+        # diferem na tela, não só na paleta.
+        meio = grid_card.mapTo(janela, grid_card.rect().center())
+        assert px(meio.x(), meio.y()) == theme.SURFACE.upper()
     finally:
         qss, paleta, fonte = antes
         qapp.setStyleSheet(qss)
@@ -285,6 +313,47 @@ def test_restaurar_layout_reexibe_paineis_ocultos(janela, qapp):
     # proporcionais aos padrões, não idênticos a eles. O que importa: nenhum
     # painel ficou colapsado (0px), que era o estado antes do restaurar.
     assert all(tamanho > 0 for tamanho in janela._left_splitter.sizes())
+
+
+def test_desligar_todos_os_paineis_nao_incha_a_barra_de_busca(janela, qapp):
+    """Bug relatado pelo Rafael (Fatia 43): desligar os painéis pelo menu
+    Janela fazia a barra de busca inchar até quase tomar a tela — os dois
+    itens do QVBoxLayout central disputavam o espaço sobrando sem
+    prioridade nenhuma entre eles. `setStretchFactor` garante que o
+    splitter (painéis + grade) sempre fica com o espaço extra."""
+    janela.resize(1200, 800)
+    janela.show()
+    qapp.processEvents()
+
+    for acao in janela._window_menu_actions:
+        acao.setChecked(False)
+    qapp.processEvents()
+    qapp.processEvents()
+
+    barra_de_busca = janela.search_box.parentWidget()
+    # Nunca deveria passar de umas poucas dezenas de pixels — bem longe dos
+    # 356px medidos com o bug presente.
+    assert barra_de_busca.height() < 100
+
+
+def test_checks_de_filtro_moraram_no_menu_janela(janela):
+    """Fatia 43: fav_check/group_check/deps_check/hidden_check saíram da
+    barra de busca e viram QAction marcável no menu Janela."""
+    from PySide6.QtGui import QAction
+
+    for atributo in ("fav_check", "group_check", "deps_check", "hidden_check"):
+        acao = getattr(janela, atributo)
+        assert isinstance(acao, QAction)
+        assert acao.isCheckable()
+        assert acao in janela._menu_janela.actions()
+
+
+def test_size_slider_mora_na_status_bar_nao_no_breadcrumb(janela):
+    """Fatia 43, opção C: o slider de tamanho saiu da barra do breadcrumb
+    (lotada) e virou widget permanente do rodapé."""
+    from PySide6.QtWidgets import QStatusBar
+
+    assert isinstance(janela.size_slider.parentWidget(), QStatusBar)
 
 
 def test_filtros_nao_quebram_a_grid(janela, qapp):
