@@ -223,3 +223,28 @@ def test_contagem_por_categoria_ignora_o_proprio_filtro_de_categoria(conn, lib):
         conn, CATEGORIES,
         category_filters=[{"asset_types": ["texture"], "extensions": []}])
     assert contagem["hdris"] == 1
+
+
+@pytest.fixture
+def lib_colorida(tmp_path, conn):
+    """Biblioteca com imagens de verdade (a `lib` acima usa bytes crus, sem
+    pixels) — necessário pro filtro de cor dominante (Fatia 39)."""
+    from PIL import Image
+
+    root = tmp_path / "lib_cor"
+    root.mkdir()
+    Image.new("RGB", (32, 32), (200, 30, 30)).save(root / "vermelho.png")
+    Image.new("RGB", (32, 32), (203, 35, 33)).save(root / "vermelho_proximo.png")
+    Image.new("RGB", (32, 32), (20, 60, 200)).save(root / "azul.png")
+    lib_id = libraries_repo.get_or_create(conn, root)
+    scan_library(conn, lib_id, root)
+    return root
+
+
+def test_filtro_por_cor_dominante(conn, lib_colorida):
+    rows = assets_repo.list_for_grid(conn, dominant_color="#c81e1e")
+    assert _names(rows) == ["vermelho", "vermelho_proximo"]
+
+
+def test_filtro_por_cor_dominante_sem_cor_traz_tudo(conn, lib_colorida):
+    assert len(assets_repo.list_for_grid(conn, dominant_color=None)) == 3

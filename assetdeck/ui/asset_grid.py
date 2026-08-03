@@ -95,6 +95,7 @@ class AssetGridModel(QAbstractListModel):
         self._min_resolution: int | None = None
         self._include_hidden: bool = False        # Fatia 10b
         self._include_dependencies: bool = True   # Fatia 13
+        self._dominant_color: str | None = None   # Fatia 39
         QPixmapCache.setCacheLimit(128 * 1024)  # 128MB de thumbs em RAM
 
     # ---- dados ----
@@ -107,7 +108,8 @@ class AssetGridModel(QAbstractListModel):
                     include_hidden: bool = False,
                     include_dependencies: bool = True,
                     collection_id: int | None = None,
-                    category_filters: list[dict] | None = None) -> None:
+                    category_filters: list[dict] | None = None,
+                    dominant_color: str | None = None) -> None:
         self._search = search or None
         self._asset_types = asset_types or []
         self._category_filters = category_filters or []
@@ -120,6 +122,7 @@ class AssetGridModel(QAbstractListModel):
         self._include_hidden = include_hidden
         self._include_dependencies = include_dependencies
         self._collection_id = collection_id
+        self._dominant_color = dominant_color
         self._requery()
 
     def set_expand_sets(self, expand: bool) -> None:
@@ -159,6 +162,7 @@ class AssetGridModel(QAbstractListModel):
             include_dependencies=self._include_dependencies,
             collection_id=self._collection_id,
             category_filters=self._category_filters,
+            dominant_color=self._dominant_color,
         )
         self._row_by_asset = {r["id"]: i for i, r in enumerate(self._rows)}
         self.endResetModel()

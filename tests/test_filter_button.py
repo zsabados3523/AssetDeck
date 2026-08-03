@@ -67,3 +67,21 @@ def test_apenas_uma_acao_marcada_por_vez(botao):
 
     a3.trigger()
     assert a3.isChecked() and not a1.isChecked()
+
+
+OPCOES_COR = [("Cor: todas", None), ("Vermelho", "#c0392b"), ("Azul", "#2980b9")]
+
+
+def test_swatch_da_icone_de_cor_as_opcoes_com_valor(qapp):
+    botao = FilterButton("palette", OPCOES_COR, swatch=True)
+    for acao, valor in botao._acoes:
+        if valor is None:
+            assert acao.icon().isNull()
+        else:
+            assert not acao.icon().isNull()
+
+
+def test_sem_swatch_nenhuma_opcao_ganha_icone(qapp):
+    botao = FilterButton("palette", OPCOES_COR, swatch=False)
+    for acao, _valor in botao._acoes:
+        assert acao.icon().isNull()

@@ -9,18 +9,34 @@ comprido) e pôr um ícone compacto na linha do breadcrumb.
 from __future__ import annotations
 
 from PySide6.QtCore import QSize, Qt, Signal
-from PySide6.QtGui import QAction, QActionGroup
+from PySide6.QtGui import QAction, QActionGroup, QColor, QIcon, QPixmap
 from PySide6.QtWidgets import QMenu, QToolButton
 
 from assetdeck.ui import icons, theme
+
+_SWATCH_SIZE = 12
+
+
+def _swatch_icon(hex_color: str) -> QIcon:
+    """Quadradinho de cor sólida pra opção de menu — mesmo truque de
+    `QPixmap.fill(QColor(...))` já usado nas cores de tag (não é
+    `setStyleSheet`, então não fere a regra de `ui/theme.py`)."""
+    px = QPixmap(_SWATCH_SIZE, _SWATCH_SIZE)
+    px.fill(QColor(hex_color))
+    return QIcon(px)
 
 
 class FilterButton(QToolButton):
     changed = Signal()
 
     def __init__(self, icon_name: str, options: list[tuple[str, object]],
-                 parent=None) -> None:
-        """`options`: [(rótulo, valor), ...] — o PRIMEIRO é o padrão/"sem filtro"."""
+                 parent=None, swatch: bool = False) -> None:
+        """`options`: [(rótulo, valor), ...] — o PRIMEIRO é o padrão/"sem filtro".
+
+        `swatch`: True faz cada opção (exceto a padrão) mostrar um
+        quadradinho da própria cor (`valor` precisa ser um hex tipo
+        "#rrggbb") em vez de só o texto — usado pela paleta de busca por
+        cor (Fatia 39)."""
         super().__init__(parent)
         self._options = options
         self._default = options[0][1]
@@ -40,6 +56,8 @@ class FilterButton(QToolButton):
         for rotulo, valor in options:
             acao = QAction(rotulo, self._menu)
             acao.setCheckable(True)
+            if swatch and valor is not None:
+                acao.setIcon(_swatch_icon(valor))
             acao.triggered.connect(lambda _c=False, v=valor: self._select(v))
             self._grupo.addAction(acao)
             self._menu.addAction(acao)
