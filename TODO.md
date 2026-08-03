@@ -601,9 +601,46 @@ manda. Detalhe achado no caminho: `expandAll()` marca até FOLHA como
 apareceria aberta sozinha no dia em que ganhasse o primeiro filho.
 9 testes novos em `test_tag_tree.py`; 569 no total.
 
-### ☐ Fatia 36 — Barra de menus
-Arquivo, Editar, Ferramentas, Configurações, Janela — o app hoje não tem
-menu de topo nenhum. Definir o conteúdo de cada menu na hora de fatiar.
+### ☑ Fatia 36 — Barra de menus
+Arquivo, Editar, Ferramentas, Configurações, Janela. Reorganiza o que já
+existia solto (menu ad hoc "Biblioteca" da Fatia 19, "Blender" da F2, Ctrl+T
+como `QShortcut` avulso) num menu de topo de verdade — nenhuma lógica nova,
+só descoberta (o Rafael não tinha como saber que "Relocalizar assets
+perdidos" existia sem clicar às cegas em "Biblioteca").
+
+- **Arquivo:** Reindexar biblioteca (Ctrl+R) · Sair (Ctrl+Q/atalho padrão).
+- **Editar:** Editar tags dos selecionados… (Ctrl+T) · Copiar/Colar/
+  Substituir tags · Renomear em lote… · Propriedades customizadas…. As
+  ações que dependem de seleção avisam no rodapé em vez de falhar em
+  silêncio quando nada está selecionado (`_copy_tags_selected`,
+  `_paste_tags_selected`, `_batch_rename_dos_selecionados`).
+- **Ferramentas:** Relocalizar assets perdidos… · Duplicados por conteúdo
+  visual… (ex-menu "Biblioteca") · Aplicar template de tags… (novo ponto de
+  entrada público `TagTree.apply_template_dialog`, além do menu de contexto
+  da árvore que já existia) · submenu **Blender** (ex-menu de topo próprio:
+  instalar add-on, gerar/parar capas, como usar).
+- **Configurações:** Preferências… (diálogo novo, `ui/preferences_dialog.py`
+  — só regrava `config.json`: ativar/desativar a ponte, porta, política de
+  ocultar preview de origem, backups a manter) · Abrir pasta de
+  configuração/logs.
+- **Janela:** toggle de visibilidade para cada painel esquerdo (Pastas,
+  Tags, Coleções, Smart Collections) + painel de detalhes · Restaurar
+  layout padrão (tamanhos originais dos dois `QSplitter`).
+
+**Achado escrevendo os testes:** `QAction.menu()` chamado duas vezes na
+mesma comprehension (uma pro filtro `if a.menu()`, outra pro valor) aciona
+um bug do shiboken nesta versão do PySide6 — o wrapper Python descartável
+da 1ª chamada derruba o `QMenu` de verdade, e a 2ª releitura explode com
+"Internal C++ object already deleted". Solução adotada: `MainWindow` guarda
+referência própria a cada menu de topo (`self._top_menus`,
+`self._menu_arquivo` etc.) em vez de reconstruir a árvore via
+`menuBar().actions()` depois — mais robusto e é o que os testes usam.
+
+**Deu certo quando** (verificado com `--screenshot` contra a testlib
+ausente neste ambiente — Rafael, confirme na tela real com a testlib
+montada): os 5 menus aparecem na barra, "Ferramentas → Blender" mostra as
+mesmas 4 ações de antes, "Janela" desliga/religa cada painel, "Restaurar
+layout padrão" devolve os painéis escondidos. 577 testes verdes (era 569).
 
 ### ☐ Fatia 37 — Compatibilidade com outros formatos
 Revit, Maya, SketchUp, USD, Alembic etc. Maior escopo da lista depois da

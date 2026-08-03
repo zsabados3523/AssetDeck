@@ -198,15 +198,22 @@ class MainWindow(QMainWindow):
         # transparente — o viewport de uma QTreeWidget/QListView pinta
         # retângulo no canto e vaza por cima de qualquer border-radius posto
         # nela diretamente, então o card por fora é obrigatório (Fatia 24).
+        self._folders_card = theme.make_card(self.folders, titulo="Pastas")
+        self._tags_card = theme.make_card(self.tags, titulo="Tags")
+        self._collections_card = theme.make_card(self.collections, titulo="Coleções")
+        self._smart_card = theme.make_card(self.smart_collections, titulo="Smart Collections")
+
         left = QSplitter(Qt.Orientation.Vertical)
         left.setHandleWidth(10)
-        left.addWidget(theme.make_card(self.folders, titulo="Pastas"))
-        left.addWidget(theme.make_card(self.tags, titulo="Tags"))
-        left.addWidget(theme.make_card(self.collections, titulo="Coleções"))
-        left.addWidget(theme.make_card(self.smart_collections, titulo="Smart Collections"))
-        left.setSizes([280, 200, 200, 200])
+        left.addWidget(self._folders_card)
+        left.addWidget(self._tags_card)
+        left.addWidget(self._collections_card)
+        left.addWidget(self._smart_card)
+        self._left_default_sizes = [280, 200, 200, 200]
+        left.setSizes(self._left_default_sizes)
         left.setMinimumWidth(200)
         left.setMaximumWidth(340)
+        self._left_splitter = left
 
         # DetailsPanel é o próprio card (objectName="card" nele mesmo) — não
         # precisa de embrulho extra, então o min/max width fica nele direto.
@@ -284,7 +291,9 @@ class MainWindow(QMainWindow):
         splitter.setStretchFactor(0, 0)
         splitter.setStretchFactor(1, 1)
         splitter.setStretchFactor(2, 0)
-        splitter.setSizes([240, 740, 300])
+        self._main_default_sizes = [240, 740, 300]
+        splitter.setSizes(self._main_default_sizes)
+        self._main_splitter = splitter
 
         # objectName próprio: controles mais baixos SÓ nesta fileira (padding
         # menor), sem afetar botão/campo em nenhum outro lugar do app —
@@ -304,18 +313,18 @@ class MainWindow(QMainWindow):
         layout.addWidget(splitter)
         self.setCentralWidget(central)
 
-        # Ctrl+T = diálogo rápido de tags (forma 3 do brief)
+        # Navegação de pastas (Fatia 32), mesmas teclas de um navegador.
+        # Ctrl+T (tags) virou QAction da Fatia 36 — ver _setup_menu_bar
+        # (um QShortcut e uma QAction com a MESMA tecla no mesmo widget
+        # geram "ambiguous shortcut" no Qt e nenhum dos dois dispara).
         from PySide6.QtGui import QKeySequence, QShortcut
 
-        QShortcut(QKeySequence("Ctrl+T"), self, activated=self._quick_tag_dialog)
-        # Navegação de pastas (Fatia 32), mesmas teclas de um navegador
         QShortcut(QKeySequence("Alt+Left"), self, activated=self._go_back)
         QShortcut(QKeySequence("Alt+Right"), self, activated=self._go_forward)
         QShortcut(QKeySequence("Alt+Up"), self, activated=self._go_up)
         self._tag_clipboard: list[int] | None = None
 
-        self._setup_bridge()  # ponte com o Blender (F2)
-        self._setup_library_menu()  # relocalizar assets perdidos (Fatia 19)
+        self._setup_menu_bar()  # Fatia 36 — Arquivo/Editar/Ferramentas/Configurações/Janela
 
         # Contagem sempre visível no rodapé (Fatia 28) — antes vivia num
         # QLabel solto na barra de filtros, junto de mais 10 widgets.
@@ -558,16 +567,170 @@ class MainWindow(QMainWindow):
         self._apply_filters()
         self.statusBar().showMessage(f"{len(asset_ids)} asset(s) removidos da coleção")
 
-    # ---- relocalizar assets perdidos (Fatia 19) ----
+    # ---- barra de menus (Fatia 36) ----
 
-    def _setup_library_menu(self) -> None:
-        menu = self.menuBar().addMenu("Biblioteca")
-        self.relocate_action = menu.addAction(
+    def _setup_menu_bar(self) -> None:
+        """Arquivo, Editar, Ferramentas, Configurações, Janela.
+
+        Reorganiza o que já existia solto (menu ad hoc "Biblioteca" da
+        Fatia 19, "Blender" da F2, Ctrl+T como QShortcut avulso) num menu de
+        topo de verdade — o app não tinha nenhum até aqui. Nenhuma ação nova
+        de lógica: só descoberta (o Rafael não tinha como saber que
+        "Relocalizar assets perdidos" existia sem clicar em "Biblioteca" às
+        cegas).
+
+        Cada QMenu de topo é guardado em `self._top_menus` (além do atributo
+        próprio, tipo `self._menu_arquivo`) — PySide/shiboken nesta versão
+        derruba o QMenu de verdade se a única referência Python a ele for
+        uma variável local que sai de escopo (`QAction.menu()` reconstrói um
+        wrapper nem sempre ligado à mesma contagem de referência do C++);
+        guardar a referência aqui é o que evita reconstruir a árvore de menus
+        via `menuBar().actions()` — caminho que se mostrou frágil (achado
+        escrevendo os testes desta fatia)."""
+        self._top_menus: list = []
+        self._menu_arquivo = self._setup_file_menu()
+        self._menu_editar = self._setup_edit_menu()
+        self._menu_ferramentas = ferramentas = self.menuBar().addMenu("Ferramentas")
+        self._top_menus.append(ferramentas)
+        self.relocate_action = ferramentas.addAction(
             "Relocalizar assets perdidos…", self._relocate_lost_assets
         )
-        self.duplicates_action = menu.addAction(
+        self.duplicates_action = ferramentas.addAction(
             "Duplicados por conteúdo visual…", self._find_duplicates
         )
+        ferramentas.addSeparator()
+        ferramentas.addAction("Aplicar template de tags…", self.tags.apply_template_dialog)
+        ferramentas.addSeparator()
+        self._setup_bridge(ferramentas)  # ponte + submenu "Blender" (F2)
+        self._menu_configuracoes = self._setup_settings_menu()
+        self._menu_janela = self._setup_window_menu()
+
+    def _setup_file_menu(self):
+        from PySide6.QtGui import QKeySequence
+
+        menu = self.menuBar().addMenu("Arquivo")
+        self._top_menus.append(menu)
+        self.reindex_action = menu.addAction("Reindexar biblioteca", self.start_scan)
+        self.reindex_action.setShortcut(QKeySequence("Ctrl+R"))
+        menu.addSeparator()
+        self.sair_action = menu.addAction("Sair", self.close)
+        self.sair_action.setShortcut(QKeySequence.StandardKey.Quit)
+        return menu
+
+    def _setup_edit_menu(self):
+        from PySide6.QtGui import QKeySequence
+
+        menu = self.menuBar().addMenu("Editar")
+        self._top_menus.append(menu)
+        tag_action = menu.addAction("Editar tags dos selecionados…", self._quick_tag_dialog)
+        tag_action.setShortcut(QKeySequence("Ctrl+T"))
+        menu.addSeparator()
+        menu.addAction("Copiar tags", self._copy_tags_selected)
+        menu.addAction("Colar tags (adicionar)", lambda: self._paste_tags_selected(replace=False))
+        menu.addAction("Substituir tags (colar por cima)",
+                       lambda: self._paste_tags_selected(replace=True))
+        menu.addSeparator()
+        menu.addAction("Renomear em lote…", self._batch_rename_dos_selecionados)
+        menu.addSeparator()
+        menu.addAction("Propriedades customizadas…", self._manage_properties)
+        return menu
+
+    def _setup_settings_menu(self):
+        menu = self.menuBar().addMenu("Configurações")
+        self._top_menus.append(menu)
+        menu.addAction("Preferências…", self._open_preferences)
+        menu.addSeparator()
+        menu.addAction("Abrir pasta de configuração", self._abrir_pasta_config)
+        menu.addAction("Abrir pasta de logs", self._abrir_pasta_logs)
+        return menu
+
+    def _setup_window_menu(self):
+        menu = self.menuBar().addMenu("Janela")
+        self._top_menus.append(menu)
+        self._panel_toggles = [
+            (self._folders_card, "Pastas"),
+            (self._tags_card, "Tags"),
+            (self._collections_card, "Coleções"),
+            (self._smart_card, "Smart Collections"),
+            (self.details, "Painel de detalhes"),
+        ]
+        self._window_menu_actions = []
+        for widget, rotulo in self._panel_toggles:
+            acao = menu.addAction(rotulo)
+            acao.setCheckable(True)
+            acao.setChecked(True)
+            acao.toggled.connect(lambda checked, w=widget: w.setVisible(checked))
+            self._window_menu_actions.append(acao)
+        menu.addSeparator()
+        menu.addAction("Restaurar layout padrão", self._restaurar_layout)
+        return menu
+
+    def _restaurar_layout(self) -> None:
+        # Mostra os widgets DIRETO (não só via `setChecked(True)`): se o
+        # painel tivesse sido ocultado por outro caminho que não o próprio
+        # toggle, a ação já estaria "checked" e setChecked(True) seria
+        # no-op — sem emitir `toggled`, o painel continuaria escondido.
+        for widget, _rotulo in self._panel_toggles:
+            widget.setVisible(True)
+        for acao in self._window_menu_actions:
+            acao.setChecked(True)
+        self._left_splitter.setSizes(self._left_default_sizes)
+        self._main_splitter.setSizes(self._main_default_sizes)
+        self.statusBar().showMessage("Layout restaurado ao padrão")
+
+    # ---- ações do menu Editar que dependem da seleção da grid ----
+
+    def _copy_tags_selected(self) -> None:
+        ids = self._selected_asset_ids()
+        if len(ids) != 1:
+            self.statusBar().showMessage("Selecione exatamente 1 asset para copiar as tags.")
+            return
+        self._copy_tags(ids[0])
+
+    def _paste_tags_selected(self, replace: bool) -> None:
+        ids = self._selected_asset_ids()
+        if not ids:
+            self.statusBar().showMessage("Selecione ao menos 1 asset antes de colar tags.")
+            return
+        if not self._tag_clipboard:
+            self.statusBar().showMessage("Nenhuma tag copiada ainda.")
+            return
+        self._paste_tags(ids, replace=replace)
+
+    def _batch_rename_dos_selecionados(self) -> None:
+        ids = self._selected_asset_ids()
+        if not ids:
+            self.statusBar().showMessage("Selecione ao menos 1 asset para renomear em lote.")
+            return
+        self._batch_rename_selected(ids)
+
+    # ---- preferências (Fatia 36) ----
+
+    def _open_preferences(self) -> None:
+        from assetdeck.ui.preferences_dialog import PreferencesDialog
+
+        dlg = PreferencesDialog(self)
+        if dlg.exec():
+            self.statusBar().showMessage(
+                "Preferências salvas — porta/ativação da ponte com o Blender "
+                "só valem depois de reabrir o AssetDeck"
+            )
+
+    def _abrir_pasta_config(self) -> None:
+        from PySide6.QtCore import QUrl
+        from PySide6.QtGui import QDesktopServices
+
+        from assetdeck import config
+
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(config.config_dir())))
+
+    def _abrir_pasta_logs(self) -> None:
+        from PySide6.QtCore import QUrl
+        from PySide6.QtGui import QDesktopServices
+
+        from assetdeck import config
+
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(config.logs_dir())))
 
     def _relocate_lost_assets(self) -> None:
         from PySide6.QtWidgets import QMessageBox
@@ -944,7 +1107,9 @@ class MainWindow(QMainWindow):
 
     # ---- ponte com o Blender (F2) ----
 
-    def _setup_bridge(self) -> None:
+    def _setup_bridge(self, ferramentas_menu) -> None:
+        """`ferramentas_menu`: onde o submenu "Blender" entra (Fatia 36 —
+        antes era um menu de topo próprio, `self.menuBar().addMenu("Blender")`)."""
         from assetdeck import config
         from assetdeck.bridge.server import BridgeServer
 
@@ -974,7 +1139,7 @@ class MainWindow(QMainWindow):
         # O Blender salvou algo novo na biblioteca → reindexar
         self._bridge.rescan_requested.connect(self.start_scan)
 
-        menu = self.menuBar().addMenu("Blender")
+        menu = ferramentas_menu.addMenu("Blender")
         menu.addAction("Instalar / atualizar add-on…", self._install_addon)
         menu.addSeparator()
         self.render_action = menu.addAction(

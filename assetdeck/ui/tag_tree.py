@@ -180,6 +180,11 @@ class TagTree(QTreeWidget):
             tags_repo.set_color(self._conn, tag_id, cor.name())
             self.structure_changed.emit()
 
+    def apply_template_dialog(self) -> None:
+        """Ponto de entrada público — usado pelo menu de contexto da árvore
+        E pelo menu "Ferramentas" da janela principal (Fatia 36)."""
+        self._template()
+
     def _template(self) -> None:
         from assetdeck.ui.tag_templates_dialog import TagTemplateDialog
 

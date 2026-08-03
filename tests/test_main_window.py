@@ -200,18 +200,81 @@ def test_ponte_e_render_ficam_prontos(janela):
     assert janela._render.running is False
 
 
+def _titulos_dos_menus(janela):
+    """Todos os QMenu da barra, recursivo (pega submenu tipo "Blender"
+    dentro de "Ferramentas") — findChildren atravessa a árvore de objetos
+    Qt inteira, não só o primeiro nível."""
+    from PySide6.QtWidgets import QMenu
+
+    return [m.title() for m in janela.menuBar().findChildren(QMenu)]
+
+
 def test_menu_blender_tem_as_acoes(janela):
-    menus = [m.title() for m in janela.menuBar().findChildren(type(janela.menuBar().addMenu("x")))]
-    assert any("Blender" in t for t in menus)
+    assert any("Blender" in t for t in _titulos_dos_menus(janela))
     assert janela.render_action.isEnabled()
     assert janela.cancel_render_action.isEnabled() is False
 
 
-def test_menu_biblioteca_tem_relocalizar(janela):
-    menus = [m.title() for m in janela.menuBar().findChildren(type(janela.menuBar().addMenu("x")))]
-    assert any("Biblioteca" in t for t in menus)
+def test_menu_ferramentas_tem_relocalizar_e_duplicados(janela):
+    """Fatia 36: "Biblioteca" (menu ad hoc da Fatia 19) virou parte de
+    "Ferramentas" — as ações continuam as mesmas, só o container mudou."""
+    assert any("Ferramentas" in t for t in _titulos_dos_menus(janela))
     assert janela.relocate_action.isEnabled()
     assert janela.duplicates_action.isEnabled()
+
+
+def test_barra_de_menus_tem_os_cinco_menus(janela):
+    """Fatia 36: Arquivo, Editar, Ferramentas, Configurações, Janela —
+    antes só existiam "Biblioteca" e "Blender" soltos.
+
+    Usa `janela._top_menus` (referência guardada na própria MainWindow), não
+    `menuBar().actions()[i].menu()` — reconstruir o QMenu a partir da QAction
+    se mostrou frágil nesta versão do PySide6/shiboken (achado escrevendo
+    este teste: o wrapper Python intermediário podia derrubar o QMenu de
+    verdade). Ver `_setup_menu_bar`."""
+    topo = [m.title() for m in janela._top_menus]
+    for esperado in ("Arquivo", "Editar", "Ferramentas", "Configurações", "Janela"):
+        assert any(esperado in t for t in topo), f"menu {esperado!r} não encontrado em {topo}"
+
+
+def test_menu_janela_alterna_visibilidade_dos_paineis(janela, qapp):
+    """Fatia 36: cada painel esquerdo + o de detalhes ganha um toggle
+    checável no menu "Janela"."""
+    janela.show()
+    qapp.processEvents()
+
+    widget_pastas, acao_pastas = None, None
+    for (widget, rotulo), acao in zip(janela._panel_toggles, janela._window_menu_actions):
+        if rotulo == "Pastas":
+            widget_pastas, acao_pastas = widget, acao
+    assert widget_pastas is not None and acao_pastas is not None
+
+    assert widget_pastas.isVisible()
+    assert acao_pastas.isChecked()
+
+    acao_pastas.setChecked(False)
+    assert not widget_pastas.isVisible()
+
+    acao_pastas.setChecked(True)
+    assert widget_pastas.isVisible()
+
+
+def test_restaurar_layout_reexibe_paineis_ocultos(janela, qapp):
+    janela.show()
+    qapp.processEvents()
+
+    widget_tags = next(w for w, r in janela._panel_toggles if r == "Tags")
+    widget_tags.setVisible(False)
+    assert not widget_tags.isVisible()
+
+    janela._restaurar_layout()
+
+    assert widget_tags.isVisible()
+    # QSplitter.setSizes() escala pela altura DISPONÍVEL de verdade — numa
+    # janela sem o tamanho exato da soma dos padrões, os valores voltam
+    # proporcionais aos padrões, não idênticos a eles. O que importa: nenhum
+    # painel ficou colapsado (0px), que era o estado antes do restaurar.
+    assert all(tamanho > 0 for tamanho in janela._left_splitter.sizes())
 
 
 def test_filtros_nao_quebram_a_grid(janela, qapp):
@@ -282,3 +345,44 @@ def test_preview_manual_recusa_asset_que_ja_tem_miniatura_de_verdade(janela):
 
     linha = janela.model.row_at(janela.model.index_of_asset(jpg_id))
     assert not linha["cover_path"]
+
+
+# ---- Fatia 36: ações do menu Editar sem nada selecionado ----
+
+
+def test_editar_menu_avisa_sem_derrubar_nada_sem_selecao(janela):
+    """As ações do menu "Editar" que dependem de seleção (copiar/colar tags,
+    renomear em lote) precisam avisar no rodapé em vez de fazer nada em
+    silêncio ou quebrar quando ninguém está selecionado."""
+    janela.grid.clearSelection()
+
+    janela._copy_tags_selected()
+    assert "Selecione exatamente 1" in janela.statusBar().currentMessage()
+
+    janela._tag_clipboard = None
+    janela._paste_tags_selected(replace=False)
+    assert "Selecione ao menos 1" in janela.statusBar().currentMessage()
+
+    janela._batch_rename_dos_selecionados()
+    assert "Selecione ao menos 1" in janela.statusBar().currentMessage()
+
+
+def test_editar_menu_colar_tags_sem_nada_copiado(janela):
+    janela.grid.selectionModel().select(
+        janela.model.index(0),
+        janela.grid.selectionModel().SelectionFlag.Select,
+    )
+    janela._tag_clipboard = None
+
+    janela._paste_tags_selected(replace=False)
+
+    assert "Nenhuma tag copiada" in janela.statusBar().currentMessage()
+
+
+def test_menu_arquivo_reindexar_e_sair_tem_atalho(janela):
+    from PySide6.QtGui import QKeySequence
+
+    assert janela.reindex_action.shortcut() == QKeySequence("Ctrl+R")
+    assert janela.sair_action.shortcut() == QKeySequence.StandardKey.Quit
+    assert janela.reindex_action in janela._menu_arquivo.actions()
+    assert janela.sair_action in janela._menu_arquivo.actions()
