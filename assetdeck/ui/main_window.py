@@ -58,6 +58,25 @@ from assetdeck.ui.category_bar import CategoryBar
 
 log = logging.getLogger(__name__)
 
+# Paleta fixa do filtro de busca por cor (Fatia 39) — decisão do Rafael:
+# botões de cor pré-definidos em vez de um seletor livre. Um hex
+# representativo por balde; a tolerância de "quão perto conta" mora em
+# assets_repo.COLOR_TOLERANCE, não aqui.
+PALETA_CORES = [
+    ("Cor: todas", None),
+    ("Vermelho", "#c0392b"),
+    ("Laranja", "#e67e22"),
+    ("Amarelo", "#f1c40f"),
+    ("Verde", "#27ae60"),
+    ("Azul", "#2980b9"),
+    ("Roxo", "#8e44ad"),
+    ("Rosa", "#e84393"),
+    ("Marrom", "#7f5539"),
+    ("Cinza", "#7f8c8d"),
+    ("Branco", "#f5f5f5"),
+    ("Preto", "#1a1a1a"),
+]
+
 
 class MainWindow(QMainWindow):
     def __init__(self, conn: sqlite3.Connection, library_root: str,
@@ -108,6 +127,11 @@ class MainWindow(QMainWindow):
              ("≥ 4K", 4096), ("≥ 8K", 8192)],
         )
         self.res_filter.changed.connect(self._apply_filters)
+
+        # Busca por cor dominante (Fatia 39) — cor média do arquivo
+        # principal, comparada contra uma paleta fixa de botões.
+        self.color_filter = FilterButton("palette", PALETA_CORES, swatch=True)
+        self.color_filter.changed.connect(self._apply_filters)
 
         # Toggle do Rafael: ver sets PBR como 1 card (ligado) ou cada mapa
         # separado (desligado). Só visualização — o banco não muda.
@@ -230,6 +254,7 @@ class MainWindow(QMainWindow):
         self.details.preview_remove_requested.connect(self._on_preview_remove)
         self.details.property_value_changed.connect(self._on_property_value_changed)
         self.details.manage_properties_requested.connect(self._manage_properties)
+        self.details.check_textures_requested.connect(self._check_textures)
 
         # Caminho navegável acima da grade (Fatia 28, estilo Connecter): a
         # única pista de "onde estou" antes disso era o item selecionado na
@@ -269,6 +294,7 @@ class MainWindow(QMainWindow):
         breadcrumb_row.addWidget(self.categories)
         breadcrumb_row.addWidget(self.rating_filter)
         breadcrumb_row.addWidget(self.res_filter)
+        breadcrumb_row.addWidget(self.color_filter)
         breadcrumb_row.addWidget(self.size_slider)
 
         grid_container = QWidget()
@@ -381,6 +407,7 @@ class MainWindow(QMainWindow):
             include_hidden=self.hidden_check.isChecked(),
             include_dependencies=self.deps_check.isChecked(),
             collection_id=self.collections.current_collection_id(),
+            dominant_color=self.color_filter.value(),
         )
 
     def _apply_filters(self) -> None:
@@ -849,6 +876,7 @@ class MainWindow(QMainWindow):
         self.rating_filter.set_value(query.get("min_rating"))
         self.fav_check.setChecked(bool(query.get("starred_only")))
         self.res_filter.set_value(query.get("min_resolution"))
+        self.color_filter.set_value(query.get("dominant_color"))
         self.hidden_check.setChecked(bool(query.get("include_hidden")))
         self.deps_check.setChecked(bool(query.get("include_dependencies")))
         self.tags.select(query.get("tag_id"))
@@ -892,6 +920,48 @@ class MainWindow(QMainWindow):
         dlg.exec()
         if dlg.changed:
             self._refresh_details_tags()  # recarrega o painel (inclui propriedades)
+
+    # ---- texturas faltando de um .blend (Fatia 40) ----
+
+    def _check_textures(self, _asset_id: int, caminho: str) -> None:
+        from PySide6.QtCore import Qt
+        from PySide6.QtWidgets import QApplication, QMessageBox
+
+        from assetdeck.blender.missing_textures import list_missing_textures
+        from assetdeck.blender.render import blender_command
+        from assetdeck.ui.missing_textures_dialog import MissingTexturesDialog
+
+        if blender_command() is None:
+            QMessageBox.warning(
+                self, "Blender não encontrado",
+                "Não achei o Blender nesta máquina. Instale com:\n\n"
+                "flatpak install flathub org.blender.Blender",
+            )
+            return
+
+        # Ação sob demanda de 1 asset, alguns segundos — cursor de espera
+        # em vez da infraestrutura de fila/progresso da Fatia 38 (só vale
+        # a pena pra job em lote pela biblioteca inteira).
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        try:
+            resultado = list_missing_textures(Path(caminho))
+        finally:
+            QApplication.restoreOverrideCursor()
+
+        if not resultado.ok:
+            QMessageBox.warning(self, "Checagem falhou", resultado.erro)
+            return
+        if not resultado.perdidas:
+            recado = "Nenhuma textura faltando."
+            if resultado.recuperadas_auto:
+                recado += (f" ({resultado.recuperadas_auto} estavam com caminho "
+                          "quebrado, mas foram religadas automaticamente.)")
+            QMessageBox.information(self, "Texturas em ordem", recado)
+            return
+
+        dlg = MissingTexturesDialog(Path(caminho), resultado.perdidas,
+                                    resultado.recuperadas_auto, self)
+        dlg.exec()
 
     # ---- notas / sidecar ----
 
