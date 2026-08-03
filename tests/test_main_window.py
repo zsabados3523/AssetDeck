@@ -22,6 +22,13 @@ def janela(qapp, tmp_path, monkeypatch):
     monkeypatch.setenv("ASSETDECK_CACHE_DIR", str(tmp_path / "cache"))
     config.ensure_dirs()
 
+    # Fatia 46: porta 0 = o SO escolhe uma livre. Com a porta FIXA do
+    # DEFAULTS (45017), este teste colidia com o AssetDeck de verdade
+    # aberto na máquina — não é regressão de código, é isolamento de teste.
+    cfg = config.load_config()
+    cfg["bridge_port"] = 0
+    config.save_config(cfg)
+
     root = tmp_path / "lib"
     root.mkdir()
     Image.new("RGB", (32, 32)).save(root / "textura.jpg")
@@ -196,6 +203,9 @@ def test_ponte_e_render_ficam_prontos(janela):
     """Cobre o NameError que derrubava a abertura do app."""
     assert janela._bridge is not None
     assert janela._bridge.listening
+    # Fatia 46: fixture pede porta 0 (SO escolhe) — confere que o Qt de
+    # fato subiu numa porta real, não só que "listening" ficou True.
+    assert janela._bridge.port > 0
     assert janela._render is not None
     assert janela._render.running is False
 
