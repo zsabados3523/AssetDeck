@@ -8,6 +8,7 @@ from assetdeck.db.connection import connect
 from assetdeck.db.migrate import apply_migrations
 from assetdeck.db.repos import assets as assets_repo
 from assetdeck.db.repos import libraries as libraries_repo
+from assetdeck.db.repos import tags as tags_repo
 from assetdeck.indexer.scanner import scan_library
 from assetdeck.sidecar.reader import read_sidecar, restorable_fields
 from assetdeck.sidecar.writer import sidecar_path, write_for_asset
@@ -41,7 +42,7 @@ def test_sidecar_e_criado_ao_lado_com_conteudo_correto(env):
 
     assert dest == root / "concreto.jpg.assetdeck.json"
     data = json.loads(dest.read_text(encoding="utf-8"))
-    assert data["assetdeck"] == 1
+    assert data["assetdeck"] == 2  # Fatia 45: formato 2, tags com cor/ícone
     assert data["name"] == "concreto"
     assert data["notes"] == "usei na fachada do projeto X"
     assert data["files"] == ["concreto.jpg"]
@@ -71,6 +72,57 @@ def test_desastre_total_recupera_nota_e_uuid_do_sidecar(env):
     assert row["notes"] == "nota preciosa"
     assert row["uuid"] == uuid_original  # identidade sobreviveu à morte do banco
     conn2.close()
+
+
+def test_desastre_total_recupera_cor_e_icone_da_tag(env):
+    """O teste-chave da Fatia 45: cor e ícone de uma tag sobrevivem a
+    apagar o banco e reindexar — não só o nome (buraco desde a Fatia 8,
+    ganhado de novo pelo ícone na Fatia 33)."""
+    conn, root, tmp_path = env
+    aid = _asset_id(conn, "concreto")
+
+    tid = tags_repo.get_or_create_path(conn, "Materiais/Concreto")
+    tags_repo.set_color(conn, tid, "#a1b2c3")
+    tags_repo.set_icon(conn, tid, "tag-concreto")
+    conn.execute(
+        "INSERT INTO asset_tags (asset_id, tag_id, source) VALUES (?, ?, 'manual')",
+        (aid, tid),
+    )
+    conn.commit()
+    write_for_asset(conn, root, aid)
+    conn.close()
+
+    # DESASTRE: banco novo, do zero
+    conn2 = connect(tmp_path / "renascido.db")
+    apply_migrations(conn2)
+    lib_id = libraries_repo.get_or_create(conn2, root)
+    scan_library(conn2, lib_id, root)
+
+    row = conn2.execute("SELECT color, icon FROM tags WHERE name = 'Concreto'").fetchone()
+    assert row["color"] == "#a1b2c3"
+    assert row["icon"] == "tag-concreto"
+    # O ancestral (raiz do caminho) também sobrevive, mesmo sem cor/ícone
+    raiz = conn2.execute("SELECT name FROM tags WHERE name = 'Materiais'").fetchone()
+    assert raiz is not None
+    conn2.close()
+
+
+def test_sidecar_formato_1_antigo_ainda_restaura_tags_sem_cor(env):
+    """Sidecar escrito ANTES da Fatia 45 (formato 1, tags como lista de
+    strings) continua restaurando a tag — só sem cor/ícone, que nunca
+    existiu nesse formato. Rafael tem sidecars assim na biblioteca real."""
+    conn, root, tmp_path = env
+    (root / "novo.png").write_bytes(b"w" * 40)
+    sidecar_path(root / "novo.png").write_text(
+        json.dumps({"assetdeck": 1, "uuid": "def45678", "tags": ["Materiais/Pedra"]}),
+        encoding="utf-8",
+    )
+    lib_id = libraries_repo.get_or_create(conn, root)
+    scan_library(conn, lib_id, root)
+
+    aid = _asset_id(conn, "novo")
+    nomes = [t["name"] for t in tags_repo.tags_of(conn, aid)]
+    assert nomes == ["Pedra"]
 
 
 def test_sidecar_corrompido_e_ignorado_sem_derrubar_a_varredura(env):
@@ -117,6 +169,15 @@ def test_restorable_fields_descarta_lixo_campo_a_campo():
 
 
 def test_read_sidecar_de_versao_desconhecida_e_ignorado(tmp_path):
+    # Fatia 45 introduziu o formato 2 (tags com cor/ícone) — só uma versão
+    # REALMENTE desconhecida (3+) deve ser rejeitada agora.
     p = tmp_path / "x.jpg.assetdeck.json"
-    p.write_text(json.dumps({"assetdeck": 2, "uuid": "abc"}), encoding="utf-8")
+    p.write_text(json.dumps({"assetdeck": 3, "uuid": "abc"}), encoding="utf-8")
     assert read_sidecar(p) is None
+
+
+def test_read_sidecar_aceita_formato_1_e_2(tmp_path):
+    for versao in (1, 2):
+        p = tmp_path / f"v{versao}.jpg.assetdeck.json"
+        p.write_text(json.dumps({"assetdeck": versao, "uuid": "abc12345"}), encoding="utf-8")
+        assert read_sidecar(p) is not None
