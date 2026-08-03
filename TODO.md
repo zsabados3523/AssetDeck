@@ -666,12 +666,34 @@ UI — a `libraries` table já suporta isso desde o schema v1, só a UI
 raiz do bug de pastas duplicadas que resolvemos em 2026-08-02 quando a
 testlib e a biblioteca real ficaram indexadas ao mesmo tempo.
 
-### ☐ Fatia 42 — Miniaturas faltando em alguns formatos de imagem
+### ☐ Fatia 42 — Miniaturas faltando em alguns formatos de imagem (parcial)
 Achado testando a biblioteca real (2026-08-02): 163 arquivos `.tif`
 ("Silhuetas") e pelo menos 1 arquivo com modo de cor não suportado pelo
 Pillow ficam sem preview (asset é indexado normal, só sem miniatura).
-Investigar se dá pra ampliar o resgate que já existe pra PNG corrompido
-(`thumbs/raster.py`) pra esses casos.
+
+**Investigado sem acesso aos arquivos reais** (esta sessão rodou sem a
+testlib nem a biblioteca do Rafael montadas — CLAUDE.md proíbe apontar
+para outro caminho, e não existia um pra apontar aqui). Sem os arquivos
+que falham (ou o trecho do log deles), não dava pra confirmar a causa raiz
+— então não fiz uma correção "no escuro" e chamá-la de pronta.
+
+**O que foi feito, como melhoria estrutural defensável por si só** (não
+como correção confirmada): `thumbs/raster.py::make_thumbnail` convertia o
+modo da imagem (paleta, CMYK, 1-bit → RGB/L/RGBA) **depois** de chamar
+`img.thumbnail()`. Isso é estruturalmente arriscado — o resample
+BICUBIC/LANCZOS padrão do Pillow historicamente não aceita todo modo — e
+`.tif` de máscara ("Silhueta") é candidato natural a vir em modo "1" ou
+"P". Virou `_to_safe_mode()`, chamado ANTES do resize. Testado com `.tif`
+sintético nos modos 1/P/CMYK/L/RGB (`test_tif_em_varios_modos_de_cor_gera_thumbnail`),
+mas **nenhum desses modos falhava também na ordem antiga** nesta versão do
+Pillow (12.3.1) — não consegui um teste vermelho→verde, só cobertura de
+regressão. Pode não ser a causa real do bug do Rafael.
+
+**Pendente para fechar de vez:** o Rafael rodar contra a biblioteca real
+de novo e, se algum `.tif` continuar sem preview, colar aqui o trecho do
+log (`~/.local/share/assetdeck/logs/assetdeck.log`, procurar "Thumbnail
+falhou") — o traceback tem o tipo exato de exceção do Pillow, que é o que
+falta pra mirar a correção certa em vez de generalizar no escuro.
 
 ### ☐ Fatia 43 — Overhaul visual (fecha o v2.0)
 Por último, de propósito (pedido do Rafael): depois que as fatias 31-42

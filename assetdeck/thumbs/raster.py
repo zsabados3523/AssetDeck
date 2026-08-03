@@ -96,6 +96,27 @@ def save_png_atomic(img: Image.Image, dest: Path) -> None:
         tmp.unlink(missing_ok=True)
 
 
+def _to_safe_mode(img: Image.Image) -> Image.Image:
+    """Normaliza o MODO antes do resize — não depois.
+
+    Achado na Fatia 42: 163 `.tif` ("Silhuetas") e outros arquivos com modo
+    de cor incomum (paleta, CMYK, 1-bit) ficavam sem thumbnail. A ordem
+    antiga (`thumbnail()` primeiro, converter depois) chama o resample
+    BICUBIC/LANCZOS do Pillow em cima do modo ORIGINAL do arquivo — e nem
+    todo modo suporta esses filtros (histórico documentado do próprio
+    Pillow: paleta "P", 1-bit "1" e alguns CMYK precisam converter para
+    RGB/L/RGBA ANTES de reamostrar). Converter primeiro é estrutural: cobre
+    qualquer modo exótico, não só os que apareceram na testlib.
+    """
+    if "A" in img.getbands():
+        # Cutouts: transparência REAL — o fundo do app aparece por trás
+        # (feedback do Rafael; o xadrez da v2 foi descartado)
+        return img.convert("RGBA")
+    if img.mode not in ("RGB", "L"):
+        return img.convert("RGB")  # paleta, CMYK, 1-bit etc.
+    return img
+
+
 def make_thumbnail(src: Path, dest: Path, size: int = 256) -> None:
     """Gera a thumbnail PNG de `src` em `dest` (máx. `size` px, proporção mantida).
 
@@ -103,11 +124,6 @@ def make_thumbnail(src: Path, dest: Path, size: int = 256) -> None:
     """
     with open_image(src) as img:
         img = normalize_mode(img)
+        img = _to_safe_mode(img)
         img.thumbnail((size, size))  # in-place, mantém proporção
-        if "A" in img.getbands():
-            # Cutouts: transparência REAL — o fundo do app aparece por trás
-            # (feedback do Rafael; o xadrez da v2 foi descartado)
-            img = img.convert("RGBA")
-        elif img.mode not in ("RGB", "L"):
-            img = img.convert("RGB")  # paleta, CMYK etc.
         save_png_atomic(img, dest)
