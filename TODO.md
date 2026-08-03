@@ -664,6 +664,15 @@ de um deles some da visão padrão (virou dependência, mesmo mecanismo do
 `.blend`, sem mudar `dependencies.py`); os 4 formatos caem em "Modelos"
 na barra de categoria. 596 testes verdes.
 
+**Dúvida do Rafael esclarecida (2026-08-03), não é bug:** o dropdown de
+extensão do botão "Modelos" não mostrava `.rvt`/`.skp`/`.usd*`/`.abc` —
+comportamento correto, não defeito. `CategoryButton` (`category_bar.py`)
+só lista extensões que existem de verdade entre os assets indexados
+(mesma regra da Fatia 31, evita opção vazia no popup); nem a testlib nem
+o banco tinham nenhum arquivo desses 4 formatos ainda. Confirmado
+rodando: assim que um `.rvt` existe no banco, ele aparece no dropdown na
+hora, sem precisar de nada novo.
+
 **Nota**: não dá pra testar com arquivo real de Revit/SketchUp/USD/
 Alembic (binários proprietários complexos, nenhum na testlib) — os
 testes usam extensão certa em conteúdo dummy, suficiente porque o
