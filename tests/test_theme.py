@@ -125,6 +125,143 @@ def test_contraste_do_rotulo_sobre_o_card_sem_miniatura():
     assert theme.contrast_ratio(theme.ON_TYPE_TINT, theme.TYPE_TINT) >= 4.5
 
 
+# ------------------------------------------------- destaque azul (F44) --
+
+def test_contraste_do_destaque_sobre_a_pastilha_suave():
+    """A pastilha suave (`accent_soft`) é o estado ATIVO de filtro/categoria, e
+    o texto dela é o próprio destaque — azul sobre azul lavado.
+
+    É o par mais apertado da paleta inteira: quem escurece o `accent` para ele
+    caber melhor sobre branco piora aqui, e vice-versa. Travado nos dois modos
+    porque foi calibrado à mão entre os dois limites.
+    """
+    assert theme.contrast_ratio(theme.ACCENT, theme.ACCENT_SOFT) >= 4.5
+    assert theme.contrast_ratio(theme.ACCENT_DARK, theme.ACCENT_SOFT_DARK) >= 4.5
+
+
+# Quanto dois tons vizinhos precisam diferir para o degrau ser visível.
+# Medido em RAZÃO DE CONTRASTE, não em luminância crua: a luminância relativa
+# satura perto do preto (o degrau #101114 → #1A1B1F dá 0,003 nela, contra
+# 0,077 do degrau equivalente no modo claro) e reprovaria um degrau escuro que
+# a tela mostra perfeitamente. A razão de contraste carrega o termo +0,05 da
+# WCAG justamente para continuar útil nessa faixa. O piso é o degrau do modo
+# claro (#F6F6F9 → #FFFFFF = 1,079), arredondado para baixo.
+DEGRAU_MINIMO = 1.07
+
+
+def test_a_pastilha_suave_se_distingue_da_superficie():
+    """`accent_soft` tem de ser VISÍVEL como pastilha: se ficar perto demais da
+    superfície, o estado ativo some e voltamos ao problema que o Rafael
+    relatou (não dava pra ver qual categoria estava ligada)."""
+    for soft, superficie in (
+        (theme.ACCENT_SOFT, theme.SURFACE),
+        (theme.ACCENT_SOFT_DARK, theme.SURFACE_DARK),
+    ):
+        razao = theme.contrast_ratio(soft, superficie)
+        assert razao >= DEGRAU_MINIMO, f"{soft} não se destaca de {superficie} ({razao:.3f})"
+
+
+def test_o_fundo_e_a_superficie_sao_cores_diferentes():
+    """Fatia 44: painel e janela deixaram de ser a mesma cor. Se alguém
+    reunificar os dois, a hierarquia da tela volta a depender só da linha de
+    contorno — que era exatamente a tela chapada que o Rafael reprovou."""
+    for bg, superficie in ((theme.BG, theme.SURFACE), (theme.BG_DARK, theme.SURFACE_DARK)):
+        assert bg != superficie
+        razao = theme.contrast_ratio(bg, superficie)
+        assert razao >= DEGRAU_MINIMO, f"{bg} e {superficie} são degraus fracos ({razao:.3f})"
+
+
+def test_o_campo_se_distingue_do_painel_nos_dois_modos():
+    """O campo de busca some no painel se os dois forem a mesma cor — era o
+    caso até a Fatia 43, quando `field` era literalmente `bg`. No claro ele
+    afunda em relação ao branco; no escuro, em relação ao painel."""
+    for campo, superficie in ((theme.FIELD, theme.SURFACE), (theme.FIELD_DARK, theme.SURFACE_DARK)):
+        razao = theme.contrast_ratio(campo, superficie)
+        assert razao >= DEGRAU_MINIMO, f"{campo} some em {superficie} ({razao:.3f})"
+
+
+def test_a_pastilha_de_tipo_nao_usa_a_cor_de_destaque():
+    """O card sem miniatura aparece dezenas de vezes ao mesmo tempo na grade.
+    Pintá-lo de azul faria da AUSÊNCIA de miniatura o elemento mais gritante da
+    tela — por isso `TYPE_TINT` é constante própria e não um apelido de
+    `ACCENT`, como já foi."""
+    assert theme.TYPE_TINT != theme.ACCENT
+    assert theme.TYPE_TINT_DARK != theme.ACCENT_DARK
+
+
+def test_o_qss_nao_tem_cor_literal(qapp):
+    """Regra do projeto: nenhuma cor cravada no theme.qss — tudo entra como
+    token no theme.py.
+
+    Não é preciosismo: os três "#FFFFFF" que estavam aqui (fundo do checkbox,
+    do indicador de árvore e da alça do slider) atravessaram o modo escuro
+    inteiro da Fatia 43 sem ninguém ver, e acendiam confetes brancos numa
+    janela quase preta.
+    """
+    folha = QSS_SEM_TOKENS = re.sub(r"\$\w+", "", _sem_comentarios(_QSS_CRU()))
+    literais = re.findall(r"#[0-9A-Fa-f]{3,8}\b", QSS_SEM_TOKENS)
+    assert not literais, f"cor literal no theme.qss: {literais} — vire token no theme.py"
+    assert folha  # a folha não pode estar vazia (senão o teste passa à toa)
+
+
+def _QSS_CRU() -> str:
+    """O theme.qss ANTES da substituição — é nele que a cor literal apareceria.
+    Depois de substituído, todo token vira hex e o teste não distinguiria."""
+    return theme.QSS_FILE.read_text(encoding="utf-8")
+
+
+# ------------------------------------------------------ modo escuro (F43) --
+
+@pytest.mark.parametrize("separation", list(theme.SEPARATION))
+def test_contraste_do_texto_sobre_o_painel_escuro(separation):
+    """Mesma régua do modo claro (WCAG, pedido do Rafael) — só a paleta
+    escura precisa passar no mesmo mínimo, luminância invertida."""
+    variant = theme.Variant(separation=separation, mode="escuro")
+    superficie = theme.surface_solid(variant)
+    assert theme.contrast_ratio(theme.TEXT_DARK, superficie) >= 4.5
+    assert theme.contrast_ratio(theme.TEXT_MUTED_DARK, superficie) >= 3.0
+    assert theme.contrast_ratio(theme.WARNING_DARK, superficie) >= 4.5
+    assert theme.contrast_ratio(theme.DANGER_DARK, superficie) >= 4.5
+    assert theme.contrast_ratio(theme.ACCENT_DARK, superficie) >= 4.5
+
+
+@pytest.mark.parametrize("separation", list(theme.SEPARATION))
+def test_contraste_do_texto_selecionado_escuro(separation):
+    """Seleção no escuro é branco translúcido sobre o fundo escuro (o
+    inverso do preto translúcido sobre fundo claro) — mesma legibilidade
+    mínima."""
+    variant = theme.Variant(separation=separation, mode="escuro")
+    pastilha = theme.blend(theme.SELECTION_DARK, theme.surface_solid(variant))
+    assert theme.contrast_ratio(theme.TEXT_DARK, pastilha) >= 4.5
+    assert theme.contrast_ratio(theme.TEXT_MUTED_DARK, pastilha) >= 3.0
+
+
+def test_contraste_do_texto_sobre_o_destaque_e_sobre_o_popup_escuro():
+    assert theme.contrast_ratio(theme.ON_ACCENT_DARK, theme.ACCENT_DARK) >= 4.5
+    assert theme.contrast_ratio(theme.TEXT_DARK, theme.POPOVER_DARK) >= 4.5
+    assert theme.contrast_ratio(theme.TEXT_DARK, theme.BG_DARK) >= 4.5
+
+
+def test_contraste_do_rotulo_sobre_o_card_sem_miniatura_escuro():
+    assert theme.contrast_ratio(theme.ON_TYPE_TINT_DARK, theme.TYPE_TINT_DARK) >= 4.5
+
+
+def test_apply_theme_no_modo_escuro_nao_lanca_key_error(qapp):
+    """`build_qss`/`Template.substitute` são estritos de propósito — token
+    faltando levanta na hora. Roda os dois modos pra pegar qualquer token
+    de cor que eu tenha esquecido de mapear em `_paleta()`."""
+    theme.apply_theme(qapp, theme.Variant(mode="escuro"))
+    theme.apply_theme(qapp, theme.Variant(mode="claro"))  # devolve pro padrão
+
+
+def test_current_colors_reflete_o_ultimo_apply_theme(qapp):
+    theme.apply_theme(qapp, theme.Variant(mode="escuro"))
+    assert theme.current_colors()["bg"] == theme.BG_DARK
+
+    theme.apply_theme(qapp, theme.Variant(mode="claro"))
+    assert theme.current_colors()["bg"] == theme.BG
+
+
 # ---------------------------------------------------------- fundo (grão) --
 
 def test_fundo_liso_nao_gera_ladrilho():
@@ -376,7 +513,7 @@ def test_vitrine_abre_com_as_amostras(tema_isolado):
     janela.show()
     tema_isolado.processEvents()
 
-    assert set(janela._combos) == {"background", "separation", "radius", "font"}
+    assert set(janela._combos) == {"background", "separation", "radius", "font", "mode"}
     assert "contraste" in janela.rodape.text()
 
     janela._combos["separation"].setCurrentIndex(2)  # dispara o reaplicar
