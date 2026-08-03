@@ -28,6 +28,12 @@ DEFAULTS = {
     "bridge_enabled": True,
     "bridge_port": 45017,
     "bridge_token": "",
+    # Cena de render de capas (Fatia 38) — valores de hoje convertidos pra
+    # hex sRGB (o que sai do QColorDialog); blender/render.py converte pra
+    # linear antes de plantar no shader.
+    "render_bg_color": "#959599",
+    "render_bg_strength": 1.8,
+    "render_sun_energy": 3.0,
 }
 
 

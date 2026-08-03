@@ -1,6 +1,11 @@
 """Roda DENTRO do Blender (blender -b -P) para renderizar a capa de um modelo.
 
-Recebe, depois de '--': <arquivo.blend> <saida.png> [tamanho]
+Recebe, depois de '--':
+  <arquivo.blend> <saida.png> [tamanho] [bg_r bg_g bg_b bg_strength sun_energy]
+
+Os 5 últimos (cena configurável, Fatia 38) são opcionais — sem eles, cai
+nos mesmos valores que sempre foram hardcoded aqui, então chamar este
+script à mão continua funcionando igual.
 
 Enquadra tudo que é visível numa câmera automática, ilumina com um céu
 neutro e renderiza. Se o .blend já tiver câmera própria, ela é respeitada —
@@ -16,6 +21,13 @@ from mathutils import Vector
 
 MARGEM = 1.05  # folga em volta do objeto
 NIVEIS_BUSCA = 2  # quantas pastas subir procurando texturas perdidas
+
+# Mesmos valores que sempre foram hardcoded — viram o fallback quando o
+# script roda sem os argumentos de cena (chamado à mão, ou versão antiga
+# de assetdeck/blender/render.py chamando este script).
+BG_COLOR_PADRAO = (0.30, 0.30, 0.32)
+BG_STRENGTH_PADRAO = 1.8
+SUN_ENERGY_PADRAO = 3.0
 
 
 def texturas_perdidas():
@@ -53,11 +65,23 @@ def relocalizar_texturas(blend_path):
 
 def argumentos():
     if "--" not in sys.argv:
-        raise SystemExit("Uso: blender -b -P render_thumb.py -- entrada.blend saida.png [px]")
+        raise SystemExit(
+            "Uso: blender -b -P render_thumb.py -- entrada.blend saida.png "
+            "[px] [bg_r bg_g bg_b bg_strength sun_energy]"
+        )
     resto = sys.argv[sys.argv.index("--") + 1:]
     if len(resto) < 2:
         raise SystemExit("Faltam argumentos: entrada.blend saida.png")
-    return resto[0], resto[1], int(resto[2]) if len(resto) > 2 else 512
+    entrada, saida = resto[0], resto[1]
+    tamanho = int(resto[2]) if len(resto) > 2 else 512
+    if len(resto) > 7:
+        bg_color = (float(resto[3]), float(resto[4]), float(resto[5]))
+        bg_strength = float(resto[6])
+        sun_energy = float(resto[7])
+    else:
+        bg_color, bg_strength, sun_energy = (
+            BG_COLOR_PADRAO, BG_STRENGTH_PADRAO, SUN_ENERGY_PADRAO)
+    return entrada, saida, tamanho, bg_color, bg_strength, sun_energy
 
 
 def caixa_da_cena(objetos):
@@ -80,7 +104,7 @@ def caixa_da_cena(objetos):
 
 
 def main():
-    entrada, saida, tamanho = argumentos()
+    entrada, saida, tamanho, bg_color, bg_strength, sun_energy = argumentos()
     bpy.ops.wm.open_mainfile(filepath=entrada)
     relocalizar_texturas(entrada)
     cena = bpy.context.scene
@@ -114,14 +138,14 @@ def main():
     nodes, links = mundo.node_tree.nodes, mundo.node_tree.links
     nodes.clear()
     fundo = nodes.new("ShaderNodeBackground")
-    fundo.inputs[0].default_value = (0.30, 0.30, 0.32, 1.0)
-    fundo.inputs[1].default_value = 1.8
+    fundo.inputs[0].default_value = (*bg_color, 1.0)
+    fundo.inputs[1].default_value = bg_strength
     saida_mundo = nodes.new("ShaderNodeOutputWorld")
     links.new(fundo.outputs["Background"], saida_mundo.inputs["Surface"])
 
     if not any(o.type == "LIGHT" for o in visiveis):
         luz_data = bpy.data.lights.new("AD_Sun", type="SUN")
-        luz_data.energy = 3.0
+        luz_data.energy = sun_energy
         luz = bpy.data.objects.new("AD_Sun", luz_data)
         cena.collection.objects.link(luz)
         luz.rotation_euler = (0.9, 0.2, 0.6)
