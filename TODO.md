@@ -798,8 +798,20 @@ headless — não é claramente um bug de lógica Python.
 **Próximo passo ao fatiar:** reproduzir na tela do Rafael com log
 temporário em `dragEnterEvent`/`dropEvent` pra confirmar se o evento
 chega no app; testar também com `QT_QPA_PLATFORM=xcb` (descarta
-Wayland-specific). Cobertura de teste também falta: nenhum teste hoje
-simula um `QDropEvent` com `hasUrls()` real contra `AssetGridView`.
+Wayland-specific).
+
+**Buraco de cobertura fechado em 2026-08-03** (sessão automatizada
+noturna — isto dava pra fazer sem o Rafael por perto, ao contrário da
+reprodução em si): `tests/test_asset_grid_drop.py` novo — 4 testes que
+constroem um `QDropEvent`/`QDragEnterEvent` DE VERDADE (não só chamam o
+handler direto) com `hasUrls()` real e despacham contra a
+`AssetGridView`: imagem externa aceita e emite `image_dropped` com o
+path certo; extensão não-raster é ignorada; drop interno (`MIME_ASSETS`)
+não é confundido com imagem externa mesmo que o mime também tivesse
+`hasUrls()`. Os 4 passam — reforça a hipótese de que a lógica Python está
+correta e o bug é mesmo XDND do SO, mas **não prova isso**: só um teste
+offscreen não reproduz o pipeline real do gerenciador de arquivos. A
+reprodução na tela do Rafael continua sendo o próximo passo real.
 
 ### ☑ Fatia 46 — Teste da ponte falha com o app aberto
 `tests/test_main_window.py::test_ponte_e_render_ficam_prontos` afirmava que
