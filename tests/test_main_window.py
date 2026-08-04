@@ -142,10 +142,18 @@ def test_tema_pinta_a_janela_e_os_cards_ficam_arredondados(qapp, janela):
         assert distancia(cor_quina, theme.BG) < distancia(cor_quina, theme.SURFACE), \
             f"a quina do card da grade não é curva (leu {cor_quina})"
 
-        # E o miolo do card é a superfície — prova que os dois tons de fato
+        # E a superfície do card aparece de verdade — prova que os dois tons
         # diferem na tela, não só na paleta.
-        meio = grid_card.mapTo(janela, grid_card.rect().center())
-        assert px(meio.x(), meio.y()) == theme.SURFACE.upper()
+        #
+        # Amostra a MARGEM de cima do card, não o centro: o centro cai sobre a
+        # grade, e ali quem pinta é a miniatura do asset (uma capa preta fazia
+        # este teste falhar dizendo que a superfície era #000000). A margem é
+        # o único ponto do card garantidamente sem filho por cima.
+        margem = grid_card.layout().contentsMargins()
+        topo = grid_card.mapTo(janela, grid_card.rect().topLeft())
+        dentro_x = topo.x() + grid_card.width() // 2
+        dentro_y = topo.y() + max(2, margem.top() // 2)
+        assert px(dentro_x, dentro_y) == theme.SURFACE.upper()
     finally:
         qss, paleta, fonte = antes
         qapp.setStyleSheet(qss)
@@ -354,6 +362,59 @@ def test_size_slider_mora_na_status_bar_nao_no_breadcrumb(janela):
     from PySide6.QtWidgets import QStatusBar
 
     assert isinstance(janela.size_slider.parentWidget(), QStatusBar)
+
+
+def test_o_topo_tem_tres_faixas_separadas(janela, qapp):
+    """Fatia 46. O Rafael olhou a linha única (navegação + caminho + 6
+    categorias + 3 filtros) e disse que estava "absurdamente atolado".
+
+    Cada faixa responde uma pergunta diferente, e o que este teste protege é
+    que elas continuem SEPARADAS — se alguém voltar a empilhar tudo numa
+    linha, o caminho de pasta funda volta a ser cortado por falta de espaço.
+    """
+    janela.resize(1200, 800)
+    janela.show()
+    qapp.processEvents()
+
+    def linha_do(widget):
+        return widget.mapTo(janela, widget.rect().center()).y()
+
+    y_caminho = linha_do(janela.breadcrumb)
+    y_categorias = linha_do(janela.categories)
+    y_escopo = linha_do(janela.list_scope)
+
+    assert y_caminho < y_categorias < y_escopo, (
+        "as três faixas do topo têm de estar empilhadas, não na mesma linha"
+    )
+    # Os filtros finos moram na MESMA faixa do escopo da lista (agem sobre a
+    # lista que já está na tela), não junto das categorias.
+    assert abs(linha_do(janela.rating_filter) - y_escopo) < 5
+    assert abs(linha_do(janela.color_filter) - y_escopo) < 5
+
+
+def test_o_escopo_da_lista_acompanha_a_pasta(janela, qapp):
+    assert janela.list_scope.text() == "Toda a biblioteca"
+
+    janela._update_breadcrumb("01 - MODELOS")
+    assert janela.list_scope.text() == "Nesta pasta"
+
+    janela._update_breadcrumb("")
+    assert janela.list_scope.text() == "Toda a biblioteca"
+
+
+def test_a_contagem_do_cabecalho_acompanha_o_filtro(janela, qapp):
+    """O número da faixa 3 é o que está VISÍVEL — é ele que responde ao
+    filtro que o usuário acabou de mexer, logo acima da grade."""
+    janela.refresh_count()
+    assert janela.list_count.text() == f"{janela.model.rowCount()} assets"
+
+    janela.search_box.setText("textura")
+    janela._apply_filters()
+    assert janela.list_count.text() == "1 assets"
+
+    janela.search_box.setText("")
+    janela._apply_filters()
+    assert janela.list_count.text() == f"{janela.model.rowCount()} assets"
 
 
 def test_filtros_nao_quebram_a_grid(janela, qapp):
