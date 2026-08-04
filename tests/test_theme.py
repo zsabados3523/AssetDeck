@@ -367,6 +367,46 @@ def test_o_qss_realmente_pinta_o_card(sonda):
     assert _borda_do_card(sonda) != theme.BG.upper(), "a linha do card não pintou"
 
 
+def test_o_card_pinta_a_superficie_mesmo_nao_sendo_um_qframe(qapp):
+    """Regressão da Fatia 49, relatada pelo Rafael como "sombras bugadas".
+
+    O seletor era `QFrame#card`. O DetailsPanel é uma subclasse de QWidget com
+    objectName "card" — a regra nunca casou com ele e o painel ficou
+    TRANSPARENTE desde a Fatia 25. Ninguém percebeu porque fundo e superfície
+    eram o mesmo branco; quando a Fatia 44 separou os dois, o painel passou a
+    mostrar o fundo da janela e pareceu um defeito de sombra.
+
+    Este teste usa um QWidget de propósito: com `QFrame#card` de volta, ele
+    falha; com `#card`, passa.
+    """
+    from PySide6.QtCore import Qt as _Qt
+    from PySide6.QtGui import QColor
+    from PySide6.QtWidgets import QVBoxLayout, QWidget
+
+    hospedeiro = QWidget()
+    hospedeiro.setAttribute(_Qt.WidgetAttribute.WA_StyledBackground, True)
+    hospedeiro.setObjectName("appSurface")
+    layout = QVBoxLayout(hospedeiro)
+    layout.setContentsMargins(20, 20, 20, 20)
+
+    painel = QWidget()  # QWidget, NÃO QFrame — é este o caso que quebrava
+    painel.setAttribute(_Qt.WidgetAttribute.WA_StyledBackground, True)
+    painel.setObjectName("card")
+    layout.addWidget(painel)
+
+    hospedeiro.resize(300, 300)
+    hospedeiro.setStyleSheet(theme.build_qss())
+    hospedeiro.show()
+    qapp.processEvents()
+
+    img = hospedeiro.grab().toImage()
+    meio = QColor(img.pixelColor(150, 150)).name().upper()
+    assert meio == theme.SURFACE.upper(), (
+        f"widget #card não pintou a superfície (leu {meio})"
+    )
+    hospedeiro.close()
+
+
 def test_o_canto_do_card_e_arredondado(sonda):
     """Regressão do cantos-arredondados-que-vazam.
 

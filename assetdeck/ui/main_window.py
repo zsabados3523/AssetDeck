@@ -51,6 +51,7 @@ from assetdeck.ui.scan_worker import ScanController
 from assetdeck.ui.smart_collection_panel import SmartCollectionPanel
 from assetdeck.ui import icons, sidebar as sidebar_mod, theme
 from assetdeck.ui.sidebar import Sidebar
+from assetdeck.ui.status_led import StatusLed
 from assetdeck.ui.tag_dialogs import QuickTagDialog
 from assetdeck.ui.tag_tree import TagTree
 from assetdeck.ui.categories import CATEGORIES
@@ -378,6 +379,13 @@ class MainWindow(QMainWindow):
         # QLabel solto na barra de filtros, junto de mais 10 widgets.
         self.footer_count = QLabel()
         self.statusBar().addPermanentWidget(self.footer_count)
+
+        # Tamanho da biblioteca (Fatia 49). O rodapé da referência que o
+        # Rafael escolheu informa; o nosso só contava assets. Soma em `files`,
+        # não em `assets`: um set PBR são vários arquivos.
+        self.footer_size = QLabel()
+        self.footer_size.setObjectName("muted")
+        self.statusBar().addPermanentWidget(self.footer_size)
         # Slider de tamanho saiu da barra do breadcrumb pro rodapé (Fatia 43,
         # opção C): libera espaço horizontal sem esconder a função.
         self.statusBar().addPermanentWidget(self.size_slider)
@@ -480,6 +488,12 @@ class MainWindow(QMainWindow):
         self._sync_nav_buttons()
 
     # ---- navegação de pastas (Fatia 32) ----
+
+    def _set_bridge_status(self, estado: str, texto: str) -> None:
+        """LED e texto do Blender andam JUNTOS — um ponto verde ao lado de
+        "porta ocupada" seria pior do que não ter LED nenhum."""
+        self._bridge_led.set_estado(estado)
+        self.bridge_status.setText(texto)
 
     def _breadcrumb_divider(self, *, horizontal: bool = False) -> QFrame:
         """Traço fino de 1px separando as faixas do topo.
@@ -761,6 +775,7 @@ class MainWindow(QMainWindow):
         self.color_filter.refresh_theme()
         self.details.refresh_theme()
         self.sidebar.refresh_theme()
+        self._bridge_led.refresh_theme()
 
         self._search_icon_action.setIcon(icons.icon("search", pal["text_muted"]))
         self.rescan_btn.setIcon(icons.icon("refresh", pal["on_accent"]))
@@ -1187,6 +1202,13 @@ class MainWindow(QMainWindow):
         # de mudar esse número. Aqui é só o que está VISÍVEL — o total e a
         # seleção continuam sendo assunto do rodapé.
         self.list_count.setText(f"{shown} assets")
+
+        # O tamanho não muda a cada filtro (é a biblioteca inteira), mas
+        # recalcular aqui é barato — um SUM indexado — e garante que ele
+        # acompanhe uma reindexação sem precisar de um gancho próprio.
+        from assetdeck.ui.details_panel import human_size
+
+        self.footer_size.setText(human_size(assets_repo.total_bytes(self._conn)))
         return total
 
     # ---- seleção / detalhes ----
@@ -1366,13 +1388,18 @@ class MainWindow(QMainWindow):
         from assetdeck import config
         from assetdeck.bridge.server import BridgeServer
 
+        # LED + texto (Fatia 49). Só o texto ("Blender: ouvindo :45017") exige
+        # ler para saber se está tudo bem; o ponto colorido responde de
+        # relance, que é o que se quer de um rodapé.
+        self._bridge_led = StatusLed()
+        self.statusBar().addPermanentWidget(self._bridge_led)
         self.bridge_status = QLabel()
         self.statusBar().addPermanentWidget(self.bridge_status)
 
         cfg = config.load_config()
         self._bridge = None
         if not cfg.get("bridge_enabled", True):
-            self.bridge_status.setText("Blender: ponte desligada")
+            self._set_bridge_status("inativo", "Blender: ponte desligada")
             return
 
         token = config.ensure_bridge_token(cfg)
@@ -1380,14 +1407,18 @@ class MainWindow(QMainWindow):
         self._bridge = BridgeServer(self._conn, self._library_root, token,
                                     thumbs_dir=self._thumbs_dir, parent=self)
         if self._bridge.start(porta):
-            self.bridge_status.setText(f"Blender: ouvindo :{self._bridge.port}")
+            self._set_bridge_status("atencao", f"Blender: ouvindo :{self._bridge.port}")
         else:
-            self.bridge_status.setText("Blender: porta ocupada (ver log)")
+            self._set_bridge_status("erro", "Blender: porta ocupada (ver log)")
+        # Ouvindo é ÂMBAR, conectado é VERDE: "ouvindo" quer dizer que a ponte
+        # subiu mas o Blender ainda não falou com ela — pintar isso de verde
+        # faria o rodapé afirmar uma conexão que não existe.
         self._bridge.client_connected.connect(
-            lambda: self.bridge_status.setText("Blender: conectado ✓")
+            lambda: self._set_bridge_status("ok", "Blender: conectado")
         )
         self._bridge.client_disconnected.connect(
-            lambda: self.bridge_status.setText(f"Blender: ouvindo :{self._bridge.port}")
+            lambda: self._set_bridge_status(
+                "atencao", f"Blender: ouvindo :{self._bridge.port}")
         )
         # O Blender salvou algo novo na biblioteca → reindexar
         self._bridge.rescan_requested.connect(self.start_scan)
