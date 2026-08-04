@@ -34,8 +34,15 @@ from assetdeck.ui.asset_grid import (
 )
 
 _BADGE = 20              # lado do selo (estrela / oculto)
-_RADIUS = theme.RADII[theme.DEFAULT.radius][1]     # 8px — o mesmo do resto do tema
 _BADGE_BG = QColor(0, 0, 0, 140)   # fundo dos selos sobre a miniatura
+
+# Espessura do contorno em cada estado (Fatia 47). O card em repouso quase não
+# tem contorno — quem separa um card do outro é o espaçamento. O contorno é
+# reservado para RESPONDER ao mouse: é ele que engorda no hover e vira destaque
+# na seleção.
+_BORDA_REPOUSO = 1.0
+_BORDA_HOVER = 1.0
+_BORDA_SELECAO = 2.0
 
 
 class AssetCardDelegate(QStyledItemDelegate):
@@ -71,13 +78,31 @@ class AssetCardDelegate(QStyledItemDelegate):
         claro/escuro trocar ao vivo. Continua tudo pré-computado FORA de
         `paint()`, só que agora pode ser refeito, não só computado uma vez."""
         pal = theme.current_colors()
+
+        # A base é `surface`, não `bg` (corrigido na Fatia 47). O card mora
+        # DENTRO do QFrame#card da grade, que é pintado com `$surface` — até a
+        # Fatia 43 as duas cores eram o mesmo branco e a distinção não
+        # aparecia, mas desde que o fundo virou um degrau mais fundo que o
+        # painel, pintar o card com `bg` deixava cada célula um retângulo
+        # escuro sobre o painel claro.
+        base = pal["surface"]
         self._pen_name = QPen(QColor(pal["text"]))
-        self._brush_surface = QColor(pal["bg"])
-        self._brush_hover = QColor(theme.blend(pal["hover"], pal["bg"]))
-        self._brush_selected = QColor(theme.blend(pal["selection"], pal["bg"]))
+        self._brush_surface = QColor(base)
+        self._brush_hover = QColor(theme.blend(pal["hover"], base))
+        self._brush_selected = QColor(theme.blend(pal["selection"], base))
         self._pen_border = self._qcolor(pal["border"])
+        # No hover o contorno passa a ser visível de verdade (era o mesmo
+        # `border` quase transparente): num tema escuro, um véu de 6% de
+        # branco no fundo praticamente não se vê, e o card não respondia ao
+        # mouse. O contorno é o sinal barato e legível nos dois modos.
+        self._pen_hover_border = QColor(pal["text_disabled"])
         self._pen_selected_border = QColor(pal["accent"])
         self._type_tint_color = QColor(pal["type_tint"])
+
+        # O raio acompanha a variante ATIVA. Era constante de módulo, avaliada
+        # no import a partir de `theme.DEFAULT` — trocar de variante ao vivo
+        # (a vitrine faz isso) deixava o card com o raio da variante antiga.
+        self._radius = theme.RADII[theme.current_variant().radius][1]
 
     def set_icon_size(self, px: int) -> None:
         """Chamado pela AssetGridView quando o slider de tamanho muda."""
@@ -99,13 +124,29 @@ class AssetCardDelegate(QStyledItemDelegate):
         selected = bool(option.state & QStyle.StateFlag.State_Selected)
         hover = bool(option.state & QStyle.StateFlag.State_MouseOver)
 
+        # Três estados, três contornos (Fatia 47). O preenchimento sozinho não
+        # dá conta: sobre fundo escuro, a diferença entre 0% e 6% de véu branco
+        # é quase invisível, e o Rafael não via o card responder ao mouse.
         if selected:
             painter.setBrush(self._brush_selected)
-            painter.setPen(QPen(self._pen_selected_border, 1.5))
+            painter.setPen(QPen(self._pen_selected_border, _BORDA_SELECAO))
+        elif hover:
+            painter.setBrush(self._brush_hover)
+            painter.setPen(QPen(self._pen_hover_border, _BORDA_HOVER))
         else:
-            painter.setBrush(self._brush_hover if hover else self._brush_surface)
-            painter.setPen(self._pen_border)
-        painter.drawRoundedRect(QRectF(card_rect), _RADIUS, _RADIUS)
+            painter.setBrush(self._brush_surface)
+            painter.setPen(QPen(self._pen_border, _BORDA_REPOUSO))
+
+        # O contorno é desenhado CENTRADO na aresta: com 2px na seleção, meio
+        # pixel cairia fora do retângulo da célula e ficaria cortado pelo
+        # vizinho. Encolher pela metade da espessura mantém a borda inteira
+        # dentro do card, e é por isso que o retângulo é ajustado aqui em vez
+        # de usar `card_rect` cru.
+        meia = _BORDA_SELECAO / 2
+        painter.drawRoundedRect(
+            QRectF(card_rect).adjusted(meia, meia, -meia, -meia),
+            self._radius, self._radius,
+        )
 
         # Miniatura sempre QUADRADA (pedido do Rafael: "sem achatar nada") —
         # o lado vem da LARGURA do card, que é o que cell_for_icon() garante
@@ -148,7 +189,7 @@ class AssetCardDelegate(QStyledItemDelegate):
         else:
             painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(self._type_tint_color)
-            painter.drawRoundedRect(QRectF(rect), _RADIUS - 2, _RADIUS - 2)
+            painter.drawRoundedRect(QRectF(rect), self._radius - 2, self._radius - 2)
 
         if bool(index.data(HIDDEN_ROLE)):
             self._badge(painter, rect.x() + 4, rect.y() + 4, self._icon_hidden)
