@@ -374,6 +374,7 @@ class MainWindow(QMainWindow):
         self._tag_clipboard: list[int] | None = None
 
         self._setup_menu_bar()  # Fatia 36 — Arquivo/Editar/Ferramentas/Configurações/Janela
+        self._setup_brand_bar()  # Fatia 50 — marca e contexto na mesma faixa
 
         # Contagem sempre visível no rodapé (Fatia 28) — antes vivia num
         # QLabel solto na barra de filtros, junto de mais 10 widgets.
@@ -657,6 +658,62 @@ class MainWindow(QMainWindow):
 
     # ---- barra de menus (Fatia 36) ----
 
+    def _setup_brand_bar(self) -> None:
+        """Marca à esquerda e contexto à direita, NA MESMA faixa dos menus.
+
+        O mockup escolhido pelo Rafael tinha aqui uma faixa com marca e abas
+        (Biblioteca / Coleções / Duplicados). As abas foram descartadas
+        conscientemente: elas não correspondem a telas do AssetDeck —
+        Coleções é uma seção da lateral e Duplicados é um diálogo de
+        Ferramentas. Abas que só abrissem diálogos prometeriam uma navegação
+        que não existe. A marca e o contexto, que são o resto da faixa,
+        entram sem esse problema.
+
+        `setCornerWidget` é o único jeito de pôr widget numa QMenuBar sem
+        substituí-la por uma barra própria — e substituí-la custaria perder
+        atalho de teclado, navegação por Alt e integração com o gerenciador
+        de janelas.
+        """
+        from PySide6.QtWidgets import QHBoxLayout
+
+        barra = self.menuBar()
+
+        marca = QWidget()
+        marca_layout = QHBoxLayout(marca)
+        marca_layout.setContentsMargins(10, 0, 12, 0)
+        marca_layout.setSpacing(7)
+        ponto = QFrame()
+        ponto.setObjectName("brandDot")
+        ponto.setFixedSize(8, 8)
+        rotulo = QLabel("AssetDeck")
+        rotulo.setObjectName("brandName")
+        marca_layout.addWidget(ponto)
+        marca_layout.addWidget(rotulo)
+
+        # A referência em `self` é OBRIGATÓRIA. A documentação do Qt diz que a
+        # barra assume a posse do corner widget, mas o PySide não transfere a
+        # posse aqui: sem uma referência do lado Python, `marca` é coletado
+        # quando esta função retorna e o canto volta a ficar vazio. Medido —
+        # o widget aparecia logo depois do `setCornerWidget` e sumia depois.
+        self._brand_widget = marca
+        barra.setCornerWidget(marca, Qt.Corner.TopLeftCorner)
+
+        # À direita vai o que NÃO aparece em nenhum outro lugar da tela: qual
+        # biblioteca está aberta (são várias desde a Fatia 41) e em que modo.
+        # A contagem de assets, que o mockup punha aqui, já está no cabeçalho
+        # da lista E no rodapé — um terceiro lugar seria ruído.
+        self.brand_context = QLabel()
+        self.brand_context.setObjectName("brandContext")
+        self.statusBar()  # garante a barra criada antes do primeiro update
+        barra.setCornerWidget(self.brand_context, Qt.Corner.TopRightCorner)
+        self._update_brand_context()
+
+    def _update_brand_context(self) -> None:
+        from assetdeck import config  # import local, como o resto do arquivo
+
+        modo = "Escuro" if config.load_config().get("theme_mode") == "escuro" else "Claro"
+        self.brand_context.setText(f"{self._library_root.name}  ·  {modo}   ")
+
     def _setup_menu_bar(self) -> None:
         """Arquivo, Editar, Ferramentas, Configurações, Janela.
 
@@ -756,6 +813,7 @@ class MainWindow(QMainWindow):
         cfg = config.load_config()
         cfg["theme_mode"] = modo
         config.save_config(cfg)
+        self._update_brand_context()  # o canto direito da faixa diz o modo
         self.statusBar().showMessage(f"Modo {modo} aplicado.")
 
     def _refresh_theme_dependent_widgets(self) -> None:
