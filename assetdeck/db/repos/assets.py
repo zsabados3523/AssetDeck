@@ -20,6 +20,26 @@ def count_active(conn: sqlite3.Connection) -> int:
     return row["n"]
 
 
+def total_bytes(conn: sqlite3.Connection) -> int:
+    """Soma o tamanho de todos os arquivos indexados (soft-deleted fora).
+
+    Soma em `files`, não em `assets`: um asset PBR é um conjunto de vários
+    arquivos, e somar só a linha do asset contaria um mapa e ignoraria os
+    outros seis. `COALESCE` porque `SUM` de conjunto vazio devolve NULL —
+    biblioteca recém-criada mostraria "None B" no rodapé.
+    """
+    row = conn.execute(
+        """
+        SELECT COALESCE(SUM(f.size_bytes), 0) AS total
+          FROM files f
+          JOIN assets a ON a.id = f.asset_id
+         WHERE a.deleted_at IS NULL
+           AND f.deleted_at IS NULL
+        """
+    ).fetchone()
+    return int(row["total"])
+
+
 def _build_where(
     conn: sqlite3.Connection,
     search: str | None = None,

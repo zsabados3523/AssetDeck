@@ -56,13 +56,20 @@ QWidget#appSurface {
  * Toda view (árvore, lista, grade) mora DENTRO de um destes, porque o
  * viewport de uma view pinta retângulo no canto e vaza por cima de qualquer
  * border-radius aplicado nela diretamente. */
-QFrame#card {
+/* Seletor SEM o tipo de propósito (Fatia 49). Era `QFrame#card`, e o
+ * DetailsPanel é uma subclasse de QWidget com objectName "card" — a regra
+ * nunca casou com ele, e o painel de detalhes ficou transparente desde a
+ * Fatia 25. Ninguém viu porque fundo e superfície eram o mesmo branco; quando
+ * a Fatia 44 separou os dois, o painel passou a mostrar o fundo da janela e o
+ * Rafael relatou "sombras bugadas" — o que estava faltando era a superfície,
+ * não a sombra. `#card` casa com qualquer widget que use o objectName. */
+#card {
     background-color: $surface;
     border: 1px solid $hairline;
     border-radius: $radius_panel;
 }
 
-QFrame#cardFlat {
+#cardFlat {
     background-color: $surface;
     border: 1px solid $border;
     border-radius: $radius_card;
