@@ -1,9 +1,13 @@
-# REDESIGN-V2.md — overhaul visual completo
+# REDESIGN-V2.md — overhaul visual completo (CONCLUÍDO)
 
-Atualizado em 2026-08-03, fim da sessão em que as decisões foram tomadas.
+**Status: fechado em 2026-08-04.** As sete fatias (43 a 50) estão todas na
+`main`, confirmadas na tela pelo Rafael. Este documento fica como registro —
+não é mais handoff de trabalho em aberto. Se uma sessão nova for mexer no
+visual do AssetDeck de novo, é um pedido NOVO, não uma continuação deste.
+
 A versão anterior deste arquivo era o handoff da Fatia 43, escrito quando
-ainda não havia direção escolhida. **As decisões abaixo já estão fechadas —
-não pergunte de novo.**
+ainda não havia direção escolhida. **As decisões abaixo estão fechadas — não
+pergunte de novo**, a menos que o Rafael peça uma mudança de direção.
 
 ## Decisões fechadas (o Rafael escolheu olhando mockups)
 
@@ -46,6 +50,9 @@ retorno foi alto.
    avisei que estava deixando o resto do mockup de fora. **Lição: ao fatiar,
    diga explicitamente o que a fatia NÃO cobre.**
 
+Todas as sete mergeadas na `main` em 2026-08-04 (commits até `6cc8ec8`).
+709 testes verdes na última rodada da suíte inteira.
+
 ## Decisões tomadas DEPOIS dos mockups
 
 - **As abas do mockup foram descartadas** (Biblioteca / Coleções /
@@ -55,7 +62,17 @@ retorno foi alto.
   e o contexto à direita, na mesma faixa dos menus, via `setCornerWidget`.
 - **Não foram feitos, por escolha do Rafael:** a linha de metadados sob o
   nome do card (`HDRI · 4096×2048`) e o card hero da pasta. Ambos continuam
-  possíveis; a resolução existe em `files.width/height`.
+  possíveis; a resolução existe em `files.width/height`. Não são pendência —
+  são escopo que ficou fora de propósito. Se o Rafael quiser depois, é pedido
+  novo, não fatia esquecida.
+
+## O que NÃO foi tocado neste overhaul
+
+Fora do escopo das 7 fatias, de propósito: os diálogos (batch rename,
+duplicados, propriedades, templates de tag) continuam com a aparência de
+antes da Fatia 43 — só herdam a paleta nova via QSS global, não receberam
+nenhum ajuste de layout. Se algum ficar estranho com o tema novo (contraste,
+espaçamento), é fatia própria, não bug desta.
 
 ## Coisas que custaram tempo — não redescubra
 
