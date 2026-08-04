@@ -38,9 +38,24 @@ retorno foi alto.
    em V3, filtros finos migrando pro cabeçalho da lista.
 4. **Fatia 47 — card da grade e estados.**
 5. **Fatia 48 — painel de detalhes.**
-6. **Fatia 49 — rodapé informativo + diálogos.** O rodapé da ref. 2 é o que
-   ele mais gostou: LED do Blender, contagem, uso de disco, cache. O token
-   `ok`/`OK_DARK` já existe no `theme.py` esperando por esta fatia.
+6. **Fatia 49 — rodapé informativo.** FEITA. LED do Blender, tamanho da
+   biblioteca. Nela apareceu o bug do `QFrame#card` (ver abaixo).
+7. **Fatia 50 — barra superior e card sem moldura.** FEITA. Nasceu porque o
+   Rafael reparou que o topo e a grade não tinham mudado: meu recorte das
+   fatias 46 e 47 cobriu só a régua de filtros e os estados do card, e eu não
+   avisei que estava deixando o resto do mockup de fora. **Lição: ao fatiar,
+   diga explicitamente o que a fatia NÃO cobre.**
+
+## Decisões tomadas DEPOIS dos mockups
+
+- **As abas do mockup foram descartadas** (Biblioteca / Coleções /
+  Duplicados). Elas não correspondem a telas do AssetDeck: Coleções é seção
+  da lateral e Duplicados é diálogo de Ferramentas. Abas que só abrissem
+  diálogos prometeriam uma navegação que não existe. Ficou a marca à esquerda
+  e o contexto à direita, na mesma faixa dos menus, via `setCornerWidget`.
+- **Não foram feitos, por escolha do Rafael:** a linha de metadados sob o
+  nome do card (`HDRI · 4096×2048`) e o card hero da pasta. Ambos continuam
+  possíveis; a resolução existe em `files.width/height`.
 
 ## Coisas que custaram tempo — não redescubra
 
@@ -62,6 +77,18 @@ retorno foi alto.
   modelo da view (`rowsInserted`/`rowsRemoved`/`modelReset`/`layoutChanged`).
 - **Largura mínima de painel deve ser derivada do conteúdo**, não cravada:
   "SMART COLLECTIONS" pede ~219px e o `200` mágico cortava no meio da palavra.
+- **`--screenshot` NÃO serve para conferir sombra nem efeito gráfico.** Ele
+  usa `win.grab()`, que repinta o widget e não passa pelo compositor. O
+  painel de detalhes ficou sem fundo por várias fatias sem aparecer em
+  nenhuma captura. Para ver o que o Rafael vê, abra o app e capture a TELA:
+  `QApplication.primaryScreen().grabWindow(0)`.
+- **`QFrame#card` não casa com o DetailsPanel**, que é um QWidget. Seletor de
+  tema deve ser `#card`, sem o tipo. Ficou escondido enquanto `bg` e
+  `surface` eram a mesma cor.
+- **`setCornerWidget` não transfere a posse no PySide.** O widget é coletado
+  quando a função retorna e o canto volta a ficar vazio — guarde a
+  referência em `self`. Vale para qualquer widget entregue ao Qt por um
+  setter que a documentação diz "takes ownership".
 - **Screenshot headless é a ferramenta que destrava tudo:**
   `QT_QPA_PLATFORM=offscreen python -m assetdeck --screenshot /tmp/x.png
   --screenshot-delay 3000`, depois recortar/ampliar com PIL. Use SEMPRE antes
