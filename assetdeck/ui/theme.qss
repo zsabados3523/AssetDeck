@@ -74,6 +74,61 @@ QFrame#breadcrumbDivider {
     background-color: $hairline;
 }
 
+/* -------------------------------------------------------------- lateral -- */
+
+/* Rail: coluna estreita de ícones, um por seção (Fatia 45). Fica no tom do
+ * FUNDO, não da superfície — é ele que faz o painel das seções parecer
+ * apoiado em cima de alguma coisa em vez de flutuar solto. */
+QWidget#sidebarRail {
+    background-color: $bg;
+}
+
+QToolButton#railButton {
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: $radius_control;
+    padding: 6px;
+}
+
+QToolButton#railButton:hover {
+    background-color: $surface_hover;
+}
+
+/* Sem pastilha no estado marcado, ao contrário dos outros QToolButton do app:
+ * "seção visível" é o estado normal das quatro, e acender as quatro deixaria
+ * o rail permanentemente iluminado sem dizer nada. O que o rail comunica é a
+ * exceção — seção escondida, ícone apagado (tingido em Python, ver
+ * SidebarRail.refresh_theme). */
+QToolButton#railButton:checked {
+    background: transparent;
+    border: 1px solid transparent;
+}
+
+/* Cabeçalho de seção: a linha inteira é clicável (recolhe/expande). */
+QWidget#sidebarHeader {
+    background: transparent;
+    border-radius: $radius_control;
+}
+
+QWidget#sidebarHeader:hover {
+    background-color: $surface_hover;
+}
+
+QLabel#sidebarSectionTitle {
+    color: $text_muted;
+    font-size: $font_size_small;
+    font-weight: 700;
+    letter-spacing: 1px;
+}
+
+/* Contador: mais apagado que o título de propósito. É informação de apoio —
+ * se competir com o nome da seção, a lateral vira uma tabela de números. */
+QLabel#sidebarCount {
+    color: $text_disabled;
+    font-size: $font_size_small;
+    font-weight: 600;
+}
+
 /* QScrollArea em si (moldura/fundo do viewport é responsabilidade do Python
  * — ver `scroll.viewport().setAutoFillBackground(False)` em details_panel.py;
  * o seletor `QScrollArea > QWidget` do QSS NÃO alcança o viewport de forma
