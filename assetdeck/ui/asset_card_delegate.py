@@ -85,9 +85,12 @@ class AssetCardDelegate(QStyledItemDelegate):
         # aparecia, mas desde que o fundo virou um degrau mais fundo que o
         # painel, pintar o card com `bg` deixava cada célula um retângulo
         # escuro sobre o painel claro.
+        # Desde a Fatia 50 o card não pinta fundo em repouso (perdeu a
+        # moldura), então não há mais um `_brush_surface`. A base segue
+        # importando: é sobre ELA que os véus de hover e seleção são
+        # compostos, e compor sobre `bg` daria uma pastilha de tom errado.
         base = pal["surface"]
         self._pen_name = QPen(QColor(pal["text"]))
-        self._brush_surface = QColor(base)
         self._brush_hover = QColor(theme.blend(pal["hover"], base))
         self._brush_selected = QColor(theme.blend(pal["selection"], base))
         self._pen_border = self._qcolor(pal["border"])
@@ -124,36 +127,25 @@ class AssetCardDelegate(QStyledItemDelegate):
         selected = bool(option.state & QStyle.StateFlag.State_Selected)
         hover = bool(option.state & QStyle.StateFlag.State_MouseOver)
 
-        # Três estados, três contornos (Fatia 47). O preenchimento sozinho não
-        # dá conta: sobre fundo escuro, a diferença entre 0% e 6% de véu branco
-        # é quase invisível, e o Rafael não via o card responder ao mouse.
-        if selected:
-            painter.setBrush(self._brush_selected)
-            painter.setPen(QPen(self._pen_selected_border, _BORDA_SELECAO))
-        elif hover:
-            painter.setBrush(self._brush_hover)
-            painter.setPen(QPen(self._pen_hover_border, _BORDA_HOVER))
-        else:
-            painter.setBrush(self._brush_surface)
-            painter.setPen(QPen(self._pen_border, _BORDA_REPOUSO))
-
-        # O contorno é desenhado CENTRADO na aresta: com 2px na seleção, meio
-        # pixel cairia fora do retângulo da célula e ficaria cortado pelo
-        # vizinho. Encolher pela metade da espessura mantém a borda inteira
-        # dentro do card, e é por isso que o retângulo é ajustado aqui em vez
-        # de usar `card_rect` cru.
-        meia = _BORDA_SELECAO / 2
-        painter.drawRoundedRect(
-            QRectF(card_rect).adjusted(meia, meia, -meia, -meia),
-            self._radius, self._radius,
-        )
+        # Card SEM moldura (Fatia 50). Em repouso não há fundo nem contorno:
+        # quem separa um card do outro é o espaçamento, e a imagem manda —
+        # era o que o mockup escolhido pelo Rafael fazia, e o retângulo com
+        # fundo e borda em volta de cada miniatura competia com ela.
+        #
+        # Os estados migraram para a BORDA DA MINIATURA (ver `_paint_thumb`).
+        # Aqui sobra só um véu de fundo em hover/seleção, que sozinho não
+        # bastaria mas ajuda a mancha do card a acompanhar o cursor.
+        if selected or hover:
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(self._brush_selected if selected else self._brush_hover)
+            painter.drawRoundedRect(QRectF(card_rect), self._radius, self._radius)
 
         # Miniatura sempre QUADRADA (pedido do Rafael: "sem achatar nada") —
         # o lado vem da LARGURA do card, que é o que cell_for_icon() garante
         # bater exatamente com o tamanho que o modelo escalou a imagem para.
         lado = card_rect.width() - 2 * CARD_PAD
         thumb_rect = QRect(card_rect.x() + CARD_PAD, card_rect.y() + CARD_PAD, lado, lado)
-        self._paint_thumb(painter, index, thumb_rect)
+        self._paint_thumb(painter, index, thumb_rect, selected=selected, hover=hover)
 
         name_rect = QRect(
             card_rect.x() + CARD_PAD, thumb_rect.bottom() + CARD_GAP,
@@ -165,7 +157,8 @@ class AssetCardDelegate(QStyledItemDelegate):
 
     # ---- miolo ----
 
-    def _paint_thumb(self, painter: QPainter, index, rect: QRect) -> None:
+    def _paint_thumb(self, painter: QPainter, index, rect: QRect, *,
+                     selected: bool = False, hover: bool = False) -> None:
         # ORDEM IMPORTA: HAS_THUMB_ROLE só fica correto DEPOIS que
         # DecorationRole rodou nesta mesma pintura (é _pixmap_for, chamado
         # por DecorationRole, quem marca "isto é placeholder ou não" no
@@ -190,6 +183,23 @@ class AssetCardDelegate(QStyledItemDelegate):
             painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(self._type_tint_color)
             painter.drawRoundedRect(QRectF(rect), self._radius - 2, self._radius - 2)
+
+        # A borda da MINIATURA é o que carrega os três estados desde a Fatia
+        # 50, quando o card perdeu a moldura. Ela é desenhada por cima da
+        # imagem, então precisa vir DEPOIS do drawPixmap.
+        if selected:
+            caneta = QPen(self._pen_selected_border, _BORDA_SELECAO)
+        elif hover:
+            caneta = QPen(self._pen_hover_border, _BORDA_HOVER)
+        else:
+            caneta = QPen(self._pen_border, _BORDA_REPOUSO)
+        meia = _BORDA_SELECAO / 2
+        painter.setPen(caneta)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawRoundedRect(
+            QRectF(rect).adjusted(meia, meia, -meia, -meia),
+            self._radius - 2, self._radius - 2,
+        )
 
         if bool(index.data(HIDDEN_ROLE)):
             self._badge(painter, rect.x() + 4, rect.y() + 4, self._icon_hidden)

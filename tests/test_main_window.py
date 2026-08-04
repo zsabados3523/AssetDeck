@@ -417,6 +417,37 @@ def test_a_contagem_do_cabecalho_acompanha_o_filtro(janela, qapp):
     assert janela.list_count.text() == f"{janela.model.rowCount()} assets"
 
 
+def test_a_marca_e_o_contexto_ficam_na_faixa_dos_menus(janela, qapp):
+    """Fatia 50. O mockup tinha marca + abas nesta faixa; as abas foram
+    descartadas (não correspondem a telas do app — Coleções é seção da
+    lateral, Duplicados é diálogo), mas a marca e o contexto entram.
+
+    `setCornerWidget` é o que permite isso sem trocar a QMenuBar por uma
+    barra própria, o que custaria atalho de teclado e navegação por Alt.
+    """
+    from PySide6.QtCore import Qt as _Qt
+
+    barra = janela.menuBar()
+    esquerda = barra.cornerWidget(_Qt.Corner.TopLeftCorner)
+    direita = barra.cornerWidget(_Qt.Corner.TopRightCorner)
+
+    assert esquerda is not None, "a marca não está na faixa dos menus"
+    assert direita is janela.brand_context
+    # E os cinco menus continuam lá: a faixa GANHOU conteúdo, não trocou.
+    assert [a.text() for a in barra.actions()] == [
+        "Arquivo", "Editar", "Ferramentas", "Configurações", "Janela"
+    ]
+
+
+def test_o_contexto_mostra_a_biblioteca_e_o_modo(janela, qapp):
+    """A contagem de assets, que o mockup punha aqui, já aparece no cabeçalho
+    da lista E no rodapé — um terceiro lugar seria ruído. O que não aparece
+    em lugar nenhum é qual biblioteca está aberta (são várias desde a F41)."""
+    texto = janela.brand_context.text()
+    assert janela._library_root.name in texto
+    assert ("Escuro" in texto) or ("Claro" in texto)
+
+
 def test_filtros_nao_quebram_a_grid(janela, qapp):
     janela.search_box.setText("textura")
     janela._apply_filters()

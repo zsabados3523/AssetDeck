@@ -184,21 +184,29 @@ def _cor(imagem, x, y) -> str:
     return QColor(imagem.pixelColor(x, y)).name().upper()
 
 
-def test_o_card_e_pintado_com_a_superficie_do_painel(grid):
+def test_os_veus_de_estado_sao_compostos_sobre_a_superficie(grid):
     """Regressão da Fatia 44.
 
-    O delegate pintava o card com `bg`. Enquanto fundo e painel eram o mesmo
+    O delegate usava `bg` como base. Enquanto fundo e painel eram o mesmo
     branco isso não aparecia — mas quando o fundo virou um degrau mais fundo
-    que o painel, cada célula passou a ser um retângulo escuro sobre o painel
-    claro. O card mora DENTRO do QFrame#card da grade, então a base dele é
-    `surface`.
+    que o painel, cada célula virou um retângulo escuro sobre o painel claro.
+    O card mora DENTRO do #card da grade, então a base é `surface`.
+
+    Desde a Fatia 50 o card não pinta fundo em repouso, e o que sobrou da
+    base são os véus de hover e seleção — compostos sobre ela. Compor sobre
+    `bg` daria uma pastilha de tom errado, que é a mesma falha de antes.
     """
     from assetdeck.ui import theme
 
-    view, modelo, _conn = grid
+    view, _modelo, _conn = grid
     delegate = view.itemDelegate()
     delegate.refresh_theme()
-    assert delegate._brush_surface.name().upper() == theme.current_colors()["surface"].upper()
+    pal = theme.current_colors()
+
+    assert delegate._brush_hover.name().upper() == \
+        theme.blend(pal["hover"], pal["surface"]).upper()
+    assert delegate._brush_selected.name().upper() == \
+        theme.blend(pal["selection"], pal["surface"]).upper()
 
 
 def test_os_tres_estados_do_card_diferem_na_tela(grid, qapp):
@@ -213,12 +221,13 @@ def test_os_tres_estados_do_card_diferem_na_tela(grid, qapp):
     delegate = view.itemDelegate()
     idx = modelo.index(0)
 
-    # Meio da aresta esquerda, no CENTRO do traço — não na sua quina externa.
+    # Desde a Fatia 50 o card não tem moldura: quem carrega os três estados é
+    # a borda da MINIATURA. Por isso a amostra é no traço dela, e não mais na
+    # aresta do card — ali, em repouso, não há contorno nenhum.
+    #
     # O contorno é desenhado centrado na aresta e o retângulo é encolhido meia
-    # espessura, então o traço de 1px do repouso vive em CARD_MARGIN+1; ler em
-    # CARD_MARGIN pegava só a borda de 2px da seleção e dava repouso e hover
-    # idênticos (os dois caíam fora do próprio traço).
-    x = asset_grid.CARD_MARGIN + 1
+    # espessura, então o traço de 1px do repouso vive uma unidade para dentro.
+    x = asset_grid.CARD_MARGIN + asset_grid.CARD_PAD + 1
     y = CELL.height() // 2
 
     repouso = _cor(_pintar(delegate, idx, view), x, y)
