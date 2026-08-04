@@ -26,10 +26,52 @@ def test_um_botao_por_categoria(barra):
     assert list(barra.buttons) == [c.key for c in CATEGORIES]
 
 
-def test_botao_e_so_icone_com_nome_e_contagem_no_tooltip(barra):
+def test_botao_mostra_so_a_contagem_quando_desligado(barra):
+    """Variante V3 (Fatia 46), escolhida pelo Rafael entre três esboços.
+
+    Substitui o contrato da Fatia 31 ("botão só com ícone, nome e contagem no
+    tooltip"): ele reclamou de não saber o que cada botão fazia sem passar o
+    mouse. A contagem passou a ficar sempre visível; o nome, só na categoria
+    ativa — a variante com todos os nomes visíveis ficou larga demais.
+    """
     botao = barra.buttons["modelos"]
-    assert botao.text() == ""  # sem rótulo escrito (pedido do Rafael)
+    assert botao.text().strip() == "85"
+    assert "Modelos" not in botao.text()
     assert botao.toolTip() == "Modelos — 85 assets (todas as extensões)"
+
+
+def test_botao_ganha_o_nome_quando_ligado(barra):
+    botao = barra.buttons["modelos"]
+    botao.setChecked(True)
+    assert "Modelos" in botao.text()
+    assert "85" in botao.text()
+
+    botao.setChecked(False)
+    assert "Modelos" not in botao.text()
+
+
+def _imagem_do_icone(botao):
+    """A IMAGEM do ícone, não o `cacheKey()`.
+
+    `cacheKey()` é por instância de QIcon: `icons.icon()` devolve um QIcon
+    novo a cada chamada, então comparar cacheKey acusa "mudou" mesmo quando a
+    cor é idêntica — um teste que passa sozinho, sem provar nada.
+    """
+    return botao.icon().pixmap(20, 20).toImage()
+
+
+def test_o_icone_acompanha_o_estado_do_botao(barra):
+    """O QSS pinta o TEXTO do botão marcado de destaque, mas `color:` não
+    alcança um QIcon: sem retingir em Python, a pastilha ativa ficava com o
+    nome azul e o glifo cinza ao lado, parecendo desligada pela metade."""
+    botao = barra.buttons["modelos"]
+    desligado = _imagem_do_icone(botao)
+
+    botao.setChecked(True)
+    assert _imagem_do_icone(botao) != desligado, "o ícone não mudou de cor"
+
+    botao.setChecked(False)
+    assert _imagem_do_icone(botao) == desligado
 
 
 def test_tooltip_lista_as_extensoes_marcadas(barra):

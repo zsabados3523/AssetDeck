@@ -74,6 +74,20 @@ QFrame#breadcrumbDivider {
     background-color: $hairline;
 }
 
+/* Cabeçalho da lista (faixa 3 do topo, Fatia 46): o escopo em destaque e a
+ * contagem apagada ao lado. O contraste entre os dois é o que faz a linha ser
+ * lida como "título + apoio" em vez de duas informações concorrendo. */
+QLabel#listScope {
+    color: $title;
+    font-size: $font_size;
+    font-weight: 600;
+}
+
+QLabel#listCount {
+    color: $text_muted;
+    font-size: $font_size_small;
+}
+
 /* -------------------------------------------------------------- lateral -- */
 
 /* Rail: coluna estreita de ícones, um por seção (Fatia 45). Fica no tom do

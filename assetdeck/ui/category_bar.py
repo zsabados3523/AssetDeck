@@ -47,9 +47,14 @@ class CategoryButton(QToolButton):
 
         self.setIcon(icons.icon(categoria.icon, theme.current_colors()["text_muted"]))
         self.setIconSize(QSize(18, 18))
-        # Só ícone + setinha (pedido do Rafael depois de ver a barra com os
-        # rótulos): nome e contagem vivem no tooltip.
-        self.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
+        # Variante V3 (Fatia 46), escolhida pelo Rafael entre três esboços na
+        # tela: a CONTAGEM aparece sempre ao lado do ícone, e o NOME só na
+        # categoria ativa. A Fatia 31 tinha ido para o extremo oposto (só
+        # ícone, tudo no tooltip) e ele reclamou de não saber o que cada botão
+        # fazia sem passar o mouse; a variante com todos os rótulos visíveis
+        # ficou larga demais para a linha. Esta é o meio-termo: compacta em
+        # repouso, explícita sobre o que está filtrando.
+        self.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         self.setPopupMode(QToolButton.ToolButtonPopupMode.MenuButtonPopup)
         self.setCheckable(True)
         self.toggled.connect(self._on_toggled)
@@ -60,7 +65,18 @@ class CategoryButton(QToolButton):
 
     def refresh_theme(self) -> None:
         """Reaplica o ícone com a cor do modo atual (Fatia 43)."""
-        self.setIcon(icons.icon(self.categoria.icon, theme.current_colors()["text_muted"]))
+        self._sync_icon()
+
+    def _sync_icon(self) -> None:
+        """Ícone na cor de destaque quando a categoria está ligada.
+
+        O QSS já pinta o TEXTO do botão marcado de azul, mas `color:` não
+        alcança um QIcon — sem isto, a pastilha ativa saía com o nome azul e o
+        glifo cinza ao lado, parecendo desligado pela metade.
+        """
+        pal = theme.current_colors()
+        cor = pal["accent"] if self.isChecked() else pal["text_muted"]
+        self.setIcon(icons.icon(self.categoria.icon, cor))
 
     def reload(self, ext_counts: dict[str, int], total: int) -> None:
         """Reconstrói o checklist de extensões preservando o que estava
@@ -136,12 +152,23 @@ class CategoryButton(QToolButton):
         self.changed.emit()
 
     def _sync_label(self) -> None:
-        """Sem texto no botão: o tooltip é o único lugar que diz qual
-        categoria é e quantos assets ela tem."""
+        """Texto do botão na variante V3: contagem sempre, nome só quando a
+        categoria está ligada.
+
+        O tooltip continua completo (nome + total + extensões escolhidas) —
+        ele é o único lugar que diz QUAIS extensões estão marcadas, e isso não
+        caberia no botão.
+        """
         exts = self.selected_extensions()
         detalhe = (", ".join(f".{e}" for e in exts) if exts
                    else "todas as extensões")
         self.setToolTip(f"{self.categoria.label} — {self._total} assets ({detalhe})")
+
+        if self.isChecked():
+            self.setText(f"  {self.categoria.label}  {self._total}")
+        else:
+            self.setText(f"  {self._total}")
+        self._sync_icon()
 
 
 class CategoryBar(QWidget):
