@@ -215,12 +215,28 @@ def test_a_largura_minima_cabe_o_cabecalho_mais_largo(qapp):
     assert lateral.minimumWidth() >= maior, "o cabeçalho mais largo não cabe no piso"
 
 
+def _imagem_do_icone(botao):
+    """A IMAGEM do ícone, não o `cacheKey()`.
+
+    `cacheKey()` é por instância de QIcon, e `icons.icon()` devolve um QIcon
+    novo a cada chamada — comparar cacheKey acusa "mudou" mesmo quando a cor é
+    exatamente a mesma. Estes dois testes usavam cacheKey e passavam sozinhos,
+    sem provar que a cor mudava (achado na Fatia 46).
+    """
+    return botao.icon().pixmap(18, 18).toImage()
+
+
 def test_o_icone_do_rail_muda_de_cor_com_o_estado(lateral, qapp):
-    """O fundo da pastilha vem do QSS, mas o ícone é pintado em Python — se
-    ele não for retingido, o botão marcado fica com o glifo apagado."""
-    antes = lateral.rail.buttons["tags"].icon().cacheKey()
+    """O ícone é pintado em Python — se não for retingido, a seção escondida
+    fica com o glifo idêntico ao da seção visível."""
+    visivel = _imagem_do_icone(lateral.rail.buttons["tags"])
+
     lateral.set_section_visible("tags", False)
-    assert lateral.rail.buttons["tags"].icon().cacheKey() != antes
+    assert _imagem_do_icone(lateral.rail.buttons["tags"]) != visivel, \
+        "o ícone da seção escondida não apagou"
+
+    lateral.set_section_visible("tags", True)
+    assert _imagem_do_icone(lateral.rail.buttons["tags"]) == visivel
 
 
 def test_a_lateral_sobrevive_a_troca_de_modo(lateral, qapp):
@@ -229,8 +245,9 @@ def test_a_lateral_sobrevive_a_troca_de_modo(lateral, qapp):
     cabeçalho e ícones do rail)."""
     theme.apply_theme(qapp, theme.Variant(mode="escuro"))
     lateral.refresh_theme()
-    escuro = lateral.rail.buttons["pastas"].icon().cacheKey()
+    escuro = _imagem_do_icone(lateral.rail.buttons["pastas"])
 
     theme.apply_theme(qapp, theme.Variant(mode="claro"))
     lateral.refresh_theme()
-    assert lateral.rail.buttons["pastas"].icon().cacheKey() != escuro
+    assert _imagem_do_icone(lateral.rail.buttons["pastas"]) != escuro, \
+        "o ícone do rail não acompanhou a troca de modo"

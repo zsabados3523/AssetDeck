@@ -238,6 +238,16 @@ class MainWindow(QMainWindow):
         # árvore de pastas — fácil de perder de vista depois de rolar.
         self.breadcrumb = QLabel()
         self.breadcrumb.setObjectName("sectionTitle")
+
+        # Escopo e contagem da faixa 3 (Fatia 46). Criados AQUI, antes do
+        # `_update_breadcrumb("")` logo abaixo — ele já escreve no escopo, e
+        # criá-los junto do layout (mais adiante) deixava a janela inteira
+        # sem subir.
+        self.list_scope = QLabel()
+        self.list_scope.setObjectName("listScope")
+        self.list_count = QLabel()
+        self.list_count.setObjectName("listCount")
+
         self._update_breadcrumb("")
 
         # Slider de tamanho da miniatura (pedido do Rafael, estilo Connecter):
@@ -260,28 +270,50 @@ class MainWindow(QMainWindow):
         self.up_btn = self._nav_button("arrow-up", "Subir um nível (Alt+↑)",
                                        self._go_up)
 
-        # Tipos / Nota / Resolução / Cor moram AQUI (Fatia 28c/39): entre o
-        # título da pasta e os filtros, como ícone compacto — não mais na
-        # barra de busca de cima. Opção C do overhaul visual (Fatia 43):
-        # navegação/caminho, categorias e filtros ficam agrupados com um
-        # traço fino entre cada grupo, em vez de tudo solto na mesma linha.
-        breadcrumb_row = QHBoxLayout()
-        breadcrumb_row.addWidget(self.back_btn)
-        breadcrumb_row.addWidget(self.fwd_btn)
-        breadcrumb_row.addWidget(self.up_btn)
-        breadcrumb_row.addWidget(self.breadcrumb, stretch=1)
-        breadcrumb_row.addWidget(self._breadcrumb_divider())
-        breadcrumb_row.addWidget(self.categories)
-        breadcrumb_row.addWidget(self._breadcrumb_divider())
-        breadcrumb_row.addWidget(self.rating_filter)
-        breadcrumb_row.addWidget(self.res_filter)
-        breadcrumb_row.addWidget(self.color_filter)
+        # Topo em TRÊS faixas (Fatia 46). Até a Fatia 43 era uma linha só
+        # carregando navegação, caminho, 6 categorias e 3 filtros — o Rafael
+        # olhou e disse que estava "absurdamente atolado", e o caminho de
+        # pasta funda já vinha sendo cortado pelo `_elide_breadcrumb` por
+        # falta de espaço. Cada faixa agora responde uma pergunta diferente:
+        #
+        #   1. onde estou           → setas + caminho
+        #   2. o que quero ver      → as 6 categorias
+        #   3. como ordenar/refinar → escopo da lista + nota/resolução/cor
+        #
+        # Os três filtros finos descem para a faixa 3 porque agem sobre a
+        # lista que já está na tela, não sobre a pasta — e ali ficam ao lado
+        # do rótulo que diz quantos itens sobraram.
+        path_row = QHBoxLayout()
+        path_row.setSpacing(2)
+        path_row.addWidget(self.back_btn)
+        path_row.addWidget(self.fwd_btn)
+        path_row.addWidget(self.up_btn)
+        path_row.addSpacing(6)
+        path_row.addWidget(self.breadcrumb, stretch=1)
+
+        category_row = QHBoxLayout()
+        category_row.setContentsMargins(0, 0, 0, 0)
+        category_row.addWidget(self.categories)
+        category_row.addStretch(1)
+
+        list_header_row = QHBoxLayout()
+        list_header_row.setSpacing(8)
+        list_header_row.addWidget(self.list_scope)
+        list_header_row.addWidget(self.list_count)
+        list_header_row.addStretch(1)
+        list_header_row.addWidget(self.rating_filter)
+        list_header_row.addWidget(self.res_filter)
+        list_header_row.addWidget(self.color_filter)
 
         grid_container = QWidget()
         grid_layout = QVBoxLayout(grid_container)
         grid_layout.setContentsMargins(0, 0, 0, 0)
         grid_layout.setSpacing(6)
-        grid_layout.addLayout(breadcrumb_row)
+        grid_layout.addLayout(path_row)
+        grid_layout.addWidget(self._breadcrumb_divider(horizontal=True))
+        grid_layout.addLayout(category_row)
+        grid_layout.addWidget(self._breadcrumb_divider(horizontal=True))
+        grid_layout.addLayout(list_header_row)
         grid_layout.addWidget(self.grid)
 
         # A grade NUNCA leva sombra: ela rola com centenas de assets, e o
@@ -416,6 +448,11 @@ class MainWindow(QMainWindow):
             trilha = " › ".join(dir_prefix.split("/"))
             self._breadcrumb_full = f"BIBLIOTECA › {trilha}".upper()
         self._elide_breadcrumb()
+        # Escopo da faixa 3 (Fatia 46). O caminho na faixa 1 responde "onde
+        # estou"; este responde "o que esta lista contém", que é diferente
+        # assim que um filtro entra.
+        self.list_scope.setText(
+            "Toda a biblioteca" if not dir_prefix else "Nesta pasta")
 
     def _elide_breadcrumb(self) -> None:
         """A linha divide espaço com 3 botões de navegação, 6 de categoria,
@@ -444,13 +481,19 @@ class MainWindow(QMainWindow):
 
     # ---- navegação de pastas (Fatia 32) ----
 
-    def _breadcrumb_divider(self) -> QFrame:
-        """Traço fino de 1px separando os grupos da barra do breadcrumb
-        (navegação+caminho / categorias / filtros) — Fatia 43, opção C
-        escolhida pelo Rafael entre os 3 esboços mostrados na tela."""
+    def _breadcrumb_divider(self, *, horizontal: bool = False) -> QFrame:
+        """Traço fino de 1px separando as faixas do topo.
+
+        Nasceu vertical na Fatia 43 (separando grupos dentro de UMA linha).
+        Na Fatia 46 o topo virou três faixas empilhadas, então o mesmo traço
+        passou a ser usado deitado, entre elas — mesma cor, mesma espessura.
+        """
         linha = QFrame()
         linha.setObjectName("breadcrumbDivider")
-        linha.setFixedWidth(1)
+        if horizontal:
+            linha.setFixedHeight(1)
+        else:
+            linha.setFixedWidth(1)
         return linha
 
     def _nav_button(self, icone: str, dica: str, slot) -> QToolButton:
@@ -1137,6 +1180,13 @@ class MainWindow(QMainWindow):
         if selecionados > 1:
             texto += f" · {selecionados} selecionados"
         self.footer_count.setText(texto)
+
+        # O mesmo número aparece de propósito no cabeçalho da lista: o rodapé
+        # é periférico (o olho não está lá quando se mexe num filtro), e a
+        # faixa 3 fica logo acima da grade, ao lado dos controles que acabaram
+        # de mudar esse número. Aqui é só o que está VISÍVEL — o total e a
+        # seleção continuam sendo assunto do rodapé.
+        self.list_count.setText(f"{shown} assets")
         return total
 
     # ---- seleção / detalhes ----
