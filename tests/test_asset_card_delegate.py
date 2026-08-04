@@ -148,6 +148,121 @@ def test_paint_nao_quebra_para_nenhuma_combinacao_de_estado(grid, qapp):
         painter.end()
 
 
+def _pintar(delegate, idx, view, *, selecionado=False, hover=False):
+    """Pinta UMA célula num pixmap e devolve a imagem, para conferir pixel."""
+    from PySide6.QtCore import QRect
+    from PySide6.QtGui import QColor, QPainter, QPixmap
+    from PySide6.QtWidgets import QStyle, QStyleOptionViewItem
+
+    alvo = QPixmap(CELL)
+    alvo.fill(QColor("#FF00FF"))  # magenta: qualquer pixel não pintado grita
+    painter = QPainter(alvo)
+    try:
+        option = QStyleOptionViewItem()
+        option.initFrom(view)
+        option.rect = QRect(0, 0, CELL.width(), CELL.height())
+
+        # ZERA os dois flags antes de ligar o que o teste pediu. `initFrom()`
+        # copia o estado do widget, e a view do fixture chega com
+        # State_MouseOver ligado — sem limpar, o caso "repouso" era pintado
+        # como hover e o teste comparava hover com hover.
+        option.state &= ~QStyle.StateFlag.State_Selected
+        option.state &= ~QStyle.StateFlag.State_MouseOver
+        if selecionado:
+            option.state |= QStyle.StateFlag.State_Selected
+        if hover:
+            option.state |= QStyle.StateFlag.State_MouseOver
+        delegate.paint(painter, option, idx)
+    finally:
+        painter.end()
+    return alvo.toImage()
+
+
+def _cor(imagem, x, y) -> str:
+    from PySide6.QtGui import QColor
+
+    return QColor(imagem.pixelColor(x, y)).name().upper()
+
+
+def test_o_card_e_pintado_com_a_superficie_do_painel(grid):
+    """Regressão da Fatia 44.
+
+    O delegate pintava o card com `bg`. Enquanto fundo e painel eram o mesmo
+    branco isso não aparecia — mas quando o fundo virou um degrau mais fundo
+    que o painel, cada célula passou a ser um retângulo escuro sobre o painel
+    claro. O card mora DENTRO do QFrame#card da grade, então a base dele é
+    `surface`.
+    """
+    from assetdeck.ui import theme
+
+    view, modelo, _conn = grid
+    delegate = view.itemDelegate()
+    delegate.refresh_theme()
+    assert delegate._brush_surface.name().upper() == theme.current_colors()["surface"].upper()
+
+
+def test_os_tres_estados_do_card_diferem_na_tela(grid, qapp):
+    """Repouso, hover e seleção têm de ser distinguíveis DE VERDADE.
+
+    O hover era um véu de 3,5% de branco: sobre fundo escuro isso é quase
+    invisível, e o card não respondia ao mouse. Por isso o contorno entrou na
+    conta — e é o contorno que este teste lê, no meio da aresta esquerda do
+    card, onde ele existe em qualquer um dos três estados.
+    """
+    view, modelo, _conn = grid
+    delegate = view.itemDelegate()
+    idx = modelo.index(0)
+
+    # Meio da aresta esquerda, no CENTRO do traço — não na sua quina externa.
+    # O contorno é desenhado centrado na aresta e o retângulo é encolhido meia
+    # espessura, então o traço de 1px do repouso vive em CARD_MARGIN+1; ler em
+    # CARD_MARGIN pegava só a borda de 2px da seleção e dava repouso e hover
+    # idênticos (os dois caíam fora do próprio traço).
+    x = asset_grid.CARD_MARGIN + 1
+    y = CELL.height() // 2
+
+    repouso = _cor(_pintar(delegate, idx, view), x, y)
+    hover = _cor(_pintar(delegate, idx, view, hover=True), x, y)
+    selecao = _cor(_pintar(delegate, idx, view, selecionado=True), x, y)
+
+    assert len({repouso, hover, selecao}) == 3, (
+        f"os três estados do card têm de diferir: {repouso=} {hover=} {selecao=}"
+    )
+
+
+def test_a_borda_da_selecao_nao_e_cortada_pela_celula_vizinha(grid):
+    """A borda de 2px é desenhada CENTRADA na aresta: sem encolher o retângulo
+    pela metade da espessura, meio pixel cai fora da célula e o vizinho corta
+    — a seleção fica com o contorno mais fino de um lado."""
+    view, modelo, _conn = grid
+    delegate = view.itemDelegate()
+    img = _pintar(delegate, modelo.index(0), view, selecionado=True)
+
+    # Nada pode ter sobrado por pintar (magenta) dentro da área do card.
+    x = asset_grid.CARD_MARGIN
+    y = CELL.height() // 2
+    assert _cor(img, x, y) != "#FF00FF"
+    assert _cor(img, CELL.width() - asset_grid.CARD_MARGIN - 1, y) != "#FF00FF"
+
+
+def test_o_raio_do_card_acompanha_a_variante_ativa(qapp, grid):
+    """Era constante de módulo, avaliada no import a partir de `theme.DEFAULT`:
+    trocar de variante ao vivo (a vitrine faz isso) deixava o card com o raio
+    da variante anterior."""
+    from assetdeck.ui import theme
+
+    view, _modelo, _conn = grid
+    delegate = view.itemDelegate()
+
+    theme.apply_theme(qapp, theme.Variant(radius="discreto"))
+    delegate.refresh_theme()
+    discreto = delegate._radius
+
+    theme.apply_theme(qapp, theme.Variant(radius="marcante"))
+    delegate.refresh_theme()
+    assert delegate._radius > discreto
+
+
 def test_set_icon_size_mantem_view_modelo_e_delegate_sincronizados(grid):
     """Slider de tamanho (Fatia 28): os três têm de mudar JUNTOS — foi
     exatamente a falta dessa sincronia que fazia a miniatura vazar por cima
