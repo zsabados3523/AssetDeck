@@ -18,7 +18,7 @@ from PySide6.QtWidgets import (
 )
 
 from assetdeck.thumbs.raster import can_thumbnail
-from assetdeck.ui import tag_icons, theme
+from assetdeck.ui import categories, tag_icons, theme
 
 log = logging.getLogger(__name__)
 
@@ -56,9 +56,16 @@ class DetailsPanel(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setObjectName("card")
 
+        # Moldura da miniatura (Fatia 48). Era um QLabel solto: sem asset
+        # selecionado sobrava um buraco de 220px de altura no topo do painel,
+        # com um texto boiando no meio e nada dizendo que ali é o lugar da
+        # imagem. Agora é uma pastilha com fundo e contorno próprios — cheia
+        # ou vazia, o bloco existe.
         self.preview = QLabel("Selecione um asset")
+        self.preview.setObjectName("previewTile")
         self.preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.preview.setMinimumSize(220, 220)
+        self.preview.setMinimumSize(220, 200)
+        self.preview.setMaximumHeight(260)
 
         self.name = QLabel("—")
         self.name.setWordWrap(True)
@@ -71,16 +78,28 @@ class DetailsPanel(QWidget):
         self.f_path = QLabel("—")
         self.f_path.setWordWrap(True)
 
-        form = QFormLayout()
-        form.addRow("Tipo:", self.f_type)
-        form.addRow("Resolução:", self.f_dims)
-        form.addRow("Tamanho:", self.f_size)
-        form.addRow("Formato:", self.f_format)
-        form.addRow("Caminho:", self.f_path)
+        # Ficha técnica: rótulo apagado à esquerda, valor à direita.
+        # O QFormLayout alinhava os dois à esquerda, com o valor começando
+        # logo depois do rótulo mais longo — cinco linhas com o valor em
+        # cinco posições diferentes, impossíveis de varrer com o olho.
+        form = QVBoxLayout()
+        form.setSpacing(2)
+        for rotulo, campo in (
+            ("Tipo", self.f_type),
+            ("Resolução", self.f_dims),
+            ("Tamanho", self.f_size),
+            ("Formato", self.f_format),
+            ("Caminho", self.f_path),
+        ):
+            form.addWidget(self._kv_row(rotulo, campo))
 
         self.open_folder_btn = QPushButton("Abrir pasta")
         self.open_folder_btn.clicked.connect(self._open_folder)
         self.open_file_btn = QPushButton("Abrir com app padrão")
+        # UM botão principal por tela (regra do tema): abrir o arquivo é a
+        # ação que se espera de um gerenciador de assets — as outras são
+        # apoio.
+        self.open_file_btn.setObjectName("primary")
         self.open_file_btn.clicked.connect(self._open_file)
         # Só faz sentido pra .blend (Fatia 40) — os outros formatos de
         # modelo (.fbx/.obj/.rvt/.skp/.usd*/.abc, Fatia 37) não têm esse
@@ -126,12 +145,15 @@ class DetailsPanel(QWidget):
             b.clicked.connect(lambda _c=False, n=i: self._on_star_clicked(n))
             self.star_btns.append(b)
             stars_row.addWidget(b)
+        stars_row.addStretch()
+
+        # O favorito ficava NA MESMA linha das cinco estrelas e era cortado
+        # pela borda do painel (visto na tela): 5 botões + um botão com texto
+        # não cabem em ~250px úteis. Linha própria, largura inteira.
         self.fav_btn = QPushButton("Favorito")
         self.fav_btn.setIconSize(_QSize(16, 16))
         self.fav_btn.setCheckable(True)
         self.fav_btn.toggled.connect(self._on_fav_toggled)
-        stars_row.addWidget(self.fav_btn)
-        stars_row.addStretch()
 
         # Aviso de edição em massa (sugestão do Rafael): com N selecionados,
         # tag/nota de estrela/favorito valem para todos
@@ -174,15 +196,20 @@ class DetailsPanel(QWidget):
         # é rolar o CONTEÚDO aqui dentro, não encolher nenhum widget.
         content = QWidget()
         layout = QVBoxLayout(content)
-        layout.setContentsMargins(0, 0, 8, 0)
+        # A margem da direita reserva espaço para a barra de rolagem (12px no
+        # tema). Estava em 8 e a barra passava por cima do fim dos botões.
+        layout.setContentsMargins(0, 0, 12, 0)
         layout.setSpacing(8)
         layout.addWidget(self.preview)
         layout.addWidget(self.name)
         layout.addLayout(form)
-        layout.addWidget(self.open_folder_btn)
+        # Principal primeiro: é a ação esperada, e ficar acima do apoio é o
+        # que faz a hierarquia ser lida sem precisar da cor.
         layout.addWidget(self.open_file_btn)
+        layout.addWidget(self.open_folder_btn)
         layout.addWidget(self.check_textures_btn)
         layout.addLayout(stars_row)
+        layout.addWidget(self.fav_btn)
         layout.addWidget(self.multi_label)
         gallery_label = QLabel("GALERIA DE PREVIEWS")
         gallery_label.setObjectName("sectionTitle")
@@ -222,6 +249,29 @@ class DetailsPanel(QWidget):
         self._paint_stars()
         self.fav_btn.setIcon(self._star_outline)
 
+    @staticmethod
+    def _kv_row(rotulo: str, campo: QLabel) -> QWidget:
+        """Uma linha da ficha técnica: rótulo apagado à esquerda, valor à
+        direita. O valor alinha à direita para os cinco ficarem numa coluna só
+        — é o que permite varrer a ficha de cima a baixo sem ler tudo."""
+        from PySide6.QtWidgets import QHBoxLayout as _QHBox
+
+        linha = QWidget()
+        lay = _QHBox(linha)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(8)
+
+        rot = QLabel(rotulo)
+        rot.setObjectName("kvLabel")
+        campo.setObjectName("kvValue")
+        campo.setAlignment(
+            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+        )
+        lay.addWidget(rot)
+        lay.addStretch(1)
+        lay.addWidget(campo, stretch=1)
+        return linha
+
     def _set_buttons(self, enabled: bool, path: Path | None = None) -> None:
         self.open_folder_btn.setEnabled(enabled)
         self.open_file_btn.setEnabled(enabled)
@@ -253,7 +303,12 @@ class DetailsPanel(QWidget):
             self.preview.setText("(sem preview ainda)")
 
         self.name.setText(row["name"])
-        self.f_type.setText(row["asset_type"])
+        # O `asset_type` cru do banco ("hdri", "pbr_set", "psd") é vocabulário
+        # de schema, não de tela — aparecia em minúsculas na ficha. Aqui vira
+        # o mesmo rótulo que a barra de categorias usa; tipo desconhecido cai
+        # no valor cru em vez de sumir.
+        categoria = categories.category_of(row["asset_type"])
+        self.f_type.setText(categoria.label if categoria else row["asset_type"])
         self.f_dims.setText(self._read_dims(path))
         self.f_size.setText(human_size(row["size_bytes"]))
         self.f_format.setText(path.suffix.lstrip(".").upper() or "—")
