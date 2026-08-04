@@ -74,6 +74,29 @@ QFrame#breadcrumbDivider {
     background-color: $hairline;
 }
 
+/* ---------------------------------------------- painel de detalhes (F48) -- */
+
+/* Moldura da miniatura. Existe mesmo vazia: sem ela, um painel sem asset
+ * selecionado é um buraco de 200px com um texto boiando no meio. */
+QLabel#previewTile {
+    background-color: $field;
+    border: 1px solid $border;
+    border-radius: $radius_card;
+    color: $text_muted;
+}
+
+/* Ficha técnica: rótulo apagado, valor na cor do texto. O contraste entre os
+ * dois é o que deixa varrer a coluna de valores sem ler os rótulos. */
+QLabel#kvLabel {
+    color: $text_muted;
+    font-size: $font_size_small;
+}
+
+QLabel#kvValue {
+    color: $text;
+    font-size: $font_size_small;
+}
+
 /* Cabeçalho da lista (faixa 3 do topo, Fatia 46): o escopo em destaque e a
  * contagem apagada ao lado. O contraste entre os dois é o que faz a linha ser
  * lida como "título + apoio" em vez de duas informações concorrendo. */
