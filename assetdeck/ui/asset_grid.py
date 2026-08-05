@@ -444,8 +444,13 @@ class AssetGridView(QListView):
         item só, o padrão do Qt já fica bom — não mexe.
         """
         indexes = self.selectedIndexes()
+        # Diagnóstico do bug relatado (arrastar asset sobre outro asset para
+        # definir preview não faz nada): confirma se o drag SEQUER começa.
+        # INFO porque dispara uma vez por gesto — não fica ruidoso no log.
+        log.info("startDrag: %d item(ns) selecionado(s)", len(indexes))
         if len(indexes) < 2:
             super().startDrag(supportedActions)
+            log.info("startDrag: super().startDrag() retornou (drag de 1 item encerrado)")
             return
 
         model = self.model()
@@ -459,7 +464,8 @@ class AssetGridView(QListView):
         pixmap = _stacked_preview(model, rows)
         drag.setPixmap(pixmap)
         drag.setHotSpot(pixmap.rect().center())
-        drag.exec(supportedActions, Qt.DropAction.CopyAction)
+        resultado = drag.exec(supportedActions, Qt.DropAction.CopyAction)
+        log.info("startDrag: drag.exec() retornou %s", resultado)
         # Sem isso, às vezes sobrava uma cópia "presa" na tela no lugar
         # onde soltou, em vez do card voltar limpo pro lugar de origem
         # (Fatia 19b) — o QDrag manual não passa pela máquina de estados
@@ -486,13 +492,21 @@ class AssetGridView(QListView):
     def dropEvent(self, event) -> None:  # noqa: N802
         index = self.indexAt(event.position().toPoint())
         row = self.model().row_at(index) if index.isValid() else None
+        # INFO: dispara uma vez por drop — é o ponto que confirma se o
+        # gesto chegou até o fim (diagnóstico do bug de preview via drag).
+        log.info("dropEvent: pos=%s alvo=%s formats=%s",
+                 event.position().toPoint(), row["name"] if row else None,
+                 event.mimeData().formats())
 
         # Caso 1: imagem externa (do gerenciador de arquivos)
         path = self._dropped_image(event.mimeData())
         if path is not None:
             if row is not None:
+                log.info("dropEvent: caso imagem externa -> image_dropped(%s)", row["id"])
                 self.image_dropped.emit(row["id"], path)
                 event.acceptProposedAction()
+            else:
+                log.info("dropEvent: imagem externa solta fora de um card — ignorado")
             return
 
         # Caso 2: asset(s) da própria grid soltos sobre um model
@@ -500,6 +514,7 @@ class AssetGridView(QListView):
             origem = [int(x) for x in
                       bytes(event.mimeData().data(MIME_ASSETS)).decode().split(",") if x]
             origem = [i for i in origem if i != row["id"]]  # não sobre si mesmo
+            log.info("dropEvent: caso asset-sobre-asset — alvo=%s origem=%s", row["id"], origem)
             if origem:
                 self.asset_preview_dropped.emit(row["id"], origem)
                 event.acceptProposedAction()
@@ -508,10 +523,17 @@ class AssetGridView(QListView):
         # reordenar por drop (sem InternalMove), então cair no dropEvent
         # padrão do Qt aqui era um caminho morto que deixava a view com o
         # "fantasma" da miniatura presa onde soltou (Fatia 19b).
+        log.info("dropEvent: nenhum caso bateu (row=%s) — ignorando o evento", row)
         event.ignore()
         self.viewport().update()
 
     def dragEnterEvent(self, event) -> None:  # noqa: N802
+        # INFO: uma vez por gesto de arrastar que ENTRA nesta view — se isto
+        # nunca aparecer no log durante um arrasto que "não faz nada", o
+        # problema é anterior a este código (o SO/Qt não está entregando o
+        # evento à janela, não é lógica Python).
+        log.info("dragEnterEvent: formats=%s hasUrls=%s",
+                 event.mimeData().formats(), event.mimeData().hasUrls())
         if self._dropped_image(event.mimeData()) or \
                 event.mimeData().hasFormat(MIME_ASSETS):
             event.acceptProposedAction()
@@ -519,6 +541,9 @@ class AssetGridView(QListView):
             super().dragEnterEvent(event)
 
     def dragMoveEvent(self, event) -> None:  # noqa: N802
+        # DEBUG (não INFO): dispara a cada pixel de movimento durante o
+        # arrasto — em INFO inundaria o log em segundos.
+        log.debug("dragMoveEvent: pos=%s", event.position().toPoint())
         if self._dropped_image(event.mimeData()) or \
                 event.mimeData().hasFormat(MIME_ASSETS):
             event.acceptProposedAction()

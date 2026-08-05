@@ -1641,13 +1641,21 @@ class MainWindow(QMainWindow):
         from assetdeck import config
         from assetdeck.thumbs.preview import can_preview
 
+        # Diagnóstico do bug relatado: se ESTE log não aparecer depois de um
+        # dropEvent que emitiu asset_preview_dropped, o sinal se perdeu entre
+        # a view e a janela — improvável (é uma conexão direta), mas descarta.
+        log.info("_on_asset_preview_dropped: alvo=%s origem=%s", target_id, source_ids)
+
         alvo = self._conn.execute(
             "SELECT name, asset_type FROM assets WHERE id = ?", (target_id,)
         ).fetchone()
         if alvo is None:
+            log.info("_on_asset_preview_dropped: alvo %s não existe no banco", target_id)
             return
         alvo_path = assets_repo.primary_abs_path(self._conn, target_id, self._library_root)
         if alvo_path is not None and can_preview(alvo_path):
+            log.info("_on_asset_preview_dropped: '%s' já tem miniatura nativa (%s) — recusado",
+                     alvo["name"], alvo_path)
             self.statusBar().showMessage(
                 f"'{alvo['name']}' já tem uma miniatura de verdade — "
                 "preview manual só vale para assets sem preview nativo"
