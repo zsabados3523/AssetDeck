@@ -1022,9 +1022,49 @@ ignora quando está fora da grade (não rouba drops legítimos pra outro
 widget); cobre o caso de imagem externa também; `dropEvent` marca entrega
 nativa confirmada. 715 testes verdes.
 
-**Falta o Rafael confirmar na tela**: o fix não pôde ser validado
-ponta-a-ponta com mouse real (só a lógica, via testes determinísticos) —
-é a mesma limitação que impediu confirmar a causa raiz.
+**2ª rodada (mesmo dia): o fix funcionou, mas nada aparecia na tela.**
+Rafael testou de novo e ainda "não foi possível". O log desta vez contava
+outra história: `fallback` disparava, achava o alvo certo pela posição do
+cursor, `_apply_drop retornou True`, `_on_asset_preview_dropped` recebia o
+sinal — ou seja, o MECANISMO DE ARRASTO estava, desta vez, funcionando de
+ponta a ponta. Conferi direto no banco real (`~/.local/share/assetdeck/
+assetdeck.db` — esse caminho é local, meu acesso a ele é confiável, ao
+contrário de caminhos dentro do SSD montado) e não havia NENHUMA linha
+nova em `previews` para os assets testados: a cópia do arquivo estava
+falhando silenciosamente.
+
+Causa: `_on_asset_preview_dropped` nunca teve `try/except` em volta de
+`previews_repo.add()` (que levanta `FileNotFoundError`/`OSError` se a
+cópia falhar por qualquer motivo) — diferente do caminho irmão
+(`_on_image_dropped`, protegido desde a Fatia 10). Como a falha acontece
+DENTRO de um sinal Qt emitido de dentro de `startDrag()` (chamado pelo
+C++ do Qt), a exceção não tinha como aparecer no log nem crashar o app:
+simplesmente desaparecia — viola em espírito a regra do projeto de nunca
+ter erro sem contexto logado.
+
+Cheguei a suspeitar que `library_root` (com "BIBLIOTECA {CURA}" duplicado
+no caminho do config) estivesse errado — **Rafael confirmou que é assim
+mesmo, de propósito**, e que o SSD estava conectado. Minha checagem de "o
+arquivo existe?" rodou pela minha própria ferramenta de terminal, que não
+enxerga o SSD montado dele (limitação do MEU sandbox, não bug do config)
+— descartada como pista. A causa real da falha na cópia continua
+desconhecida; o fix não depende de saber qual é.
+
+Fix: `_on_asset_preview_dropped` agora envolve `previews_repo.add()` num
+`try/except (FileNotFoundError, OSError)`, loga com `log.exception()`
+(origem, alvo, caminho tentado, `library_root`) e mostra a mensagem no
+rodapé — mesmo padrão do `_on_image_dropped`. Continua tentando as outras
+origens se o drop tiver mais de uma. Teste novo prova que era um bug
+real: derruba com exceção não tratada SEM o fix (confirmado rodando
+contra o código antigo via `git stash`), passa limpo COM o fix.
+
+716 testes verdes.
+
+**Falta o Rafael confirmar na tela de novo**: agora QUALQUER falha na
+cópia vai aparecer visível (rodapé + log), então a próxima tentativa deve
+finalmente mostrar OU o preview funcionando, OU o motivo real de não
+funcionar — o que quebra o ciclo de "log diz que funcionou mas não
+funcionou".
 
 ### ☑ Fatia 46 — Teste da ponte falha com o app aberto
 `tests/test_main_window.py::test_ponte_e_render_ficam_prontos` afirmava que
