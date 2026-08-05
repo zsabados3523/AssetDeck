@@ -146,7 +146,23 @@ class AssetGridModel(QAbstractListModel):
                 )
 
     def reload(self) -> None:
-        """Recarga completa (pós-varredura): refaz a consulta e o pré-aquecimento."""
+        """Recarga BARATA: só refaz a consulta filtrada (`_requery`).
+
+        Bug de performance achado em 2026-08-05 (Rafael, biblioteca real de
+        23 mil assets): isto ANTES também chamava `_warmup()` — que varre a
+        biblioteca INTEIRA sem filtro (72 mil linhas no modo expandido) e
+        confere no disco se cada thumbnail já existe. Medido: ~1,1s só
+        nisso, rodando no thread principal, TRAVANDO a UI — e `reload()` é
+        chamado a cada drop de preview, favorito, nota, tag… ações que
+        deveriam ser instantâneas. `_warmup()` só faz sentido depois de uma
+        VARREDURA (arquivos novos podem ter surgido); ver `warmup_library()`.
+        """
+        self._requery()
+
+    def warmup_library(self) -> None:
+        """Recarga COMPLETA: consulta + pré-aquecimento da biblioteca
+        inteira. Chamar só depois de uma varredura real (Reindexar, abrir o
+        app) — não a cada mudança pequena (ver `reload()`)."""
         self._requery()
         self._warmup()
 

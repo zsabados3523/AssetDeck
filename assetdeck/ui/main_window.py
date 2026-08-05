@@ -400,7 +400,12 @@ class MainWindow(QMainWindow):
     # ---- filtros e contagem ----
 
     def _reload_all(self) -> None:
-        """Recarga completa: pastas, tags, checklist de tipos e grid.
+        """Recarga completa: pastas, tags, checklist de tipos e grid — E o
+        pré-aquecimento de thumbnails da biblioteca inteira (`warmup_library`,
+        não o `reload()` barato). Só é chamada depois de algo que pode ter
+        trazido arquivo novo pra biblioteca (varredura, rename em lote,
+        agrupar/desagrupar) — nunca a cada mudancinha, por isso pode pagar
+        o custo do pré-aquecimento aqui sem travar a UI o tempo todo.
 
         `folders.reload` reseta a seleção para a raiz — antes da Fatia 32
         isso jogava o Rafael de volta pra "tudo" no fim de cada varredura, e
@@ -412,7 +417,7 @@ class MainWindow(QMainWindow):
         self.collections.reload(self._conn)
         self.smart_collections.reload(self._conn)
         self.categories.reload(self._conn, self._category_counts())
-        self.model.reload()
+        self.model.warmup_library()
         self._go_to_dir(anterior, record=False)
 
     def _category_counts(self) -> dict:
