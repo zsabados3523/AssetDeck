@@ -1663,17 +1663,42 @@ class MainWindow(QMainWindow):
             return
 
         aplicados: list[int] = []
+        falhas: list[str] = []
         for sid in source_ids:
             origem = assets_repo.primary_abs_path(self._conn, sid, self._library_root)
             if origem is None or not can_preview(origem):
                 log.info("Origem %d ignorada (sumida ou sem preview visual).", sid)
                 continue
-            previews_repo.add(self._conn, target_id, origem, config.previews_dir())
+            # `can_preview` só olha a EXTENSÃO — não confere se o arquivo
+            # existe de verdade. Se `library_root` estiver errado (ou o
+            # arquivo tiver sumido sem reindexar), previews_repo.add()
+            # levanta FileNotFoundError. Sem este try/except o erro
+            # desaparecia: a exceção nasce DENTRO de um sinal Qt emitido a
+            # partir de startDrag() (chamado pelo C++ do Qt), e o Python
+            # não tem chance de logar nada — bug real achado em 2026-08-05
+            # ao investigar por que o fallback "funcionava" no log mas o
+            # preview não aparecia. Nenhum except silencioso: sempre loga
+            # com contexto (regra do projeto).
+            try:
+                previews_repo.add(self._conn, target_id, origem, config.previews_dir())
+            except (FileNotFoundError, OSError) as exc:
+                log.exception(
+                    "Falha ao copiar preview do asset %d para %d (origem=%s, "
+                    "library_root=%s)", sid, target_id, origem, self._library_root,
+                )
+                falhas.append(str(exc))
+                continue
             aplicados.append(sid)
         if not aplicados:
-            self.statusBar().showMessage(
-                "Nenhuma das origens era uma imagem utilizável como preview."
-            )
+            if falhas:
+                self.statusBar().showMessage(
+                    f"Falha ao copiar a imagem de origem: {falhas[0]} "
+                    "(confira se a biblioteca está no caminho certo — ver log)"
+                )
+            else:
+                self.statusBar().showMessage(
+                    "Nenhuma das origens era uma imagem utilizável como preview."
+                )
             return
 
         # Ocultar as imagens de origem? (pergunta, com memória da escolha)

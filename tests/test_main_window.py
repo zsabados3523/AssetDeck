@@ -507,6 +507,50 @@ def test_preview_manual_vale_para_asset_sem_miniatura_nativa(janela):
     assert linha["cover_path"], "o .ies devia ter ganhado a capa manual"
 
 
+def test_preview_manual_com_arquivo_de_origem_sumido_nao_falha_em_silencio(
+    janela, monkeypatch, caplog
+):
+    """Bug real achado em 2026-08-05 (Rafael): com o library_root apontando
+    pra um caminho que não bate mais com o disco (ex.: SSD remontado num
+    lugar diferente), previews_repo.add() levanta FileNotFoundError — e
+    como isso acontecia DENTRO do sinal emitido a partir de startDrag()
+    (chamado pelo C++ do Qt), a exceção sumia sem log e sem aviso: o log
+    dizia '_apply_drop retornou True', mas nenhum preview era criado.
+
+    Este teste finge exatamente esse cenário — origem que `can_preview`
+    aceita (extensão certa) mas que NÃO existe mais no disco de verdade —
+    e confere que agora vira um aviso visível, não silêncio."""
+    from assetdeck.db.repos import libraries as libraries_repo
+    from assetdeck.indexer.scanner import scan_library
+
+    cfg = config.load_config()
+    cfg["hide_preview_source"] = "never"
+    config.save_config(cfg)
+
+    root = janela._library_root
+    (root / "existe.jpg").write_bytes(b"j" * 30)
+    lib_id = libraries_repo.get_or_create(janela._conn, root)
+    scan_library(janela._conn, lib_id, root)
+    janela.model.reload()
+
+    modelo_id = _asset_id(janela._conn, "modelo")  # .blend do fixture — sem preview nativo
+    origem_id = _asset_id(janela._conn, "existe")
+
+    # Simula "arquivo sumiu do disco depois do último rescan": can_preview só
+    # olha a extensão, então o registro no banco continua achando que é uma
+    # imagem válida — é exatamente essa lacuna que causava o bug real.
+    (root / "existe.jpg").unlink()
+
+    with caplog.at_level("ERROR"):
+        janela._on_asset_preview_dropped(modelo_id, [origem_id])
+
+    linha = janela.model.row_at(janela.model.index_of_asset(modelo_id))
+    assert not linha["cover_path"], "não pode ter aplicado uma capa que falhou ao copiar"
+    assert "Falha ao copiar a imagem" in janela.statusBar().currentMessage()
+    assert any("Falha ao copiar preview" in r.message for r in caplog.records), \
+        "o erro tem que aparecer no log — nada de falha silenciosa"
+
+
 def test_preview_manual_recusa_asset_que_ja_tem_miniatura_de_verdade(janela):
     """Um .jpg já tem preview nativo — não faz sentido sobrepor com um
     preview manual, então o drop é ignorado (com aviso no rodapé)."""
