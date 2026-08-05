@@ -979,7 +979,7 @@ caso também, já que os dois passam pelo mesmo `_apply_drop`. **Falta o
 Rafael confirmar na tela** especificamente para o caso de imagem externa
 (ele confirmou o caso asset-sobre-asset, que motivou a Fatia 51).
 
-### ☐ Fatia 51 — Bug: arrastar asset sobre outro asset da grade não funciona
+### ☑ Fatia 51 — Bug: arrastar asset sobre outro asset da grade não funciona
 Relatado pelo Rafael (2026-08-05), variante do Fatia 44: arrastar uma
 imagem (asset já indexado) sobre um `.blend`/`.fbx` pra definir como
 preview (Fatia 10b) não fazia nada.
@@ -1060,11 +1060,17 @@ contra o código antigo via `git stash`), passa limpo COM o fix.
 
 716 testes verdes.
 
-**Falta o Rafael confirmar na tela de novo**: agora QUALQUER falha na
-cópia vai aparecer visível (rodapé + log), então a próxima tentativa deve
-finalmente mostrar OU o preview funcionando, OU o motivo real de não
-funcionar — o que quebra o ciclo de "log diz que funcionou mas não
-funcionou".
+**Confirmado pelo Rafael na tela (2026-08-05): está funcionando.** Preview
+aplicado corretamente pelo fallback. Observação cosmética dele: durante o
+arrasto, o cursor mostra o ícone de "bloqueado" o tempo todo, mesmo o
+resultado saindo certo — mesma causa raiz (nenhuma janela confirma o
+drop nativamente, então o Qt nunca troca o cursor pro de "aceito"; o
+fallback aplica o efeito DEPOIS, mas não retroage no cursor mostrado
+durante o gesto). Não afeta o funcionamento. Consertar isso direito
+exigiria trocar `super().startDrag()` por um `QDrag` manual também no
+caso de 1 item só (pra poder chamar `setDragCursor`), o que muda também o
+preview visual do item arrastado — foi deixado como polimento opcional,
+a critério do Rafael, não bloqueia o fechamento desta fatia.
 
 ### ☑ Fatia 46 — Teste da ponte falha com o app aberto
 `tests/test_main_window.py::test_ponte_e_render_ficam_prontos` afirmava que
