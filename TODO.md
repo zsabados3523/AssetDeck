@@ -1072,6 +1072,25 @@ caso de 1 item só (pra poder chamar `setDragCursor`), o que muda também o
 preview visual do item arrastado — foi deixado como polimento opcional,
 a critério do Rafael, não bloqueia o fechamento desta fatia.
 
+**Pergunta do Rafael que virou um bug de performance real:** por que
+demora ~1,5-2s pra assinalar o preview? Medi contra o banco real dele (23
+mil assets): `AssetGridModel.reload()` chamava `_warmup()` — que varre a
+biblioteca INTEIRA sem filtro (72.059 linhas no modo expandido) e confere
+no disco se cada thumbnail já existe (~64.606 checagens) — TUDO síncrono
+no thread principal. Medido: ~1,1s (388ms SQL + 379ms filtro Python +
+335ms `dest.exists()` por item). E `reload()` roda a cada ação pequena
+(preview, favorito, nota, tag), não só depois de varredura.
+
+Fix: `reload()` virou barato (só `_requery()` — 11ms medido numa pasta
+filtrada real dele); o pré-aquecimento foi pra `warmup_library()`,
+chamada só de `_reload_all()` (que já é reservada pra pós-varredura/
+rename em lote/agrupar — nunca pelas ações frequentes). 3 testes novos em
+`tests/test_asset_grid_warmup.py`, confirmando via `git stash` que
+derrubavam contra o código antigo.
+
+**Medido de ponta a ponta com o banco real do Rafael: ~1100ms → ~11ms.**
+719 testes verdes. Falta ele confirmar na tela que a trava sumiu.
+
 ### ☑ Fatia 46 — Teste da ponte falha com o app aberto
 `tests/test_main_window.py::test_ponte_e_render_ficam_prontos` afirmava que
 a ponte do Blender está escutando, mas ela usava a porta FIXA 45017
