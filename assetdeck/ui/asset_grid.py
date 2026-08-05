@@ -375,6 +375,9 @@ class AssetGridView(QListView):
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
+        # Ver startDrag()/_fallback_drop_by_cursor_position(): confirma se o
+        # SO entregou o drop nativamente para o gesto em andamento.
+        self._native_drop_handled = False
         self.setAcceptDrops(True)
         self.setViewMode(QListView.ViewMode.IconMode)
         # CAUSA REAL do bug do card que ficava preso onde o mouse soltou
@@ -442,35 +445,69 @@ class AssetGridView(QListView):
         ('baralho' + contador) que acompanha o cursor pelo centro —
         pedido do Rafael depois de usar as coleções (Fatia 17b). Com 1
         item só, o padrão do Qt já fica bom — não mexe.
+
+        Bug confirmado por log real (Rafael, 2026-08-05): soltar um asset
+        sobre OUTRO asset desta MESMA grade não entrega dragEnterEvent/
+        dropEvent em lugar nenhum — startDrag dispara e retorna, e nada
+        mais acontece. Arrastos para outros widgets (Tags, Coleções) e
+        para o Blender (outra janela/processo) continuam funcionando —
+        o problema é específico de soltar DENTRO da mesma view. Como não
+        dá pra confiar na entrega nativa aqui, o FALLBACK abaixo confere
+        onde o cursor real está assim que o gesto termina e aplica o
+        efeito na mão se a entrega nativa não chegou.
         """
         indexes = self.selectedIndexes()
-        # Diagnóstico do bug relatado (arrastar asset sobre outro asset para
-        # definir preview não faz nada): confirma se o drag SEQUER começa.
-        # INFO porque dispara uma vez por gesto — não fica ruidoso no log.
         log.info("startDrag: %d item(ns) selecionado(s)", len(indexes))
-        if len(indexes) < 2:
-            super().startDrag(supportedActions)
-            log.info("startDrag: super().startDrag() retornou (drag de 1 item encerrado)")
+        if not indexes:
             return
 
         model = self.model()
         mime = model.mimeData(indexes)
         if mime is None:
             return
+        origem_ids = {r["id"] for r in (model.row_at(i) for i in indexes) if r is not None}
 
-        rows = [r for r in (model.row_at(i) for i in indexes) if r is not None]
-        drag = QDrag(self)
-        drag.setMimeData(mime)
-        pixmap = _stacked_preview(model, rows)
-        drag.setPixmap(pixmap)
-        drag.setHotSpot(pixmap.rect().center())
-        resultado = drag.exec(supportedActions, Qt.DropAction.CopyAction)
-        log.info("startDrag: drag.exec() retornou %s", resultado)
-        # Sem isso, às vezes sobrava uma cópia "presa" na tela no lugar
-        # onde soltou, em vez do card voltar limpo pro lugar de origem
-        # (Fatia 19b) — o QDrag manual não passa pela máquina de estados
-        # de repaint que o startDrag padrão do Qt já cuida sozinho.
-        self.viewport().update()
+        self._native_drop_handled = False  # dropEvent() liga isto se o SO entregar
+
+        if len(indexes) < 2:
+            super().startDrag(supportedActions)
+            log.info("startDrag: super().startDrag() retornou (drag de 1 item encerrado)")
+        else:
+            rows = [r for r in (model.row_at(i) for i in indexes) if r is not None]
+            drag = QDrag(self)
+            drag.setMimeData(mime)
+            pixmap = _stacked_preview(model, rows)
+            drag.setPixmap(pixmap)
+            drag.setHotSpot(pixmap.rect().center())
+            resultado = drag.exec(supportedActions, Qt.DropAction.CopyAction)
+            log.info("startDrag: drag.exec() retornou %s", resultado)
+            # Sem isso, às vezes sobrava uma cópia "presa" na tela no lugar
+            # onde soltou, em vez do card voltar limpo pro lugar de origem
+            # (Fatia 19b) — o QDrag manual não passa pela máquina de estados
+            # de repaint que o startDrag padrão do Qt já cuida sozinho.
+            self.viewport().update()
+
+        if not self._native_drop_handled:
+            self._fallback_drop_by_cursor_position(mime, origem_ids)
+
+    def _fallback_drop_by_cursor_position(self, mime: QMimeData, origem_ids: set[int]) -> None:
+        """Se o SO não entregou o drop nativamente, usa a posição REAL do
+        cursor (QCursor, não sintética) no instante em que o gesto terminou
+        para decidir se caiu sobre outro card desta mesma grade. Soltar fora
+        da grade (outro widget/janela) deixa `indexAt` inválido e não faz
+        nada aqui — esses casos já funcionam pelo caminho nativo."""
+        from PySide6.QtGui import QCursor
+
+        local = self.viewport().mapFromGlobal(QCursor.pos())
+        index = self.indexAt(local)
+        if not index.isValid():
+            return
+        row = self.model().row_at(index)
+        if row is None or row["id"] in origem_ids:
+            return
+        log.info("startDrag: entrega nativa não confirmada; aplicando pela "
+                 "posição do cursor (fallback) — alvo=%s", row["id"])
+        self._apply_drop(mime, row)
 
     # ---- receber imagem externa como preview ----
 
@@ -489,6 +526,24 @@ class AssetGridView(QListView):
                     return p
         return None
 
+    def _apply_drop(self, mime: QMimeData, row) -> bool:
+        """Lógica compartilhada entre o dropEvent nativo e o fallback por
+        posição do cursor. Retorna True se aplicou algo."""
+        path = self._dropped_image(mime)
+        if path is not None:
+            log.info("_apply_drop: caso imagem externa -> image_dropped(%s)", row["id"])
+            self.image_dropped.emit(row["id"], path)
+            return True
+
+        if mime.hasFormat(MIME_ASSETS):
+            origem = [int(x) for x in bytes(mime.data(MIME_ASSETS)).decode().split(",") if x]
+            origem = [i for i in origem if i != row["id"]]  # não sobre si mesmo
+            log.info("_apply_drop: caso asset-sobre-asset — alvo=%s origem=%s", row["id"], origem)
+            if origem:
+                self.asset_preview_dropped.emit(row["id"], origem)
+                return True
+        return False
+
     def dropEvent(self, event) -> None:  # noqa: N802
         index = self.indexAt(event.position().toPoint())
         row = self.model().row_at(index) if index.isValid() else None
@@ -497,27 +552,16 @@ class AssetGridView(QListView):
         log.info("dropEvent: pos=%s alvo=%s formats=%s",
                  event.position().toPoint(), row["name"] if row else None,
                  event.mimeData().formats())
+        # O evento CHEGOU — não importa se há um alvo válido aqui, isso já
+        # prova que a entrega nativa funcionou para este gesto, então o
+        # fallback de startDrag() não precisa (e não deve) agir depois.
+        self._native_drop_handled = True
 
-        # Caso 1: imagem externa (do gerenciador de arquivos)
-        path = self._dropped_image(event.mimeData())
-        if path is not None:
-            if row is not None:
-                log.info("dropEvent: caso imagem externa -> image_dropped(%s)", row["id"])
-                self.image_dropped.emit(row["id"], path)
-                event.acceptProposedAction()
-            else:
-                log.info("dropEvent: imagem externa solta fora de um card — ignorado")
+        if row is not None and self._apply_drop(event.mimeData(), row):
+            event.acceptProposedAction()
             return
-
-        # Caso 2: asset(s) da própria grid soltos sobre um model
-        if event.mimeData().hasFormat(MIME_ASSETS) and row is not None:
-            origem = [int(x) for x in
-                      bytes(event.mimeData().data(MIME_ASSETS)).decode().split(",") if x]
-            origem = [i for i in origem if i != row["id"]]  # não sobre si mesmo
-            log.info("dropEvent: caso asset-sobre-asset — alvo=%s origem=%s", row["id"], origem)
-            if origem:
-                self.asset_preview_dropped.emit(row["id"], origem)
-                event.acceptProposedAction()
+        if row is None and self._dropped_image(event.mimeData()) is not None:
+            log.info("dropEvent: imagem externa solta fora de um card — ignorado")
             return
         # Sem alvo válido dentro da própria grade — o modelo não suporta
         # reordenar por drop (sem InternalMove), então cair no dropEvent

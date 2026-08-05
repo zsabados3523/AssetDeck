@@ -956,37 +956,75 @@ com as fórmulas de contraste (WCAG), não olhando pra tela de verdade.
 Bem provável que precise de ajuste fino, como aconteceu com a paleta
 clara na F4 (três rodadas de correção).
 
-### ☐ Fatia 44 — Bug: preview customizado não aceita imagem externa via drag-and-drop
+### ☑ Fatia 44 — Bug: preview customizado não aceita imagem externa via drag-and-drop
 Relatado pelo Rafael (2026-08-02): arrastar um `.png`/`.jpeg` do
 gerenciador de arquivos do sistema para cima de um asset na grade não
 faz nada — devia definir a imagem como capa customizada (Fatia 10).
 
-**Investigado sem reproduzir ainda** (ver `assetdeck/ui/asset_grid.py`):
-`_dropped_image` (456-469), `dropEvent` (471-497), `dragEnterEvent`/
-`dragMoveEvent` (499-511) diferenciam corretamente drop externo
-(`hasUrls()`) de drop interno (`MIME_ASSETS`, Fatia 10b) e emitem
-`image_dropped` certinho num teste direto com `QDropEvent` sintético
-(offscreen). Os handlers em `main_window.py` (`_on_image_dropped`,
-981-994) também estão corretos. **Hipótese principal: integração XDND do
-SO** (X11/Wayland ↔ gerenciador de arquivos), fora do que dá pra testar
-headless — não é claramente um bug de lógica Python.
-**Próximo passo ao fatiar:** reproduzir na tela do Rafael com log
-temporário em `dragEnterEvent`/`dropEvent` pra confirmar se o evento
-chega no app; testar também com `QT_QPA_PLATFORM=xcb` (descarta
-Wayland-specific).
+**Investigado sem reproduzir na época** (ver `assetdeck/ui/asset_grid.py`):
+`_dropped_image`, `dropEvent`, `dragEnterEvent`/`dragMoveEvent`
+diferenciam corretamente drop externo (`hasUrls()`) de drop interno
+(`MIME_ASSETS`, Fatia 10b) e emitem `image_dropped` certinho num teste
+direto com `QDropEvent` sintético (offscreen). Hipótese principal na
+época: integração XDND do SO — sem confirmação.
 
-**Buraco de cobertura fechado em 2026-08-03** (sessão automatizada
-noturna — isto dava pra fazer sem o Rafael por perto, ao contrário da
-reprodução em si): `tests/test_asset_grid_drop.py` novo — 4 testes que
-constroem um `QDropEvent`/`QDragEnterEvent` DE VERDADE (não só chamam o
-handler direto) com `hasUrls()` real e despacham contra a
-`AssetGridView`: imagem externa aceita e emite `image_dropped` com o
-path certo; extensão não-raster é ignorada; drop interno (`MIME_ASSETS`)
-não é confundido com imagem externa mesmo que o mime também tivesse
-`hasUrls()`. Os 4 passam — reforça a hipótese de que a lógica Python está
-correta e o bug é mesmo XDND do SO, mas **não prova isso**: só um teste
-offscreen não reproduz o pipeline real do gerenciador de arquivos. A
-reprodução na tela do Rafael continua sendo o próximo passo real.
+**Buraco de cobertura fechado em 2026-08-03**: `tests/test_asset_grid_drop.py`
+— 4 testes com `QDropEvent`/`QDragEnterEvent` DE VERDADE contra a
+`AssetGridView`. Passaram, reforçando a lógica Python sem provar a causa.
+
+**Causa raiz confirmada em 2026-08-05** (ver Fatia 51): não é XDND geral —
+é especificamente soltar DENTRO da mesma view que iniciou o arrasto. O
+mesmo fix da Fatia 51 (fallback por posição real do cursor) cobre este
+caso também, já que os dois passam pelo mesmo `_apply_drop`. **Falta o
+Rafael confirmar na tela** especificamente para o caso de imagem externa
+(ele confirmou o caso asset-sobre-asset, que motivou a Fatia 51).
+
+### ☐ Fatia 51 — Bug: arrastar asset sobre outro asset da grade não funciona
+Relatado pelo Rafael (2026-08-05), variante do Fatia 44: arrastar uma
+imagem (asset já indexado) sobre um `.blend`/`.fbx` pra definir como
+preview (Fatia 10b) não fazia nada.
+
+**Reproduzido com log real** (não sintético): instrumentei
+`startDrag`/`dragEnterEvent`/`dropEvent`/`_on_asset_preview_dropped` em
+INFO (nível padrão, sem flag extra) e pedi pro Rafael tentar uma vez. Log
+de 5 tentativas reais: `startDrag` dispara e retorna todas as 5 vezes,
+`dragEnterEvent` NUNCA aparece — nem uma. Rafael confirmou que outros
+arrastos (Tags, Coleções, Blender) funcionam normalmente, isolando o
+problema para "soltar DENTRO da mesma view que iniciou o arrasto"
+especificamente — não é XDND quebrado em geral.
+
+**Tentativa de reproduzir sinteticamente com QTest (mouse real via `xcb`,
+display `:0`, não offscreen) esgotada sem sucesso**: replica o SINTOMA
+(`startDrag` dispara, nada mais chega) tanto para o caso próprio quanto
+para grid→Coleções (que o Rafael confirma funcionar) — ou seja,
+`QTest.mouseMove` não sustenta um `QDrag.exec()` nativo neste ambiente
+pra NENHUM alvo, então não serve pra comparar "funciona" com "não
+funciona". Descoberta lateral: `QCursor.pos()` também não acompanha
+`QTest.mouseMove` aqui — é por isso que o fix não depende dele nesse
+sentido (lê o cursor real do SO, não o sintético).
+
+**Fix, sem depender de entender a causa exata no Qt/X11** (`asset_grid.py`):
+depois que a chamada bloqueante nativa (`super().startDrag()` ou
+`drag.exec()`) retorna, se `dropEvent` não confirmou entrega
+(`_native_drop_handled` continua `False`), um fallback lê a posição REAL
+do cursor (`QCursor.pos()`, não sintética) e aplica o efeito na mão se
+ela cair sobre outro card desta mesma grade. `_apply_drop()` extraído
+como lógica compartilhada entre o `dropEvent` nativo e o fallback — cobre
+os dois casos (asset-sobre-asset E imagem externa) com um só caminho.
+Soltar fora da grade (Blender/Tags/Coleções, que já funcionam) não é
+afetado: `indexAt()` da posição do cursor dá inválido fora dos limites da
+view, e o fallback só age quando o alvo é OUTRO card da própria grade.
+
+6 testes novos em `tests/test_asset_grid_drop.py` (mockando `QCursor.pos`
+para determinismo, já que ele não é confiável sob simulação): fallback
+aplica corretamente; ignora quando o cursor está sobre a própria origem;
+ignora quando está fora da grade (não rouba drops legítimos pra outro
+widget); cobre o caso de imagem externa também; `dropEvent` marca entrega
+nativa confirmada. 715 testes verdes.
+
+**Falta o Rafael confirmar na tela**: o fix não pôde ser validado
+ponta-a-ponta com mouse real (só a lógica, via testes determinísticos) —
+é a mesma limitação que impediu confirmar a causa raiz.
 
 ### ☑ Fatia 46 — Teste da ponte falha com o app aberto
 `tests/test_main_window.py::test_ponte_e_render_ficam_prontos` afirmava que
