@@ -487,6 +487,8 @@ class AssetGridView(QListView):
             # de repaint que o startDrag padrão do Qt já cuida sozinho.
             self.viewport().update()
 
+        log.info("startDrag: _native_drop_handled=%s (decide se roda o fallback)",
+                 self._native_drop_handled)
         if not self._native_drop_handled:
             self._fallback_drop_by_cursor_position(mime, origem_ids)
 
@@ -498,16 +500,33 @@ class AssetGridView(QListView):
         nada aqui — esses casos já funcionam pelo caminho nativo."""
         from PySide6.QtGui import QCursor
 
-        local = self.viewport().mapFromGlobal(QCursor.pos())
+        global_pos = QCursor.pos()
+        local = self.viewport().mapFromGlobal(global_pos)
         index = self.indexAt(local)
+        # LOG DETALHADO (Fatia 51, 2ª rodada): o fix não resolveu na tela do
+        # Rafael. Preciso saber ONDE especificamente este fallback está
+        # falhando — se o cursor não mapeia pra um índice válido (posição
+        # errada?), se mapeia pro próprio item de origem (cursor não chegou
+        # a se mover de fato?), ou se chega até _apply_drop e falha lá.
+        log.info("fallback: cursor_global=%s local_na_viewport=%s "
+                 "viewport_rect=%s index_valido=%s",
+                 global_pos, local, self.viewport().rect(), index.isValid())
         if not index.isValid():
+            log.info("fallback: posição do cursor não corresponde a nenhum "
+                     "card — abortando sem aplicar nada")
             return
         row = self.model().row_at(index)
-        if row is None or row["id"] in origem_ids:
+        if row is None:
+            log.info("fallback: index válido mas sem linha correspondente no modelo")
             return
-        log.info("startDrag: entrega nativa não confirmada; aplicando pela "
-                 "posição do cursor (fallback) — alvo=%s", row["id"])
-        self._apply_drop(mime, row)
+        if row["id"] in origem_ids:
+            log.info("fallback: cursor terminou sobre o(s) próprio(s) item(ns) "
+                     "de origem (%s) — não é um drop sobre outro asset", origem_ids)
+            return
+        log.info("fallback: entrega nativa não confirmada; aplicando pela "
+                 "posição do cursor — alvo=%s (%s)", row["id"], row["name"])
+        aplicou = self._apply_drop(mime, row)
+        log.info("fallback: _apply_drop retornou %s", aplicou)
 
     # ---- receber imagem externa como preview ----
 
