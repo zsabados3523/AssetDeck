@@ -391,10 +391,6 @@ class AssetGridView(QListView):
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
-        # Ver startDrag()/_fallback_drop_by_cursor_position(): confirma se o
-        # SO entregou o drop nativamente para o gesto em andamento.
-        self._native_drop_handled = False
-        self.setAcceptDrops(True)
         self.setViewMode(QListView.ViewMode.IconMode)
         # CAUSA REAL do bug do card que ficava preso onde o mouse soltou
         # (Fatia 19b): setViewMode(IconMode) liga Movement.Free por padrão,
@@ -428,7 +424,21 @@ class AssetGridView(QListView):
         # e para FORA do app — Blender, gerenciador de arquivos… (F13)
         self.setDragEnabled(True)
         self.setDragDropMode(QListView.DragDropMode.DragDrop)
+        self.setAcceptDrops(True)
         self.setDefaultDropAction(Qt.DropAction.CopyAction)
+        # CAUSA REAL de "arrastar imagem pro card parou de funcionar" e do
+        # cursor de "bloqueado" (achado em 2026-08-06, regressão da Fatia
+        # 19b): `setMovement(Static)` faz, lá dentro do Qt,
+        # `viewport()->setAcceptDrops(false)` — ele assume que uma grade
+        # imóvel não recebe drop nenhum. E quem recebe os eventos de
+        # arrasto do sistema é o VIEWPORT, não a view. `setAcceptDrops(True)`
+        # na view só repassa pro viewport quando o valor MUDA (evento
+        # AcceptDropsChange); como já estava True, nada era repassado e o
+        # viewport ficava recusando tudo — nem `dragEnterEvent` nem
+        # `dropEvent` chegavam a disparar (confirmado: zero ocorrências
+        # deles em 6 arquivos de log do Rafael). Por isso o viewport é
+        # religado AQUI, explicitamente, depois de `setMovement`.
+        self.viewport().setAcceptDrops(True)
 
     # ---- tamanho da miniatura (slider da Fatia 28) ----
 
@@ -462,15 +472,14 @@ class AssetGridView(QListView):
         pedido do Rafael depois de usar as coleções (Fatia 17b). Com 1
         item só, o padrão do Qt já fica bom — não mexe.
 
-        Bug confirmado por log real (Rafael, 2026-08-05): soltar um asset
-        sobre OUTRO asset desta MESMA grade não entrega dragEnterEvent/
-        dropEvent em lugar nenhum — startDrag dispara e retorna, e nada
-        mais acontece. Arrastos para outros widgets (Tags, Coleções) e
-        para o Blender (outra janela/processo) continuam funcionando —
-        o problema é específico de soltar DENTRO da mesma view. Como não
-        dá pra confiar na entrega nativa aqui, o FALLBACK abaixo confere
-        onde o cursor real está assim que o gesto termina e aplica o
-        efeito na mão se a entrega nativa não chegou.
+        A Fatia 51 tinha aqui um FALLBACK que, quando o drop "não chegava",
+        olhava onde o cursor estava e aplicava o preview na mão. Ele foi
+        REMOVIDO em 2026-08-06, junto com a descoberta da causa real (ver
+        `__init__`: o viewport recusava todo drop). Além de desnecessário,
+        era perigoso: ele decidia só pela coordenada do cursor, sem saber
+        qual JANELA estava por cima nem se o gesto tinha sido cancelado —
+        soltar um asset no Blender aberto por cima da grade, ou apertar Esc
+        no meio do arrasto, aplicava um preview que ninguém pediu.
         """
         indexes = self.selectedIndexes()
         log.info("startDrag: %d item(ns) selecionado(s)", len(indexes))
@@ -481,9 +490,6 @@ class AssetGridView(QListView):
         mime = model.mimeData(indexes)
         if mime is None:
             return
-        origem_ids = {r["id"] for r in (model.row_at(i) for i in indexes) if r is not None}
-
-        self._native_drop_handled = False  # dropEvent() liga isto se o SO entregar
 
         if len(indexes) < 2:
             super().startDrag(supportedActions)
@@ -502,47 +508,6 @@ class AssetGridView(QListView):
             # (Fatia 19b) — o QDrag manual não passa pela máquina de estados
             # de repaint que o startDrag padrão do Qt já cuida sozinho.
             self.viewport().update()
-
-        log.info("startDrag: _native_drop_handled=%s (decide se roda o fallback)",
-                 self._native_drop_handled)
-        if not self._native_drop_handled:
-            self._fallback_drop_by_cursor_position(mime, origem_ids)
-
-    def _fallback_drop_by_cursor_position(self, mime: QMimeData, origem_ids: set[int]) -> None:
-        """Se o SO não entregou o drop nativamente, usa a posição REAL do
-        cursor (QCursor, não sintética) no instante em que o gesto terminou
-        para decidir se caiu sobre outro card desta mesma grade. Soltar fora
-        da grade (outro widget/janela) deixa `indexAt` inválido e não faz
-        nada aqui — esses casos já funcionam pelo caminho nativo."""
-        from PySide6.QtGui import QCursor
-
-        global_pos = QCursor.pos()
-        local = self.viewport().mapFromGlobal(global_pos)
-        index = self.indexAt(local)
-        # LOG DETALHADO (Fatia 51, 2ª rodada): o fix não resolveu na tela do
-        # Rafael. Preciso saber ONDE especificamente este fallback está
-        # falhando — se o cursor não mapeia pra um índice válido (posição
-        # errada?), se mapeia pro próprio item de origem (cursor não chegou
-        # a se mover de fato?), ou se chega até _apply_drop e falha lá.
-        log.info("fallback: cursor_global=%s local_na_viewport=%s "
-                 "viewport_rect=%s index_valido=%s",
-                 global_pos, local, self.viewport().rect(), index.isValid())
-        if not index.isValid():
-            log.info("fallback: posição do cursor não corresponde a nenhum "
-                     "card — abortando sem aplicar nada")
-            return
-        row = self.model().row_at(index)
-        if row is None:
-            log.info("fallback: index válido mas sem linha correspondente no modelo")
-            return
-        if row["id"] in origem_ids:
-            log.info("fallback: cursor terminou sobre o(s) próprio(s) item(ns) "
-                     "de origem (%s) — não é um drop sobre outro asset", origem_ids)
-            return
-        log.info("fallback: entrega nativa não confirmada; aplicando pela "
-                 "posição do cursor — alvo=%s (%s)", row["id"], row["name"])
-        aplicou = self._apply_drop(mime, row)
-        log.info("fallback: _apply_drop retornou %s", aplicou)
 
     # ---- receber imagem externa como preview ----
 
@@ -587,10 +552,6 @@ class AssetGridView(QListView):
         log.info("dropEvent: pos=%s alvo=%s formats=%s",
                  event.position().toPoint(), row["name"] if row else None,
                  event.mimeData().formats())
-        # O evento CHEGOU — não importa se há um alvo válido aqui, isso já
-        # prova que a entrega nativa funcionou para este gesto, então o
-        # fallback de startDrag() não precisa (e não deve) agir depois.
-        self._native_drop_handled = True
 
         if row is not None and self._apply_drop(event.mimeData(), row):
             event.acceptProposedAction()
