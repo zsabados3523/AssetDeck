@@ -1141,11 +1141,23 @@ derrubam contra o código antigo. **716 testes verdes.**
 
 **Achado à parte, fora do código:** o log do Rafael mostrava TODA cópia de
 preview falhando com `FileNotFoundError`. Não é bug do app — o SSD da
-biblioteca não está montado (`lsblk` mostra `sdb1` LABEL=`SSD` sem ponto
-de montagem, e `/media/rafael/` vazio), então `library_root` aponta pra um
-caminho inexistente. O app já loga e avisa no rodapé; a mensagem é
-discreta. **Ideia de melhoria (não feita, decisão do Rafael):** avisar de
-forma visível quando `library_root` não existe ao abrir o app.
+biblioteca não estava montado (`lsblk` mostrava `sdb1` LABEL=`SSD` sem
+ponto de montagem, e `/media/rafael/` vazio), então `library_root`
+apontava pra um caminho inexistente. Ele montou o disco e o problema
+sumiu. Diagnóstico ficou mais difícil do que precisava: nos 6 arrastos
+registrados no log dele, TODOS eram asset-sobre-asset — nenhum vinha do
+gerenciador de arquivos (dá pra distinguir pelo formato no log:
+`application/x-assetdeck-asset-ids` = veio da grade).
+
+**Confirmado pelo Rafael na tela (2026-08-06): "está funcionando
+perfeitamente"** — os dois casos (imagem externa → card e asset da grade
+→ card). Mergeada na `main`.
+
+**Ideia de melhoria que ficou de fora (decisão do Rafael):** hoje, quando
+`library_root` não existe, o app só mostra uma mensagem discreta no
+rodapé — e TODA ação de arquivo falha em silêncio prático. Valeria um
+aviso visível na abertura ("a biblioteca não está acessível: <caminho>"),
+que teria evitado esta ida e volta inteira.
 
 ### ☑ Fatia 46 — Teste da ponte falha com o app aberto
 `tests/test_main_window.py::test_ponte_e_render_ficam_prontos` afirmava que
