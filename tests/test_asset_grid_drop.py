@@ -1,16 +1,20 @@
 """Fatia 44 (investigação): cobertura que faltava — um QDropEvent DE
 VERDADE (não só chamar o handler direto) contra a AssetGridView, com
-hasUrls() real. Isolado da hipótese de integração XDND do SO (fora do que
-dá pra testar headless) — isto só prova que a lógica Python em si
-(dragEnterEvent/dropEvent/_dropped_image) reage certo a um evento genuíno
-do Qt, reforçando a suspeita de que o bug relatado pelo Rafael é do
-gerenciador de arquivos ↔ Qt, não do código do app.
+hasUrls() real. Prova que a lógica Python (dragEnterEvent/dropEvent/
+_dropped_image) reage certo a um evento genuíno do Qt.
+
+ATENÇÃO ao ler estes testes (lição da Fatia 52): eles ENTREGAM o evento
+na mão para a view, então passam mesmo quando o app real não recebe drop
+nenhum — no app quem recebe o evento do sistema é `view.viewport()`, e
+foi ele que ficou 'surdo' por meses. A conclusão que esta docstring tirava
+antes ("o bug é do gerenciador de arquivos ↔ Qt, não do código do app")
+estava ERRADA; o bug era do app. Ver o bloco da Fatia 52 lá embaixo.
 """
 
 import pytest
 from PIL import Image
-from PySide6.QtCore import QMimeData, QPoint, QPointF, Qt, QUrl
-from PySide6.QtGui import QCursor, QDragEnterEvent, QDropEvent
+from PySide6.QtCore import QMimeData, QPointF, Qt, QUrl
+from PySide6.QtGui import QDragEnterEvent, QDropEvent
 
 from assetdeck.db.connection import connect
 from assetdeck.db.migrate import apply_migrations
@@ -141,119 +145,45 @@ def test_drop_interno_mime_assets_nao_e_tratado_como_imagem_externa(grid):
     assert recebido_asset == [(alvo_id, [origem_id])]
 
 
-# ---- Fatia 51: fallback por posição do cursor ----
+# ---- Fatia 52: quem recebe o drop do sistema é o VIEWPORT ----
 #
-# Log real do Rafael (2026-08-05, 5 tentativas): startDrag dispara e
-# retorna, mas dragEnterEvent/dropEvent NUNCA chegam ao soltar um asset
-# sobre OUTRO asset da MESMA grade — mesmo com outros arrastos (Tags,
-# Coleções, Blender) funcionando normalmente. Isolado como específico de
-# soltar DENTRO da própria view (não é XDND quebrado em geral).
+# CAUSA REAL do "arrastar imagem pro card parou de funcionar" e do cursor
+# de bloqueado (achado em 2026-08-06). Todos os testes acima chamam
+# `view.dragEnterEvent(...)`/`view.dropEvent(...)` na mão, então passavam
+# mesmo com o bug: no app de verdade quem recebe o evento do sistema é
+# `view.viewport()`, e era ELE que estava recusando tudo.
 #
-# Fix: depois que a chamada nativa bloqueante (super().startDrag() ou
-# drag.exec()) retorna, se dropEvent não confirmou entrega
-# (_native_drop_handled ainda False), aplica o efeito a partir da posição
-# REAL do cursor (QCursor.pos(), não sintética) — não depende da entrega
-# nativa do evento a lugar nenhum.
+# `setMovement(Static)` (Fatia 19b) faz, lá dentro do Qt,
+# `viewport()->setAcceptDrops(false)` — assume que grade imóvel não recebe
+# drop. `setAcceptDrops(True)` na view só repassa pro viewport quando o
+# valor MUDA; como já estava True, o repasse nunca acontecia.
 #
-# QTest.mouseMove NÃO move o QCursor.pos() real neste ambiente (confirmado
-# ao investigar: o cursor ficou parado longe da posição simulada) — por
-# isso estes testes MOCAM QCursor.pos() para exercer a lógica de forma
-# determinística, em vez de tentar simular o drag nativo inteiro.
+# Confirmado fora do teste, com mouse real (XTEST) e um QDrag de outro
+# processo: antes do fix o `drag.exec()` da fonte devolvia IgnoreAction
+# (cursor de bloqueado) e nenhum dragEnterEvent/dropEvent aparecia no log;
+# depois do fix devolve CopyAction e o preview é aplicado.
 
-def test_dropEvent_marca_entrega_nativa_confirmada(grid):
-    view, modelo, _conn, _tmp = grid
-    pos_alvo, _alvo_id = _card_center(view, modelo, "cena")
-    mime = QMimeData()
-    mime.setData(MIME_ASSETS, b"1")
+def test_viewport_da_grade_aceita_drops(grid):
+    """Regressão: sem isto, NENHUM arrasto do sistema chega na grade."""
+    view, _modelo, _conn, _tmp = grid
 
-    assert view._native_drop_handled is False
-    view.dropEvent(_drop_event(pos_alvo, mime))
-    assert view._native_drop_handled is True
-
-
-def test_fallback_aplica_asset_sobre_asset_pela_posicao_do_cursor(grid, monkeypatch):
-    """O caso do bug: soltar sobre outro card SEM dropEvent nativo chegar —
-    simulado aqui como 'nunca chamamos dropEvent', só o fallback."""
-    view, modelo, _conn, _tmp = grid
-    pos_alvo, alvo_id = _card_center(view, modelo, "cena")
-    _pos_origem, origem_id = _card_center(view, modelo, "modelo")
-
-    monkeypatch.setattr(QCursor, "pos", staticmethod(
-        lambda: view.viewport().mapToGlobal(pos_alvo)
-    ))
-
-    recebido = []
-    view.asset_preview_dropped.connect(lambda aid, origens: recebido.append((aid, origens)))
-
-    mime = QMimeData()
-    mime.setData(MIME_ASSETS, str(origem_id).encode())
-    view._fallback_drop_by_cursor_position(mime, {origem_id})
-
-    assert recebido == [(alvo_id, [origem_id])]
+    assert view.viewport().acceptDrops() is True, (
+        "o viewport recusa drops — o app inteiro mostra cursor de bloqueado"
+    )
+    assert view.acceptDrops() is True
+    # Continua imóvel (o motivo da Fatia 19b) e continua arrastável.
+    assert view.movement() == AssetGridView.Movement.Static
+    assert view.dragEnabled() is True
 
 
-def test_fallback_ignora_quando_cursor_esta_sobre_a_propria_origem(grid, monkeypatch):
-    """Soltar 'em cima de si mesmo' (o cursor não saiu do item de origem)
-    não pode disparar nada — nem no caminho nativo, nem no fallback."""
-    view, modelo, _conn, _tmp = grid
-    pos_origem, origem_id = _card_center(view, modelo, "modelo")
-
-    monkeypatch.setattr(QCursor, "pos", staticmethod(
-        lambda: view.viewport().mapToGlobal(pos_origem)
-    ))
-
-    recebido = []
-    view.asset_preview_dropped.connect(lambda aid, origens: recebido.append((aid, origens)))
-
-    mime = QMimeData()
-    mime.setData(MIME_ASSETS, str(origem_id).encode())
-    view._fallback_drop_by_cursor_position(mime, {origem_id})
-
-    assert recebido == []
-
-
-def test_fallback_ignora_quando_cursor_esta_fora_da_grade(grid, monkeypatch):
-    """Soltar em outro widget/janela (Blender, Tags, Coleções — que já
-    funcionam pelo caminho nativo) não pode ser 'roubado' pelo fallback."""
-    view, modelo, _conn, _tmp = grid
-    _pos_origem, origem_id = _card_center(view, modelo, "modelo")
-
-    # Bem fora dos limites da view — indexAt() retorna índice inválido.
-    monkeypatch.setattr(QCursor, "pos", staticmethod(
-        lambda: view.viewport().mapToGlobal(QPoint(-500, -500))
-    ))
-
-    recebido = []
-    view.asset_preview_dropped.connect(lambda aid, origens: recebido.append((aid, origens)))
-    view.image_dropped.connect(lambda aid, path: recebido.append((aid, path)))
-
-    mime = QMimeData()
-    mime.setData(MIME_ASSETS, str(origem_id).encode())
-    view._fallback_drop_by_cursor_position(mime, {origem_id})
-
-    assert recebido == []
-
-
-def test_fallback_tambem_funciona_para_imagem_externa(grid, tmp_path, monkeypatch):
-    """Mesma lógica vale para o caso irmão (Fatia 44: imagem do gerenciador
-    de arquivos solta sobre um card) — um único fallback cobre os dois."""
-    view, modelo, _conn, _tmp = grid
-    pos_alvo, alvo_id = _card_center(view, modelo, "cena")
-    externo = tmp_path / "externa.png"
-    externo.write_bytes(b"p" * 20)
-
-    monkeypatch.setattr(QCursor, "pos", staticmethod(
-        lambda: view.viewport().mapToGlobal(pos_alvo)
-    ))
-
-    recebido = []
-    view.image_dropped.connect(lambda aid, path: recebido.append((aid, path)))
-
-    mime = QMimeData()
-    mime.setUrls([QUrl.fromLocalFile(str(externo))])
-    view._fallback_drop_by_cursor_position(mime, set())
-
-    assert recebido == [(alvo_id, str(externo))]
+def test_grade_recem_criada_ja_aceita_drops_antes_de_show(qapp):
+    """A ordem das chamadas do __init__ é o que quebrava — este teste pega
+    a regressão sem depender de modelo, janela ou tela."""
+    nova = AssetGridView()
+    try:
+        assert nova.viewport().acceptDrops() is True
+    finally:
+        nova.deleteLater()
 
 
 def test_apply_drop_retorna_false_sem_efeito_colateral_quando_nada_bate(grid):

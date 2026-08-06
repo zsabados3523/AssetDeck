@@ -1091,6 +1091,74 @@ derrubavam contra o código antigo.
 **Medido de ponta a ponta com o banco real do Rafael: ~1100ms → ~11ms.**
 719 testes verdes. Falta ele confirmar na tela que a trava sumiu.
 
+### ☑ Fatia 52 — CAUSA REAL do drag-and-drop: o viewport da grade recusava todo drop
+Rafael relatou de novo em 2026-08-06: arrastar imagem pra definir preview
+"antes funcionava, agora não funciona mais", e o cursor mostra "bloqueado"
+durante o arrasto. Isso fecha, com a causa verdadeira, o que as Fatias 44
+e 51 tinham só contornado.
+
+**Causa (uma linha):** `setMovement(QListView.Movement.Static)` — que a
+Fatia 19b adicionou pra resolver o card que ficava preso — faz, dentro do
+Qt, `viewport()->setAcceptDrops(false)`: ele assume que uma grade imóvel
+não recebe drop nenhum. E quem recebe os eventos de arrasto do SISTEMA é
+o **viewport**, não a view. O `setAcceptDrops(True)` da view só é
+repassado pro viewport quando o valor MUDA (evento `AcceptDropsChange`);
+como já estava `True` desde a linha anterior, o repasse nunca acontecia.
+Resultado: o viewport recusava tudo, o X nunca marcava a janela como
+alvo válido (daí o cursor de bloqueado) e `dragEnterEvent`/`dropEvent`
+nunca disparavam. **Zero ocorrências deles nos 6 arquivos de log do
+Rafael** — nenhuma, desde que o log foi instrumentado.
+
+**Por que passou despercebido por tantas fatias:** os testes de
+`test_asset_grid_drop.py` entregam o evento na mão pra view
+(`view.dropEvent(...)`), pulando exatamente o widget quebrado. Passavam
+verdes com o app 100% surdo a arrastos. A docstring do arquivo chegou a
+concluir que "o bug é do gerenciador de arquivos ↔ Qt, não do app" —
+estava errada, e foi corrigida.
+
+**Fix:** `self.viewport().setAcceptDrops(True)` explícito, DEPOIS de
+`setMovement`, no fim do bloco de drag-and-drop do `__init__`.
+
+**Verificado com mouse REAL (XTEST/libXtst) e XDND entre processos** —
+não sintético: um segundo processo Qt fazendo o papel do Nautilus
+(`QDrag` com `text/uri-list`) e o app de verdade rodando sobre a testlib.
+- ANTES do fix: `drag.exec()` da fonte devolve `IgnoreAction` (= cursor
+  de bloqueado), nenhum `dragEnterEvent`/`dropEvent` no log, nada aplicado.
+- DEPOIS do fix: devolve `CopyAction`, `dragEnterEvent` + `dropEvent`
+  disparam, e o log confirma `Preview user adicionado ao asset ... (capa=True)`.
+Vale para os dois casos: imagem externa → card, e asset da grade → card.
+
+**Fallback da Fatia 51 REMOVIDO** (`_fallback_drop_by_cursor_position`,
+`_native_drop_handled` e os 5 testes dele). Agora é comprovadamente
+desnecessário — e era perigoso: decidia só pela coordenada do cursor, sem
+saber qual JANELA estava por cima nem se o gesto tinha sido cancelado.
+Soltar um asset no Blender aberto por cima da grade, ou apertar Esc no
+meio do arrasto, aplicava um preview que ninguém pediu.
+
+2 testes novos de regressão (`viewport().acceptDrops()` logo no
+`__init__`, sem depender de tela) — confirmados via `git stash` que
+derrubam contra o código antigo. **716 testes verdes.**
+
+**Achado à parte, fora do código:** o log do Rafael mostrava TODA cópia de
+preview falhando com `FileNotFoundError`. Não é bug do app — o SSD da
+biblioteca não estava montado (`lsblk` mostrava `sdb1` LABEL=`SSD` sem
+ponto de montagem, e `/media/rafael/` vazio), então `library_root`
+apontava pra um caminho inexistente. Ele montou o disco e o problema
+sumiu. Diagnóstico ficou mais difícil do que precisava: nos 6 arrastos
+registrados no log dele, TODOS eram asset-sobre-asset — nenhum vinha do
+gerenciador de arquivos (dá pra distinguir pelo formato no log:
+`application/x-assetdeck-asset-ids` = veio da grade).
+
+**Confirmado pelo Rafael na tela (2026-08-06): "está funcionando
+perfeitamente"** — os dois casos (imagem externa → card e asset da grade
+→ card). Mergeada na `main`.
+
+**Ideia de melhoria que ficou de fora (decisão do Rafael):** hoje, quando
+`library_root` não existe, o app só mostra uma mensagem discreta no
+rodapé — e TODA ação de arquivo falha em silêncio prático. Valeria um
+aviso visível na abertura ("a biblioteca não está acessível: <caminho>"),
+que teria evitado esta ida e volta inteira.
+
 ### ☑ Fatia 46 — Teste da ponte falha com o app aberto
 `tests/test_main_window.py::test_ponte_e_render_ficam_prontos` afirmava que
 a ponte do Blender está escutando, mas ela usava a porta FIXA 45017
