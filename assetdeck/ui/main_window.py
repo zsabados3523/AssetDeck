@@ -253,12 +253,17 @@ class MainWindow(QMainWindow):
 
         # Slider de tamanho da miniatura (pedido do Rafael, estilo Connecter):
         # a grade e o modelo mudam JUNTOS — ver AssetGridView.set_icon_size.
+        # Fatia 56: saiu do rodapé (longe da grade, alça "bola" destoando dos
+        # botões de filtro ao lado) e foi pra faixa 3, junto de nota/
+        # resolução/cor — mesma linha que já refina o que está na tela.
+        # Mais estreito que os 110px de antes: cabe ao lado de 3 botões
+        # ícone-only sem empurrar o contador pra fora.
         from PySide6.QtWidgets import QSlider
 
         self.size_slider = QSlider(Qt.Orientation.Horizontal)
         self.size_slider.setRange(asset_grid.MIN_ICON, asset_grid.MAX_ICON)
         self.size_slider.setValue(asset_grid.DEFAULT_ICON)
-        self.size_slider.setFixedWidth(110)
+        self.size_slider.setFixedWidth(72)
         self.size_slider.setToolTip("Tamanho das miniaturas")
         self.size_slider.valueChanged.connect(self.grid.set_icon_size)
 
@@ -305,6 +310,8 @@ class MainWindow(QMainWindow):
         list_header_row.addWidget(self.rating_filter)
         list_header_row.addWidget(self.res_filter)
         list_header_row.addWidget(self.color_filter)
+        list_header_row.addSpacing(4)
+        list_header_row.addWidget(self.size_slider)
 
         grid_container = QWidget()
         grid_layout = QVBoxLayout(grid_container)
@@ -387,9 +394,6 @@ class MainWindow(QMainWindow):
         self.footer_size = QLabel()
         self.footer_size.setObjectName("muted")
         self.statusBar().addPermanentWidget(self.footer_size)
-        # Slider de tamanho saiu da barra do breadcrumb pro rodapé (Fatia 43,
-        # opção C): libera espaço horizontal sem esconder a função.
-        self.statusBar().addPermanentWidget(self.size_slider)
         # É uma linha de status, não precisa da altura padrão do Fusion
         # (pedido do Rafael de enxutar o rodapé).
         self.statusBar().setMaximumHeight(24)
