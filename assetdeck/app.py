@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
+from pathlib import Path
 
 from assetdeck import __version__, config
 from assetdeck.backup.rotate import daily_backup
@@ -46,8 +47,6 @@ def _set_app_icon(app) -> None:
     e não bate. `setDesktopFileName` resolve pela raiz: manda o Qt anunciar
     a janela com o MESMO nome do `.desktop` (WM_CLASS no X11).
     """
-    from pathlib import Path
-
     from PySide6.QtGui import QIcon
 
     app.setDesktopFileName(DESKTOP_FILE_ID)
@@ -95,6 +94,77 @@ def _run_theme_preview(args) -> int:
     return app.exec()
 
 
+def _confirmar_biblioteca(conn, cfg: dict, silencioso: bool) -> str:
+    """Confere se a biblioteca está onde o config diz — e resolve se não estiver.
+
+    Bug real (2026-08-09): o SSD do Rafael montou em `/mnt/<uuid>` em vez do
+    `/media/rafael/SSD` gravado no config. O app abria como se nada fosse (as
+    miniaturas vêm do cache), mas qualquer operação que precisasse LER o
+    arquivo original falhava só no log — arrastar imagem para virar preview
+    de um modelo "não fazia nada" na tela. Agora o app fala na cara, na
+    abertura, antes de o usuário perder tempo.
+
+    Devolve o caminho da biblioteca a usar nesta sessão.
+    """
+    from PySide6.QtWidgets import QFileDialog, QMessageBox
+
+    from assetdeck import library_root
+
+    configurado = Path(cfg["library_root"])
+    res = library_root.resolve(configurado)
+
+    if res.ok:
+        return str(res.found)
+
+    # --screenshot roda sem ninguém na frente da tela: um diálogo modal
+    # travaria a captura para sempre. Loga e segue.
+    if silencioso:
+        log.error("Biblioteca fora do lugar (%s) — seguindo assim mesmo (modo silencioso).",
+                  configurado)
+        return str(configurado)
+
+    if res.moved:
+        escolha = QMessageBox.question(
+            None, "A biblioteca mudou de lugar",
+            f"O AssetDeck procurava a biblioteca em:\n{configurado}\n\n"
+            f"Ela não está lá, mas eu encontrei em:\n{res.found}\n\n"
+            "Isso costuma acontecer quando o disco externo é montado num "
+            "caminho diferente do da última vez.\n\n"
+            "Quer que eu passe a usar o caminho novo? "
+            "(nada é movido nem renomeado no disco)",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes,
+        )
+        if escolha != QMessageBox.StandardButton.Yes:
+            log.warning("Rafael recusou repontar a biblioteca para %s", res.found)
+            return str(configurado)
+        novo = res.found
+    else:
+        QMessageBox.warning(
+            None, "Biblioteca não encontrada",
+            f"O AssetDeck não achou a biblioteca em:\n{configurado}\n\n"
+            "Procurei também nos discos montados e não estava em nenhum.\n\n"
+            "Se o disco externo estiver desconectado, feche o app, conecte "
+            "e abra de novo. Se ela mudou de pasta, escolha a nova pasta na "
+            "próxima tela (ou cancele para abrir mesmo assim — a grade "
+            "aparece, mas nada que leia os arquivos vai funcionar).",
+        )
+        escolhido = QFileDialog.getExistingDirectory(
+            None, "Onde está a biblioteca?", str(Path.home()),
+        )
+        if not escolhido:
+            log.warning("Rafael cancelou a escolha da biblioteca — abrindo com %s",
+                        configurado)
+            return str(configurado)
+        novo = Path(escolhido)
+
+    linhas = library_root.repoint(conn, configurado, novo)
+    cfg["library_root"] = str(novo)
+    config.save_config(cfg)
+    log.info("Biblioteca repontada para %s (%d linha(s) no banco)", novo, linhas)
+    return str(novo)
+
+
 def run(argv: list[str]) -> int:
     args = parse_args(argv)
 
@@ -133,7 +203,11 @@ def run(argv: list[str]) -> int:
     theme.apply_theme(app, theme.Variant(mode=cfg.get("theme_mode", "claro")))
     _set_app_icon(app)
 
-    win = MainWindow(conn=conn, library_root=cfg["library_root"],
+    # Depois do QApplication (precisa dele para abrir diálogo) e ANTES da
+    # janela — a MainWindow recebe a raiz já conferida.
+    raiz = _confirmar_biblioteca(conn, cfg, silencioso=bool(args.screenshot))
+
+    win = MainWindow(conn=conn, library_root=raiz,
                      db_path=config.db_path(), thumbs_dir=config.thumbs_dir())
     win.show()
     win.start_scan()  # indexação em background a cada abertura (idempotente)
