@@ -269,6 +269,20 @@ def test_menu_ferramentas_tem_relocalizar_e_duplicados(janela):
     assert janela.duplicates_action.isEnabled()
 
 
+def test_menu_ferramentas_tem_assinalar_previews_automaticamente(janela):
+    """Fatia 57: rodar o casamento por nome igual sob demanda, sem esperar
+    a próxima varredura."""
+    textos = [a.text() for a in janela._menu_ferramentas.actions()]
+    assert any("previews automaticamente" in t for t in textos)
+
+
+def test_assinalar_previews_automaticamente_sem_par_de_nome_nao_cria_nada(janela):
+    """A biblioteca mínima do fixture tem 'textura.jpg' e 'modelo.blend' —
+    nomes diferentes, não casam — só confere que não quebra e avisa."""
+    janela._assinalar_previews_automaticamente()
+    assert "Nenhum modelo" in janela.statusBar().currentMessage()
+
+
 def test_barra_de_menus_tem_os_cinco_menus(janela):
     """Fatia 36: Arquivo, Editar, Ferramentas, Configurações, Janela —
     antes só existiam "Biblioteca" e "Blender" soltos.

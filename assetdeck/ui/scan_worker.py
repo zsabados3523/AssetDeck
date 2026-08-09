@@ -56,9 +56,11 @@ class ScanWorker(QObject):
                 if not stats.aborted:
                     # Pós-processamento, tudo nesta thread (a UI não trava):
                     # agrupar sets PBR → marcar dependências → capas de pack
+                    # → capas por nome igual (Fatia 57, opt-in)
                     from assetdeck import config
                     from assetdeck.indexer.dependencies import (
                         attach_pack_previews,
+                        attach_stem_match_previews,
                         detect,
                     )
                     from assetdeck.indexer.grouper import apply_grouping
@@ -68,6 +70,13 @@ class ScanWorker(QObject):
                     detect(conn, library_id)
                     attach_pack_previews(conn, library_id, self._library_root,
                                          config.previews_dir())
+                    cfg = config.load_config()
+                    if cfg.get("auto_match_previews_by_name"):
+                        attach_stem_match_previews(
+                            conn, library_id, self._library_root,
+                            config.previews_dir(),
+                            hide_source=bool(cfg.get("auto_match_hide_source")),
+                        )
                 self.finished.emit(stats)
             finally:
                 conn.close()

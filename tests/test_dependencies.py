@@ -7,7 +7,11 @@ from assetdeck.db.migrate import apply_migrations
 from assetdeck.db.repos import assets as assets_repo
 from assetdeck.db.repos import libraries as libraries_repo
 from assetdeck.db.repos import previews as previews_repo
-from assetdeck.indexer.dependencies import attach_pack_previews, detect
+from assetdeck.indexer.dependencies import (
+    attach_pack_previews,
+    attach_stem_match_previews,
+    detect,
+)
 from assetdeck.indexer.scanner import scan_library
 
 
@@ -203,3 +207,137 @@ def test_preview_do_pack_nao_duplica_em_revarredura(env):
     attach_pack_previews(conn, lib_id, root, tmp_path / "previews")
     criadas2 = attach_pack_previews(conn, lib_id, root, tmp_path / "previews")
     assert criadas2 == 0  # já tem capa: não mexe
+
+
+# ---- preview automático por nome igual (Fatia 57) ----
+
+@pytest.fixture
+def env_nomes(tmp_path):
+    """'Cadeira.blend' + 'Cadeira.jpg' na mesma pasta — o caso que o
+    Rafael pediu — e os cantos que não podem virar match errado."""
+    root = tmp_path / "lib"
+    pasta = root / "MOVEIS"
+    pasta.mkdir(parents=True)
+
+    # 1) Casamento simples: mesmo nome-base, mesma pasta
+    (pasta / "Cadeira.blend").write_bytes(b"b" * 30)
+    (pasta / "Cadeira.jpg").write_bytes(b"j" * 30)
+
+    # 2) Ambíguo: DUAS imagens com o mesmo nome-base do modelo
+    (pasta / "Mesa.blend").write_bytes(b"b" * 30)
+    (pasta / "Mesa.jpg").write_bytes(b"j" * 30)
+    (pasta / "Mesa.png").write_bytes(b"p" * 30)
+
+    # 3) Sem imagem nenhuma de mesmo nome
+    (pasta / "Sofa.blend").write_bytes(b"b" * 30)
+
+    # 4) Nome bate, mas a imagem está em OUTRA pasta — não pode casar
+    (pasta / "Banco.blend").write_bytes(b"b" * 30)
+    outra = root / "OUTRAPASTA"
+    outra.mkdir(parents=True)
+    (outra / "Banco.jpg").write_bytes(b"j" * 30)
+
+    conn = connect(tmp_path / "t.db")
+    apply_migrations(conn)
+    lib_id = libraries_repo.get_or_create(conn, root)
+    scan_library(conn, lib_id, root)
+    yield conn, lib_id, root, tmp_path
+    conn.close()
+
+
+def _id_por_caminho(conn, rel_path):
+    """`assets.name` é só o stem (`path.stem`) — '.blend' e '.jpg' do
+    mesmo nome-base viram DOIS assets com o mesmo `name`, então não dá
+    pra achar por nome sem ambiguidade. `rel_path` é único."""
+    return conn.execute(
+        "SELECT a.id FROM assets a JOIN files f ON f.asset_id = a.id "
+        "WHERE f.rel_path = ? AND f.is_primary = 1", (rel_path,),
+    ).fetchone()["id"]
+
+
+def test_casa_modelo_com_imagem_de_mesmo_nome(env_nomes):
+    conn, lib_id, root, tmp_path = env_nomes
+    cadeira_id = _id_por_caminho(conn, "MOVEIS/Cadeira.blend")
+
+    criadas = attach_stem_match_previews(conn, lib_id, root, tmp_path / "previews")
+
+    assert criadas == 1
+    galeria = previews_repo.list_for(conn, cadeira_id)
+    assert len(galeria) == 1
+    assert galeria[0]["is_cover"] == 1
+    assert galeria[0]["origin"] == "auto"
+
+
+def test_ambiguo_e_pulado_sem_criar_nada(env_nomes):
+    """2+ imagens com o mesmo nome-base do modelo: não adivinha qual usar
+    (regra do projeto — nenhum erro/ambiguidade mascarada)."""
+    conn, lib_id, root, tmp_path = env_nomes
+    mesa_id = _id_por_caminho(conn, "MOVEIS/Mesa.blend")
+
+    attach_stem_match_previews(conn, lib_id, root, tmp_path / "previews")
+
+    assert previews_repo.list_for(conn, mesa_id) == []
+
+
+def test_sem_imagem_de_mesmo_nome_nao_cria_nada(env_nomes):
+    conn, lib_id, root, tmp_path = env_nomes
+    sofa_id = _id_por_caminho(conn, "MOVEIS/Sofa.blend")
+
+    attach_stem_match_previews(conn, lib_id, root, tmp_path / "previews")
+
+    assert previews_repo.list_for(conn, sofa_id) == []
+
+
+def test_pasta_diferente_nao_casa_por_engano(env_nomes):
+    """'OUTRAPASTA/Banco.jpg' tem o MESMO nome-base de 'MOVEIS/Banco.blend',
+    mas pasta diferente — casar por nome só vale dentro da mesma pasta."""
+    conn, lib_id, root, tmp_path = env_nomes
+    banco_id = _id_por_caminho(conn, "MOVEIS/Banco.blend")
+
+    attach_stem_match_previews(conn, lib_id, root, tmp_path / "previews")
+
+    assert previews_repo.list_for(conn, banco_id) == []
+
+
+def test_nao_mexe_em_modelo_que_ja_tem_capa(env_nomes):
+    conn, lib_id, root, tmp_path = env_nomes
+    cadeira_id = _id_por_caminho(conn, "MOVEIS/Cadeira.blend")
+    outra_imagem = tmp_path / "capa_manual.jpg"
+    outra_imagem.write_bytes(b"m" * 30)
+    previews_repo.add(conn, cadeira_id, outra_imagem, tmp_path / "previews", origin="user")
+
+    criadas = attach_stem_match_previews(conn, lib_id, root, tmp_path / "previews")
+
+    assert criadas == 0
+    galeria = previews_repo.list_for(conn, cadeira_id)
+    assert len(galeria) == 1
+    assert galeria[0]["origin"] == "user"  # a manual continua sendo a capa
+
+
+def test_nao_duplica_em_revarredura(env_nomes):
+    conn, lib_id, root, tmp_path = env_nomes
+    attach_stem_match_previews(conn, lib_id, root, tmp_path / "previews")
+    criadas2 = attach_stem_match_previews(conn, lib_id, root, tmp_path / "previews")
+    assert criadas2 == 0  # já tem capa: não mexe
+
+
+def test_hide_source_desligado_por_padrao_nao_oculta(env_nomes):
+    conn, lib_id, root, tmp_path = env_nomes
+    imagem_id = _id_por_caminho(conn, "MOVEIS/Cadeira.jpg")
+
+    attach_stem_match_previews(conn, lib_id, root, tmp_path / "previews")
+
+    linha = assets_repo.list_for_grid(conn, include_hidden=True)
+    hidden = next(r for r in linha if r["id"] == imagem_id)["hidden"]
+    assert hidden == 0
+
+
+def test_hide_source_ligado_oculta_a_imagem_usada(env_nomes):
+    conn, lib_id, root, tmp_path = env_nomes
+    imagem_id = _id_por_caminho(conn, "MOVEIS/Cadeira.jpg")
+
+    attach_stem_match_previews(conn, lib_id, root, tmp_path / "previews", hide_source=True)
+
+    linha = assets_repo.list_for_grid(conn, include_hidden=True)
+    hidden = next(r for r in linha if r["id"] == imagem_id)["hidden"]
+    assert hidden == 1

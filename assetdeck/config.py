@@ -45,6 +45,15 @@ DEFAULTS = {
     # fechamento; vazio = nunca fechou o app depois desta fatia, usa os
     # padrões hardcoded de sempre.
     "ui_state": {},
+    # Assinalar preview automaticamente por nome igual (Fatia 57):
+    # 'Cadeira.blend' + 'Cadeira.jpg' na mesma pasta vira capa sozinha.
+    # Desligado por padrão — é comportamento novo que mexe em vários
+    # assets de uma vez, opt-in.
+    "auto_match_previews_by_name": False,
+    # Some a imagem usada como preview da grade (reversível em "Mostrar
+    # ocultos") — independente do `hide_preview_source` do fluxo manual,
+    # porque este roda em lote, sem ninguém pra responder um diálogo.
+    "auto_match_hide_source": False,
 }
 
 
