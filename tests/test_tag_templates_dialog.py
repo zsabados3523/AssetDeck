@@ -32,7 +32,7 @@ def _itens(arvore):
 def test_abre_no_balanceado(qapp, conn):
     dlg = TagTemplateDialog(conn)
     assert dlg.nivel == tt.BALANCEADO
-    assert len(_itens(dlg.arvore)) == tt.contar(tt.arvore(tt.BALANCEADO))
+    assert len(_itens(dlg.arvore)) == tt.contar(tt.arvore("arquitetura", tt.BALANCEADO))
 
 
 def test_trocar_de_nivel_recarrega_a_previa(qapp, conn):
@@ -41,7 +41,7 @@ def test_trocar_de_nivel_recarrega_a_previa(qapp, conn):
 
     assert len(_itens(dlg.arvore)) == 8
     dlg._trocar_nivel(tt.COMPLETO)
-    assert len(_itens(dlg.arvore)) == tt.contar(tt.arvore(tt.COMPLETO))
+    assert len(_itens(dlg.arvore)) == tt.contar(tt.arvore("arquitetura", tt.COMPLETO))
 
 
 def test_marca_e_esmaece_o_que_ja_existe(qapp, conn):
@@ -95,9 +95,48 @@ def test_aplicar_cria_e_reporta(qapp, conn):
 
 
 def test_botao_desliga_quando_nao_ha_o_que_criar(qapp, conn):
-    tt.aplicar(conn, tt.COMPLETO)
+    tt.aplicar(conn, "arquitetura", tt.COMPLETO)
 
     dlg = TagTemplateDialog(conn)
     dlg._trocar_nivel(tt.COMPLETO)
 
     assert dlg.aplicar_btn.isEnabled() is False
+
+
+# ---- seletor de template (Fatia 55) ----
+
+def test_combo_lista_todos_os_templates(qapp, conn):
+    dlg = TagTemplateDialog(conn)
+    rotulos = {dlg.template_combo.itemText(i) for i in range(dlg.template_combo.count())}
+    assert rotulos == {tpl.rotulo for tpl in tt.TEMPLATES.values()}
+
+
+def test_abre_no_primeiro_template_do_registro(qapp, conn):
+    dlg = TagTemplateDialog(conn)
+    assert dlg.template == next(iter(tt.TEMPLATES))
+    assert "Arquitetura" in dlg.windowTitle()
+
+
+def test_trocar_template_recarrega_a_previa_e_o_titulo(qapp, conn):
+    dlg = TagTemplateDialog(conn)
+    indice = dlg.template_combo.findData("construcao")
+    assert indice != -1
+
+    dlg.template_combo.setCurrentIndex(indice)
+
+    assert dlg.template == "construcao"
+    assert "Construção" in dlg.windowTitle()
+    assert len(_itens(dlg.arvore)) == tt.contar(tt.arvore("construcao", dlg.nivel))
+
+
+def test_aplicar_um_template_novo_cria_a_hierarquia_dele(qapp, conn):
+    dlg = TagTemplateDialog(conn)
+    indice = dlg.template_combo.findData("gamedev")
+    dlg.template_combo.setCurrentIndex(indice)
+    dlg._trocar_nivel(tt.RESUMIDO)
+
+    dlg._aplicar()
+
+    assert dlg.aplicado == tt.Resultado(criadas=8, existentes=0)
+    nomes = {t["name"] for t in tags_repo.list_tree(conn)}
+    assert {n.nome for n in tt.GAMEDEV} <= nomes
