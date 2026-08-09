@@ -396,6 +396,9 @@ class MainWindow(QMainWindow):
 
         self.statusBar().showMessage(f"v{__version__} · banco: {db_path}")
         self._reload_all()
+        # Precisa vir DEPOIS de `_reload_all()`: restaurar filtro/tag/pasta
+        # exige pastas e tags já carregadas na árvore (Fatia 54).
+        self._restore_ui_state()
 
     # ---- filtros e contagem ----
 
@@ -1799,9 +1802,86 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(f"ERRO na indexação: {message} (detalhes no log)")
         log.error("UI: indexação falhou — %s", message)
 
+    # ---- estado de tela entre sessões (Fatia 54) ----
+
+    def _chaves_dos_paineis(self) -> list[str]:
+        """Mesma ordem de `_panel_toggles`/`_window_menu_actions`: a chave
+        interna de cada seção da lateral, e `"detalhes"` pro painel que não
+        é seção (não tem chave própria no Sidebar)."""
+        return [chave for chave, _r in self._secoes_do_menu] + ["detalhes"]
+
+    def _save_ui_state(self) -> None:
+        """Grava geometria, painéis, splitters, tamanho do slider, tags
+        expandidas e filtros ativos — tudo que o Rafael deixou arrumado
+        na tela, pra próxima abertura vir do mesmo jeito."""
+        from base64 import b64encode
+
+        from assetdeck import config
+
+        cfg = config.load_config()
+        cfg["ui_state"] = {
+            "window_geometry_b64": b64encode(bytes(self.saveGeometry())).decode("ascii"),
+            "left_splitter_sizes": self._left_splitter.sizes(),
+            "main_splitter_sizes": self._main_splitter.sizes(),
+            "panels_visible": dict(zip(
+                self._chaves_dos_paineis(),
+                (acao.isChecked() for acao in self._window_menu_actions),
+            )),
+            "icon_size": self.size_slider.value(),
+            "tag_tree_expanded_ids": sorted(self.tags._tags_expandidas()),
+            "filters": self._current_filters_dict(),
+        }
+        config.save_config(cfg)
+        log.info("Estado da UI salvo (Fatia 54).")
+
+    def _restore_ui_state(self) -> None:
+        """Contrapartida de `_save_ui_state()`. Um `config.json` sem
+        `ui_state` (primeira vez depois desta fatia, ou config antigo) faz
+        nada — a janela abre com os padrões hardcoded de sempre."""
+        from base64 import b64decode
+
+        from assetdeck import config
+
+        estado = config.load_config().get("ui_state") or {}
+        if not estado:
+            return
+
+        geo_b64 = estado.get("window_geometry_b64")
+        if geo_b64:
+            self.restoreGeometry(b64decode(geo_b64))
+
+        paineis = estado.get("panels_visible") or {}
+        for chave, acao in zip(self._chaves_dos_paineis(), self._window_menu_actions):
+            if chave in paineis:
+                acao.setChecked(bool(paineis[chave]))
+
+        # DEPOIS da visibilidade: esconder/mostrar um painel redistribui o
+        # splitter sozinho, e o tamanho salvo é quem tem a última palavra.
+        tam_esq = estado.get("left_splitter_sizes")
+        if tam_esq:
+            self._left_splitter.setSizes(tam_esq)
+        tam_main = estado.get("main_splitter_sizes")
+        if tam_main:
+            self._main_splitter.setSizes(tam_main)
+
+        icon_size = estado.get("icon_size")
+        if icon_size:
+            self.size_slider.setValue(int(icon_size))  # dispara set_icon_size
+
+        # `is not None`, não truthy: lista VAZIA (nada expandido) é um
+        # estado válido e tem de recolher tudo, não ser ignorada.
+        expandidas = estado.get("tag_tree_expanded_ids")
+        if expandidas is not None:
+            self.tags.set_expanded(set(expandidas))
+
+        filtros = estado.get("filters")
+        if filtros:
+            self._restore_filters(filtros)
+
     # ---- encerramento limpo ----
 
     def closeEvent(self, event) -> None:  # noqa: N802 (nome vem do Qt)
+        self._save_ui_state()
         self._scan.shutdown()
         self._pipeline.shutdown()
         if getattr(self, "_bridge", None) is not None:

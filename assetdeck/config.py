@@ -39,6 +39,12 @@ DEFAULTS = {
     "render_bg_color": "#959599",
     "render_bg_strength": 1.8,
     "render_sun_energy": 3.0,
+    # Estado de tela entre sessões (Fatia 54) — geometria, splitters,
+    # painéis visíveis, tamanho do slider, tags expandidas e filtros
+    # ativos. Escrito inteiro por `MainWindow._save_ui_state()` no
+    # fechamento; vazio = nunca fechou o app depois desta fatia, usa os
+    # padrões hardcoded de sempre.
+    "ui_state": {},
 }
 
 
