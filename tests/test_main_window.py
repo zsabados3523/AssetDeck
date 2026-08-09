@@ -356,12 +356,14 @@ def test_checks_de_filtro_moraram_no_menu_janela(janela):
         assert acao in janela._menu_janela.actions()
 
 
-def test_size_slider_mora_na_status_bar_nao_no_breadcrumb(janela):
-    """Fatia 43, opção C: o slider de tamanho saiu da barra do breadcrumb
-    (lotada) e virou widget permanente do rodapé."""
+def test_size_slider_mora_na_faixa_de_nota_resolucao_e_cor(janela):
+    """Fatia 56: o slider saiu do rodapé (longe da grade, alça "bola"
+    destoando dos botões de filtro) e foi pra faixa 3, ao lado de
+    nota/resolução/cor — mesma linha que já refina o que está na tela."""
     from PySide6.QtWidgets import QStatusBar
 
-    assert isinstance(janela.size_slider.parentWidget(), QStatusBar)
+    assert not isinstance(janela.size_slider.parentWidget(), QStatusBar)
+    assert janela.size_slider.parentWidget() is janela.color_filter.parentWidget()
 
 
 def test_o_topo_tem_tres_faixas_separadas(janela, qapp):
