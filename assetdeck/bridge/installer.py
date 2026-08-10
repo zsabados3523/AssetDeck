@@ -1,8 +1,8 @@
 """Instalação do add-on na pasta do Blender (o AssetDeck faz por você).
 
-Descobre o caminho de add-ons do Blender Flatpak, copia o pacote e grava o
-bridge_config.json com host/porta/token. Reinstalar é sempre seguro:
-substitui a versão anterior.
+Descobre o caminho de add-ons do Blender (Flatpak ou instalação
+padrão/portátil), copia o pacote e grava o bridge_config.json com
+host/porta/token. Reinstalar é sempre seguro: substitui a versão anterior.
 """
 
 from __future__ import annotations
@@ -17,8 +17,12 @@ from assetdeck.bridge import protocol as proto
 log = logging.getLogger(__name__)
 
 ADDON_NAME = "assetdeck_bridge"
-# Caminho do Blender instalado por Flatpak (verificado no 5.2 do Rafael)
+# Caminho do Blender instalado por Flatpak.
 FLATPAK_CONFIG = Path.home() / ".var/app/org.blender.Blender/config/blender"
+# Caminho padrão do Blender (pacote do sistema, tarball ou versão portátil —
+# mesmo rodando de /home/rafael/Apps/blender-*, a config de usuário do
+# Blender vai para ~/.config/blender, não para a pasta do executável).
+STANDARD_CONFIG = Path.home() / ".config/blender"
 
 
 def source_dir() -> Path:
@@ -27,18 +31,21 @@ def source_dir() -> Path:
 
 
 def find_addon_dirs() -> list[Path]:
-    """Pastas scripts/addons de cada versão do Blender Flatpak encontrada.
+    """Pastas scripts/addons de cada versão do Blender encontrada, olhando
+    tanto a config do Flatpak quanto a config padrão (sistema/portátil).
 
     Retorna da versão mais nova para a mais antiga.
     """
-    if not FLATPAK_CONFIG.is_dir():
-        return []
     versoes = []
-    for d in FLATPAK_CONFIG.iterdir():
-        try:
-            versoes.append((tuple(int(p) for p in d.name.split(".")), d))
-        except ValueError:
-            continue  # pastas que não são "5.2", "4.2"…
+    for raiz in (FLATPAK_CONFIG, STANDARD_CONFIG):
+        if not raiz.is_dir():
+            continue
+        for d in raiz.iterdir():
+            try:
+                versao = tuple(int(p) for p in d.name.split("."))
+            except ValueError:
+                continue  # pastas que não são "5.2", "4.2"…
+            versoes.append((versao, d))
     return [d / "scripts" / "addons" for _v, d in sorted(versoes, reverse=True)]
 
 
@@ -58,9 +65,9 @@ def install(token: str, port: int = proto.DEFAULT_PORT,
     destinos_base = find_addon_dirs()
     if not destinos_base:
         raise RuntimeError(
-            "Não encontrei o Blender instalado por Flatpak. Instale com "
-            "'flatpak install flathub org.blender.Blender' e abra o Blender "
-            "uma vez antes de instalar o add-on."
+            "Não encontrei nenhuma instalação do Blender (procurei em "
+            f"'{FLATPAK_CONFIG}' e '{STANDARD_CONFIG}'). Abra o Blender pelo "
+            "menos uma vez antes de instalar o add-on."
         )
 
     instalados: list[Path] = []
