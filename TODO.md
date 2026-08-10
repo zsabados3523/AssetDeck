@@ -1175,6 +1175,27 @@ rodapé — e TODA ação de arquivo falha em silêncio prático. Valeria um
 aviso visível na abertura ("a biblioteca não está acessível: <caminho>"),
 que teria evitado esta ida e volta inteira.
 
+### ☑ Bug: instalador do add-on só achava Blender via Flatpak
+O Rafael reinstalou o Blender como versão portátil
+(`/home/rafael/Apps/blender-5.2.0-linux-x64/`). `installer.find_addon_dirs()`
+só procurava em `~/.var/app/org.blender.Blender/config/blender` (caminho
+fixo do Flatpak) — como essa pasta não existe mais de verdade em uso, a
+lista voltava vazia e o botão "Instalar add-on" falhava sempre, sem
+avisar o motivo real na UI (só o `RuntimeError` genérico "não encontrei o
+Blender").
+
+`installer.py` ganhou `STANDARD_CONFIG = ~/.config/blender` — é lá que
+QUALQUER Blender não-Flatpak (pacote do sistema, tarball, portátil) grava
+a config de usuário, mesmo rodando de fora de `/usr` ou de `Apps/`.
+`find_addon_dirs()` agora varre as duas raízes (Flatpak e padrão) e
+instala em todas as versões encontradas nas duas — se um dia o Rafael
+tiver as duas instalações ao mesmo tempo, o add-on vai pras duas.
+
+**Verificado de verdade, não só em teste:** com o fix, `installer.install()`
+achou e instalou em `~/.config/blender/5.2/scripts/addons/assetdeck_bridge/`
+— a pasta real que o Blender portátil do Rafael usa (confirmado por ele:
+os add-ons de verdade, como `vray_blender`, já moram lá).
+
 ### ☑ Fatia 46 — Teste da ponte falha com o app aberto
 `tests/test_main_window.py::test_ponte_e_render_ficam_prontos` afirmava que
 a ponte do Blender está escutando, mas ela usava a porta FIXA 45017
