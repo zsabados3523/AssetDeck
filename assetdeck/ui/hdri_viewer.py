@@ -36,15 +36,17 @@ from PySide6.QtOpenGL import (
 from PySide6.QtOpenGLWidgets import QOpenGLWidget
 from PySide6.QtWidgets import (
     QButtonGroup,
-    QDialog,
     QHBoxLayout,
     QLabel,
     QPushButton,
     QVBoxLayout,
+    QWidget,
 )
 
 from assetdeck.thumbs.hdr import load_tonemapped
+from assetdeck.ui import theme
 from assetdeck.ui.hdri_camera import HdriCamera
+from assetdeck.ui.overlay import OverlayPanel
 
 log = logging.getLogger(__name__)
 
@@ -293,13 +295,15 @@ class HdriGLView(QOpenGLWidget):
             self.doneCurrent()
 
 
-class HdriViewer(QDialog):
-    """A janela: superfície GL + alternador de modo."""
+class HdriViewer(OverlayPanel):
+    """Overlay embutido na janela principal (Fatia 65) — superfície GL +
+    alternador de modo. Antes era `QDialog` com `setWindowFlag(Qt.WindowType.
+    Window)`: o Rafael relatou que a janela "piscava" ao abrir — o contexto
+    OpenGL próprio de uma superfície de janela nova faz o compositor
+    remapear tudo, mais visível ainda aqui do que num `QDialog` comum."""
 
-    def __init__(self, parent=None) -> None:
-        super().__init__(parent)
-        self.setWindowFlag(Qt.WindowType.Window)
-        self.resize(1000, 620)
+    def __init__(self, host: QWidget) -> None:
+        super().__init__(host)
 
         self.view = HdriGLView()
         self.status = QLabel("Carregando…")
@@ -319,22 +323,37 @@ class HdriViewer(QDialog):
         topo.addStretch()
         topo.addWidget(self.status)
 
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(12, 12, 12, 12)
-        layout.setSpacing(8)
-        layout.addLayout(topo)
-        layout.addWidget(self.view, stretch=1)
+        card_inner = QWidget()
+        card_layout = QVBoxLayout(card_inner)
+        card_layout.setContentsMargins(0, 0, 0, 0)
+        card_layout.setSpacing(8)
+        card_layout.addLayout(topo)
+        card_layout.addWidget(self.view, stretch=1)
+        self._card = theme.make_card(card_inner, sombra=True)
+
+        outer = QVBoxLayout(self)
+        outer.addStretch(1)
+        outer.addWidget(self._card, 0, Qt.AlignmentFlag.AlignCenter)
+        outer.addStretch(1)
 
         self._sig = _Signaller()
         self._sig.loaded.connect(self._on_loaded)
         self._sig.failed.connect(self._on_failed)
+        # Libera a textura na GPU (32MB num HDRI 4K) sempre que o overlay
+        # fecha — mesmo gatilho de antes (`closeEvent`), só que agora pelo
+        # sinal `closed` do `OverlayPanel` (não existe mais "fechar janela").
+        self.closed.connect(self.view.cleanup)
+
+    def _resize_card(self) -> None:
+        w = min(1400, int(self._host.width() * 0.85))
+        h = min(900, int(self._host.height() * 0.85))
+        self._card.setFixedSize(w, h)
 
     def show_for(self, path: Path) -> None:
-        self.setWindowTitle(f"HDRI — {path.name}")
-        self.status.setText("Carregando…")
+        self._resize_card()
+        self.status.setText(f"HDRI — {path.name}  ·  Carregando…")
         self.view.camera.reset()
-        self.show()
-        self.raise_()
+        self.open_overlay()
         QThreadPool.globalInstance().start(_LoadJob(self._sig, path))
 
     def _on_loaded(self, img: QImage) -> None:
@@ -344,16 +363,6 @@ class HdriViewer(QDialog):
 
     def _on_failed(self, msg: str) -> None:
         self.status.setText(f"Falhou: {msg}")
-
-    def keyPressEvent(self, event) -> None:  # noqa: N802
-        if event.key() == Qt.Key.Key_Escape:
-            self.close()
-        else:
-            super().keyPressEvent(event)
-
-    def closeEvent(self, event) -> None:  # noqa: N802
-        self.view.cleanup()  # libera a textura na GPU (32MB num HDRI 4K)
-        super().closeEvent(event)
 
 
 def ensure_gl_format() -> None:
