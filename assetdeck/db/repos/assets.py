@@ -11,6 +11,26 @@ import sqlite3
 # cores vizinhas da paleta.
 COLOR_TOLERANCE = 90
 
+# Ordenação da grid (Fatia 63). Coluna real por trás de cada critério —
+# todas NOT NULL no schema (`SCHEMA.md`: size_bytes, mtime_ns), então não
+# precisa de COALESCE. "resolution" reusa a mesma expressão do filtro de
+# resolução mínima (maior lado do arquivo).
+_ORDER_BY_COLUMNS = {
+    "name": "a.name COLLATE NOCASE",
+    "modified": "f.mtime_ns",
+    "size": "f.size_bytes",
+    "resolution": "MAX(COALESCE(f.width, 0), COALESCE(f.height, 0))",
+}
+
+
+def _order_by_sql(sort_by: str, sort_dir: str) -> str:
+    coluna = _ORDER_BY_COLUMNS.get(sort_by, _ORDER_BY_COLUMNS["name"])
+    direcao = "DESC" if sort_dir == "desc" else "ASC"
+    # Critério de desempate: sempre o nome, crescente — estável e previsível
+    # quando dois arquivos têm o mesmo tamanho/data/resolução exatos.
+    desempate = "f.rel_path COLLATE NOCASE" if sort_by == "name" else "a.name COLLATE NOCASE"
+    return f" ORDER BY {coluna} {direcao}, {desempate}"
+
 
 def count_active(conn: sqlite3.Connection) -> int:
     """Quantos assets existem (soft-deleted não contam)."""
@@ -156,6 +176,8 @@ def list_for_grid(
     collection_id: int | None = None,
     category_filters: list[dict] | None = None,
     dominant_color: str | None = None,
+    sort_by: str = "name",
+    sort_dir: str = "asc",
 ) -> list[dict]:
     """Assets para a grid (asset + arquivo principal), com filtros combináveis.
 
@@ -171,10 +193,13 @@ def list_for_grid(
     - expand_sets: True = toggle 'agrupar' DESLIGADO — cada mapa de um set
       PBR vira um card próprio (só visualização; o banco não muda)
     - collection_id: só assets dentro dessa coleção, na ORDEM MANUAL em que
-      foram arrastados para dentro (Fatia 17)
+      foram arrastados para dentro (Fatia 17) — ignora sort_by/sort_dir,
+      a ordem de arraste sempre vence dentro de uma coleção
     - dominant_color: cor (hex) escolhida na paleta fixa de busca por cor
       (Fatia 39) — compara com `files.dominant_color` até `COLOR_TOLERANCE`
       de distância; arquivo sem cor calculada (não-raster) fica de fora
+    - sort_by/sort_dir: critério de ordenação da grid (Fatia 63) — ver
+      `_ORDER_BY_SQL`; par desconhecido cai no padrão (nome, A→Z)
     """
     join_files = ("JOIN files f ON f.asset_id = a.id" if expand_sets
                   else "JOIN files f ON f.asset_id = a.id AND f.is_primary = 1")
@@ -213,7 +238,7 @@ def list_for_grid(
                 " a.name COLLATE NOCASE")
         params.append(collection_id)
     else:
-        sql += " ORDER BY a.name COLLATE NOCASE, f.rel_path COLLATE NOCASE"
+        sql += _order_by_sql(sort_by, sort_dir)
     rows = [dict(r) for r in conn.execute(sql, params)]
     if expand_sets:
         for r in rows:
@@ -273,6 +298,12 @@ def count_by_category(conn: sqlite3.Connection, categorias, **filtros) -> dict[s
 
     `categorias`: iterável de `ui.categories.Category`."""
     filtros.pop("category_filters", None)
+    # sort_by/sort_dir (Fatia 63) não fazem sentido pra uma contagem — só
+    # existem no dicionário porque ele é o mesmo que `list_for_grid` aceita
+    # (`_current_filters_dict()` serve os dois). `_build_where` não os
+    # conhece; sem o pop, virava TypeError toda vez que a contagem rodasse.
+    filtros.pop("sort_by", None)
+    filtros.pop("sort_dir", None)
     where, params = _build_where(conn, **filtros)
     sql = f"""SELECT a.asset_type AS t, COUNT(*) AS n FROM assets a
               JOIN files f ON f.asset_id = a.id AND f.is_primary = 1
