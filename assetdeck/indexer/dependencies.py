@@ -163,3 +163,86 @@ def attach_pack_previews(conn: sqlite3.Connection, library_id: int,
     if criadas:
         log.info("Capas automáticas de packs: %d modelos ganharam preview.", criadas)
     return criadas
+
+
+def attach_stem_match_previews(conn: sqlite3.Connection, library_id: int,
+                               library_root, previews_dir,
+                               hide_source: bool = False) -> int:
+    """Casa 'Cadeira.blend' com 'Cadeira.jpg' pelo NOME (mesma pasta, mesmo
+    nome-base) e usa a imagem como capa automática do modelo (Fatia 57,
+    pedido do Rafael).
+
+    Diferente de `attach_pack_previews` (que casa por PASTA, um preview por
+    pasta): aqui uma pasta pode ter vários modelos, cada um casando com a
+    própria imagem de mesmo nome. Só aplica quando há exatamente UM
+    candidato por modelo — 2+ imagens com o mesmo nome-base é ambíguo,
+    pulado e logado, nunca adivinhado (regra do projeto: nenhum erro
+    silencioso).
+
+    `hide_source=True` some a imagem da grade (reversível, mesmo flag
+    `hidden` do drag-and-drop manual) — separado do `hide_preview_source`
+    do fluxo manual porque este roda em lote, sem ninguém pra responder um
+    diálogo "ocultar origem?" no meio da varredura.
+
+    Retorna quantas capas foram criadas.
+    """
+    from pathlib import Path
+
+    from assetdeck.db.repos import assets as assets_repo
+    from assetdeck.db.repos import previews as previews_repo
+    from assetdeck.thumbs.preview import can_preview
+
+    # Modelos sem capa, indexados por (pasta, nome-base em minúsculas).
+    modelos: dict[tuple[str, str], tuple[int, str]] = {}
+    for row in conn.execute(
+        f"""SELECT a.id, f.rel_path FROM assets a
+            JOIN files f ON f.asset_id = a.id AND f.is_primary = 1
+            WHERE a.library_id = ? AND a.deleted_at IS NULL AND f.deleted_at IS NULL
+              AND a.asset_type IN ({','.join('?' * len(OWNER_TYPES))})
+              AND NOT EXISTS (SELECT 1 FROM previews p
+                              WHERE p.asset_id = a.id AND p.is_cover = 1
+                                AND p.deleted_at IS NULL)""",
+        (library_id, *OWNER_TYPES),
+    ):
+        rel = row["rel_path"]
+        modelos[(_dir_of(rel), Path(rel).stem.lower())] = (row["id"], rel)
+
+    if not modelos:
+        return 0
+
+    # Imagens candidatas, agrupadas pela MESMA chave (pasta, nome-base) —
+    # o próprio arquivo do modelo nunca bate aqui: `can_preview` é falso
+    # pra .blend/.fbx/.obj.
+    candidatos: dict[tuple[str, str], list[tuple[str, int]]] = {}
+    for row in conn.execute(
+        """SELECT f.rel_path, a.id AS asset_id FROM files f
+           JOIN assets a ON a.id = f.asset_id
+           WHERE a.library_id = ? AND a.deleted_at IS NULL AND f.deleted_at IS NULL""",
+        (library_id,),
+    ):
+        rel = row["rel_path"]
+        p = Path(rel)
+        chave = (_dir_of(rel), p.stem.lower())
+        if chave in modelos and can_preview(p):
+            candidatos.setdefault(chave, []).append((rel, row["asset_id"]))
+
+    criadas = 0
+    for chave, itens in candidatos.items():
+        if len(itens) != 1:
+            log.info("Preview por nome ambíguo em %r: %d candidatos — pulado (%s).",
+                     chave, len(itens), ", ".join(rel for rel, _aid in itens))
+            continue
+        rel_imagem, imagem_asset_id = itens[0]
+        asset_id, _modelo_rel = modelos[chave]
+        try:
+            previews_repo.add(conn, asset_id, Path(library_root) / rel_imagem,
+                              Path(previews_dir), origin="auto")
+            criadas += 1
+            if hide_source:
+                assets_repo.set_hidden(conn, imagem_asset_id, True)
+        except (OSError, FileNotFoundError):
+            log.warning("Preview por nome ilegível: %s", rel_imagem, exc_info=True)
+
+    if criadas:
+        log.info("Capas automáticas por nome: %d modelos ganharam preview.", criadas)
+    return criadas

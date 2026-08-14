@@ -758,6 +758,11 @@ class MainWindow(QMainWindow):
         ferramentas.addSeparator()
         ferramentas.addAction("Aplicar template de tags…", self.tags.apply_template_dialog)
         ferramentas.addSeparator()
+        ferramentas.addAction(
+            "Assinalar previews automaticamente por nome agora",
+            self._assinalar_previews_automaticamente,
+        )
+        ferramentas.addSeparator()
         self._setup_bridge(ferramentas)  # ponte + submenu "Blender" (F2)
         self._menu_configuracoes = self._setup_settings_menu()
         self._menu_janela = self._setup_window_menu()
@@ -1770,6 +1775,32 @@ class MainWindow(QMainWindow):
         self._reload_grid()
         self._refresh_details_tags()
         self.statusBar().showMessage("Preview removido da galeria")
+
+    def _assinalar_previews_automaticamente(self) -> None:
+        """Ferramentas → roda o casamento por nome igual (Fatia 57) sob
+        demanda, sem esperar a próxima varredura — útil logo depois de
+        ligar o toggle em Preferências, ou pra rever depois de arrumar
+        nomes de arquivo na biblioteca."""
+        from assetdeck import config
+        from assetdeck.db.repos import libraries as libraries_repo
+        from assetdeck.indexer.dependencies import attach_stem_match_previews
+
+        cfg = config.load_config()
+        lib_id = libraries_repo.get_or_create(self._conn, self._library_root)
+        criadas = attach_stem_match_previews(
+            self._conn, lib_id, self._library_root, config.previews_dir(),
+            hide_source=bool(cfg.get("auto_match_hide_source")),
+        )
+        if criadas:
+            self._reload_grid()
+            self._refresh_details_tags()
+            self.statusBar().showMessage(
+                f"{criadas} modelo(s) ganharam preview automático por nome igual"
+            )
+        else:
+            self.statusBar().showMessage(
+                "Nenhum modelo sem capa casou com uma imagem de mesmo nome"
+            )
 
     # ---- varredura ----
 
