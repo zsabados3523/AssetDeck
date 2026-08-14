@@ -115,14 +115,10 @@ class MainWindow(QMainWindow):
         self.categories = CategoryBar()
         self.categories.changed.connect(self._apply_filters)
 
-        # Nota mínima e resolução mínima (Fatia 9) — eram QComboBox longos
-        # ("Nota: todas") na barra de filtros; viraram botão de ícone
-        # compacto na linha do breadcrumb (pedido do Rafael, Fatia 28c).
-        self.rating_filter = FilterButton(
-            "star-filled", [("Nota: todas", None)] + [(f"★ ≥ {n}", n) for n in range(1, 6)]
-        )
-        self.rating_filter.changed.connect(self._apply_filters)
-
+        # Resolução mínima (Fatia 9) — era QComboBox longo ("Resolução: todas")
+        # na barra de filtros; virou botão de ícone compacto na linha do
+        # breadcrumb (pedido do Rafael, Fatia 28c). Filtro de nota mínima
+        # removido na Fatia 62 (junto com a nota em si — só favorito ficou).
         self.res_filter = FilterButton(
             "resolution",
             [("Resolução: todas", None), ("≥ 1K", 1024), ("≥ 2K", 2048),
@@ -225,7 +221,6 @@ class MainWindow(QMainWindow):
         theme.apply_card_shadow(self.details)
         self.details.notes_saved.connect(self._on_notes_saved)
         self.details.tag_toggled.connect(self._on_tag_toggled)
-        self.details.rating_changed.connect(self._on_rating_changed)
         self.details.starred_changed.connect(self._on_starred_changed)
         self.details.preview_add_requested.connect(self._on_preview_add)
         self.details.preview_cover_requested.connect(self._on_preview_cover)
@@ -307,7 +302,6 @@ class MainWindow(QMainWindow):
         list_header_row.addWidget(self.list_scope)
         list_header_row.addWidget(self.list_count)
         list_header_row.addStretch(1)
-        list_header_row.addWidget(self.rating_filter)
         list_header_row.addWidget(self.res_filter)
         list_header_row.addWidget(self.color_filter)
         list_header_row.addSpacing(4)
@@ -447,7 +441,6 @@ class MainWindow(QMainWindow):
             # ele não via caso de uso pra desligar). Sempre True agora.
             include_subdirs=True,
             tag_id=self.tags.current_tag_id(),
-            min_rating=self.rating_filter.value(),
             starred_only=self.fav_check.isChecked(),
             min_resolution=self.res_filter.value(),
             include_hidden=self.hidden_check.isChecked(),
@@ -592,10 +585,11 @@ class MainWindow(QMainWindow):
         filtro de tag ou busca ativos, então navegando uma pasta normal
         (o caso mais comum) nada na tela mudava. Antes da Fatia 61 isso já
         era um bug (silencioso, sem nenhum indício visual de tag na grid);
-        o badge novo só expôs o sintoma. Mesmo padrão que `_on_rating_changed`/
-        `_on_starred_changed` já usavam: `_reload_grid()` sempre roda (barato,
-        preserva rolagem/seleção — Fatia 45); `_apply_filters()` continua só
-        quando o FILTRO ativo pode mudar de resultado (tag/busca).
+        o badge novo só expôs o sintoma. Mesmo padrão que `_on_starred_changed`
+        já usava (nota em estrelas removida na Fatia 62): `_reload_grid()`
+        sempre roda (barato, preserva rolagem/seleção — Fatia 45);
+        `_apply_filters()` continua só quando o FILTRO ativo pode mudar de
+        resultado (tag/busca).
         """
         assets_repo.rebuild_fts(self._conn)
         for aid in asset_ids:
@@ -628,20 +622,6 @@ class MainWindow(QMainWindow):
             alvos,
             f"Tag '{nome}' {'adicionada' if checked else 'removida'}{sufixo}",
         )
-
-    def _on_rating_changed(self, rating) -> None:
-        alvos = self._selected_asset_ids()
-        if not alvos:
-            return
-        for aid in alvos:
-            assets_repo.set_rating(self._conn, aid, rating)
-            sidecar_writer.write_for_asset(self._conn, self._library_root, aid)
-        self._reload_grid()  # a estrela/nota aparece na grid
-        texto = f"{'★' * rating}" if rating else "nota removida"
-        sufixo = f" em {len(alvos)} assets" if len(alvos) > 1 else ""
-        self.statusBar().showMessage(f"Nota: {texto}{sufixo}")
-        if self.rating_filter.value():
-            self._apply_filters()
 
     def _on_starred_changed(self, starred: bool) -> None:
         alvos = self._selected_asset_ids()
@@ -861,7 +841,6 @@ class MainWindow(QMainWindow):
         self.grid.viewport().update()
 
         self.categories.refresh_theme()
-        self.rating_filter.refresh_theme()
         self.res_filter.refresh_theme()
         self.color_filter.refresh_theme()
         self.details.refresh_theme()
@@ -1155,7 +1134,6 @@ class MainWindow(QMainWindow):
         else:
             # Salva antes da Fatia 31: só tinha `asset_types` crus.
             self.categories.set_selection_from_types(query.get("asset_types") or [])
-        self.rating_filter.set_value(query.get("min_rating"))
         self.fav_check.setChecked(bool(query.get("starred_only")))
         self.res_filter.set_value(query.get("min_resolution"))
         self.color_filter.set_value(query.get("dominant_color"))
@@ -1336,7 +1314,7 @@ class MainWindow(QMainWindow):
         row = self.model.row_at(current)
         if row is not None:
             self.details.show_asset(row, self._thumb_from_disk(row))
-            self.details.load_rating(row["rating"], bool(row["starred"]))
+            self.details.load_starred(bool(row["starred"]))
             self.details.load_tags(
                 tags_repo.list_tree(self._conn),
                 {t["id"] for t in tags_repo.tags_of(self._conn, row["id"])},
