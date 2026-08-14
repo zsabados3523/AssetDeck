@@ -190,7 +190,8 @@ def list_for_grid(
                     f.width, f.height,
                     {cover_select},
                     (SELECT COUNT(*) FROM files f2
-                     WHERE f2.asset_id = a.id AND f2.deleted_at IS NULL) AS files_count
+                     WHERE f2.asset_id = a.id AND f2.deleted_at IS NULL) AS files_count,
+                    EXISTS(SELECT 1 FROM asset_tags at WHERE at.asset_id = a.id) AS has_tags
              FROM assets a
              {join_files}
              WHERE a.deleted_at IS NULL AND f.deleted_at IS NULL"""

@@ -617,3 +617,53 @@ def test_menu_arquivo_reindexar_e_sair_tem_atalho(janela):
     assert janela.sair_action.shortcut() == QKeySequence.StandardKey.Quit
     assert janela.reindex_action in janela._menu_arquivo.actions()
     assert janela.sair_action in janela._menu_arquivo.actions()
+
+
+# ---- Fatia 61 (bug pós-tela): taggear "não fazia nada" sem filtro ativo ----
+
+
+def test_checkbox_de_tag_atualiza_a_grid_sem_filtro_ativo(janela):
+    """BUG relatado pelo Rafael (2026-08-14): taggear pelo checkbox do painel
+    de detalhes, por Ctrl+T ou arrastando pra uma tag "parecia não fazer
+    nada" navegando numa pasta normal. A gravação no banco sempre funcionou
+    (`tags_repo.assign`/`tags_of` — conferido à parte); o que faltava era
+    `_after_tags_changed` atualizar a GRID: ela só chamava `_apply_filters()`
+    quando havia filtro de tag ou busca ativos, então no caso mais comum
+    (nenhum dos dois) nada na tela mudava. `_on_tag_toggled` é o handler real
+    conectado a `details.tag_toggled` (o sinal do checkbox)."""
+    from assetdeck.db.repos import tags as tags_repo
+    from assetdeck.ui.asset_grid import HAS_TAGS_ROLE
+
+    tag_id = tags_repo.create(janela._conn, "Teste")
+    asset_id = _asset_id(janela._conn, "textura")
+    idx = janela.model.index_of_asset(asset_id)
+
+    assert janela.tags.current_tag_id() is None
+    assert janela.search_box.text() == ""
+    assert janela.model.data(idx, HAS_TAGS_ROLE) is False
+
+    janela.grid.selectionModel().select(
+        idx, janela.grid.selectionModel().SelectionFlag.Select,
+    )
+    janela._on_tag_toggled(asset_id, tag_id, True)
+
+    idx2 = janela.model.index_of_asset(asset_id)
+    assert janela.model.data(idx2, HAS_TAGS_ROLE) is True, \
+        "a grid tem que refletir a tag nova mesmo sem filtro de tag/busca ativo"
+
+
+def test_arrastar_para_tag_atualiza_a_grid_sem_filtro_ativo(janela):
+    """Mesmo bug do teste acima, pelo caminho do drag-and-drop
+    (`_on_assets_dropped`, conectado a `tags.assets_dropped`)."""
+    from assetdeck.db.repos import tags as tags_repo
+    from assetdeck.ui.asset_grid import HAS_TAGS_ROLE
+
+    tag_id = tags_repo.create(janela._conn, "Teste")
+    asset_id = _asset_id(janela._conn, "textura")
+    idx = janela.model.index_of_asset(asset_id)
+    assert janela.model.data(idx, HAS_TAGS_ROLE) is False
+
+    janela._on_assets_dropped(tag_id, [asset_id])
+
+    idx2 = janela.model.index_of_asset(asset_id)
+    assert janela.model.data(idx2, HAS_TAGS_ROLE) is True
