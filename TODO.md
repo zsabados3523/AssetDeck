@@ -1347,3 +1347,30 @@ oculto, superior-direito = favorito, inferior-esquerdo = chip de extensão).
 **Verificado contra a testlib real:** taggeei um asset direto no banco só
 pra teste visual (removido depois — não é dado real da testlib), o badge
 apareceu certo no canto inferior-direito. 737 testes verdes.
+
+**Bug real achado testando (2026-08-14):** o Rafael reportou que taggear
+"parece simplesmente não funcionar" — nem arrastar pra tag, nem Ctrl+T,
+nem o checkbox do painel de detalhes. Investigado com a gravação de
+verdade (`tags_repo.assign` + `tags_of` direto contra o banco real, fora
+da UI): a gravação sempre funcionou, sem erro nenhum. A causa real estava
+em `_after_tags_changed()` (`main_window.py`) — função ÚNICA por trás dos
+três caminhos (`_on_tag_toggled`, `_on_assets_dropped`,
+`_quick_tag_dialog`): ela só chamava `_apply_filters()` (recarrega a
+grid) quando havia filtro de TAG ou BUSCA ativo. Navegando uma pasta
+normal — o caso mais comum — nada na tela mudava depois de taggear.
+
+**Bug pré-existente desde a Fatia 8**, só ficou invisível até agora: não
+havia NENHUM indício visual de tag na grid antes do badge desta fatia, só
+uma mensagem discreta no rodapé. O badge novo expôs o sintoma.
+
+**Fix:** mesmo padrão que `_on_rating_changed`/`_on_starred_changed` já
+usavam — `_reload_grid()` (barato, preserva rolagem/seleção, Fatia 45)
+roda sempre que não há filtro pra recalcular; `_apply_filters()` continua
+reservado pro caso em que o FILTRO ativo pode mudar de resultado (tag ou
+busca).
+
+**2 testes de regressão novos** (`tests/test_main_window.py`), provados
+falhando contra o código antigo antes do fix (`git stash` no arquivo só
+do fix): `test_checkbox_de_tag_atualiza_a_grid_sem_filtro_ativo` e
+`test_arrastar_para_tag_atualiza_a_grid_sem_filtro_ativo`. 739 testes
+verdes no total.
