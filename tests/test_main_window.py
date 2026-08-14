@@ -667,3 +667,88 @@ def test_arrastar_para_tag_atualiza_a_grid_sem_filtro_ativo(janela):
 
     idx2 = janela.model.index_of_asset(asset_id)
     assert janela.model.data(idx2, HAS_TAGS_ROLE) is True
+
+
+# ---- Fatia 64: reindexação não re-varre thumbnails à toa ----
+
+
+def test_on_finished_pula_warmup_quando_so_sumiu_arquivo(janela, monkeypatch):
+    """Bug de performance relatado pelo Rafael: a reindexação automática ao
+    abrir "demora demais". Uma causa real: `_on_finished` chamava
+    `_reload_all()` — que inclui o pré-aquecimento CARO de thumbnails
+    (medido em ~1,1s numa biblioteca de 23 mil assets, Fatia 45) — sempre
+    que QUALQUER coisa mudava no scan, inclusive quando só um arquivo
+    sumiu. Sumir não traz nenhuma imagem nova pra desenhar."""
+    from assetdeck.indexer.scanner import ScanStats
+
+    chamadas_warmup = []
+    chamadas_reload = []
+    monkeypatch.setattr(janela.model, "warmup_library", lambda: chamadas_warmup.append(1))
+    monkeypatch.setattr(janela.model, "reload", lambda: chamadas_reload.append(1))
+
+    janela._on_finished(ScanStats(missing=1))
+
+    assert chamadas_warmup == [], "arquivo sumido não precisa de thumbnail nova"
+    assert chamadas_reload == [1], "mas pastas/tags/contagens ainda têm que atualizar"
+
+
+def test_on_finished_pula_warmup_quando_so_restaurou_sidecar(janela, monkeypatch):
+    """Mesma lógica: metadado de sidecar voltando pra um arquivo que já
+    estava indexado (e já tinha thumbnail) também não precisa de
+    pré-aquecimento novo."""
+    from assetdeck.indexer.scanner import ScanStats
+
+    chamadas_warmup = []
+    monkeypatch.setattr(janela.model, "warmup_library", lambda: chamadas_warmup.append(1))
+
+    janela._on_finished(ScanStats(restored=3))
+
+    assert chamadas_warmup == []
+
+
+def test_on_finished_avisa_antes_de_recarregar(janela, monkeypatch):
+    """Antes do fix, a barra de status ficava com o texto de "Indexando…
+    X/Y arquivos" congelado durante o freeze da recarga — dava a impressão
+    de app travado (queixa do Rafael: "não sei muito bem o que exatamente
+    faz o resync"). Agora "Sincronizando biblioteca…" aparece ANTES."""
+    from assetdeck.indexer.scanner import ScanStats
+
+    mensagens = []
+    monkeypatch.setattr(janela.statusBar(), "showMessage", mensagens.append)
+    monkeypatch.setattr(janela.model, "warmup_library", lambda: None)
+
+    janela._on_finished(ScanStats(added=1))
+
+    assert "Sincronizando biblioteca…" in mensagens
+    assert mensagens.index("Sincronizando biblioteca…") < len(mensagens) - 1, \
+        "tem que vir ANTES da mensagem final, não depois"
+
+
+@pytest.mark.parametrize("kwargs", [
+    {"added": 2}, {"updated": 1}, {"reappeared": 1}, {"grouped_sets": 1},
+])
+def test_on_finished_warmup_quando_ha_conteudo_visual_novo(janela, monkeypatch, kwargs):
+    """O caso que PRECISA continuar pagando o pré-aquecimento: arquivo novo,
+    atualizado, reaparecido ou set PBR novo — todos podem exigir thumbnail
+    que ainda não existe."""
+    from assetdeck.indexer.scanner import ScanStats
+
+    chamadas_warmup = []
+    monkeypatch.setattr(janela.model, "warmup_library", lambda: chamadas_warmup.append(1))
+
+    janela._on_finished(ScanStats(**kwargs))
+
+    assert chamadas_warmup == [1]
+
+
+def test_on_finished_nada_mudou_nao_chama_reload_all(janela, monkeypatch):
+    """Comportamento de antes preservado: scan sem nenhuma mudança não
+    chama `_reload_all` nem no modo barato — só atualiza a contagem."""
+    from assetdeck.indexer.scanner import ScanStats
+
+    chamadas = []
+    monkeypatch.setattr(janela, "_reload_all", lambda **kw: chamadas.append(kw))
+
+    janela._on_finished(ScanStats())
+
+    assert chamadas == []

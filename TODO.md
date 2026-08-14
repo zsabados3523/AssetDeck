@@ -1450,3 +1450,56 @@ comportamento de sempre) passou.
 **Deu certo quando:** testado contra a testlib real — ícone aparece na
 barra antes de Resolução/Cor, biblioteca carrega ordenada por nome por
 padrão. 751 testes verdes.
+
+### ☑ Fatia 64 — Reindexação: menos redundante, com feedback de verdade
+Rafael relatou: não sabe bem o que a resincronização faz, às vezes
+acontece sozinha ao abrir, e demora demais.
+
+**Achado (não é "às vezes"):** roda SEMPRE ao abrir (`app.py:213`,
+`win.start_scan()` logo após `win.show()`). E `MainWindow.__init__` já
+faz uma passada completa — `_reload_all()`, que inclui o pré-aquecimento
+caro de thumbnails (`warmup_library`, medido em ~1,1s numa biblioteca de
+23 mil assets, Fatia 45) — ANTES até da varredura em si rodar. Se o scan
+encontra qualquer mudança, `_on_finished` chamava `_reload_all()` de
+NOVO, pagando o pré-aquecimento inteiro uma segunda vez — mesmo quando a
+mudança não tinha NADA que precisasse de thumbnail nova (só um arquivo
+sumiu, ou só voltou metadado de um sidecar).
+
+**Fix — dois pontos:**
+1. `_reload_all(warmup: bool = True)` ganhou o parâmetro; com
+   `warmup=False` atualiza pastas/tags/coleções/contagens (sempre
+   baratos) mas troca `model.warmup_library()` por `model.reload()`
+   (`_requery()` só, ~11ms medido na Fatia 45).
+2. `_on_finished` decide: `added`/`updated`/`reappeared`/`grouped_sets`
+   podem trazer thumbnail nova de verdade → `warmup=True`; só
+   `missing`/`restored` → `warmup=False`. Mensagem "Sincronizando
+   biblioteca…" + `QApplication.processEvents()` ANTES da recarga (que
+   ainda pode travar a UI por um instante) — sem isso a barra de status
+   ficava com o texto de "Indexando… X/Y arquivos" congelado durante o
+   freeze, dando a impressão de app travado. `processEvents()` força o
+   repaint na hora; sem ele o Qt só pintaria depois que este método
+   síncrono terminasse, tarde demais pra servir de feedback.
+
+**Honestidade sobre o alcance do fix:** isto NÃO elimina o pré-aquecimento
+duplo no caso mais comum de mudança real — se o scan encontra `updated`
+(conteúdo mudou de verdade, ou timestamps à deriva por causa do disco
+externo remontando em outro ponto de montagem, caso já visto na Fatia 53),
+o pré-aquecimento roda de novo do mesmo jeito, porque não dá pra saber sem
+olhar arquivo por arquivo se aquele "updated" precisa mesmo de thumbnail
+nova. Resolver isso de verdade exigiria o scanner rastrear QUAIS assets
+mudaram (não só contar quantos — `ScanStats` hoje só tem contadores) e
+`_warmup()` aceitar uma lista só deles, em vez de reconsultar a
+biblioteca inteira — mudança bem maior no scanner, mexendo em código
+usado por várias outras fatias, fora do escopo desta. Se o Rafael sentir
+que ainda demora depois desta fatia, é o próximo passo natural.
+
+**Verificado com a testlib real, não só teoria** — log real, não só
+teste isolado: movi um `.blend` pra fora da testlib, rodei o app, e o log
+confirma `Varredura concluída: ... 1 sumidos` sem nenhum novo
+"Pré-aquecimento: N thumbnails agendadas" depois (antes do fix, sempre
+apareceria de novo). Arquivo devolvido ao lugar depois do teste.
+
+**8 testes novos** (`tests/test_main_window.py`), 2 deles provados
+falhando contra o código antigo (`git stash` só no `main_window.py`):
+`test_on_finished_pula_warmup_quando_so_sumiu_arquivo` e
+`..._so_restaurou_sidecar`. 759 testes verdes no total.
