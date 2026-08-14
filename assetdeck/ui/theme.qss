@@ -615,9 +615,14 @@ QProgressBar::chunk {
     border-radius: 5px;
 }
 
-/* Slider de tamanho da miniatura (Fatia 28c): trilho fino, alça pequena e
- * redonda, trecho preenchido na cor de destaque — minimalista, sem o relevo
- * 3D padrão do Fusion. */
+/* Slider de tamanho da miniatura (Fatia 28c): trilho fino, trecho
+ * preenchido na cor de destaque — minimalista, sem o relevo 3D padrão do
+ * Fusion. Fatia 56: a alça deixou de ser uma bolinha 16×16 flutuando
+ * (destoava dos botões ícone-only ao lado, agora que o slider mudou do
+ * rodapé pra faixa de nota/resolução/cor) — virou um traço fino e baixo,
+ * do mesmo jeito "achatado" da trilha, não um raio de $radius_control
+ * (que arredondaria demais numa alça deste tamanho e voltaria a parecer
+ * bola). */
 QSlider::groove:horizontal {
     height: 4px;
     background: $bg_tint;
@@ -629,18 +634,17 @@ QSlider::sub-page:horizontal {
     border-radius: 2px;
 }
 
-/* A alça era "#FFFFFF" cravada — mesma história do checkbox: uma bolinha
- * branca acesa no rodapé escuro (Fatia 44). */
 QSlider::handle:horizontal {
-    width: 16px;
-    height: 16px;
-    margin: -6px 0;
+    width: 6px;
+    height: 14px;
+    margin: -5px 0;
     background: $surface;
     border: 1px solid $border_strong;
-    border-radius: 8px;
+    border-radius: 2px;
 }
 
 QSlider::handle:horizontal:hover {
+    background: $accent;
     border: 1px solid $accent;
 }
 
