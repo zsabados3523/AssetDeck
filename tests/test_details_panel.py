@@ -100,20 +100,16 @@ def test_so_existe_um_botao_principal_no_painel(painel):
 
 
 def test_o_favorito_cabe_na_largura_do_painel(painel, qapp):
-    """Bug visto na tela: o favorito dividia a linha com as cinco estrelas e
-    era cortado pela borda direita — 5 botões mais um botão com texto não
-    cabem nos ~250px úteis do painel."""
+    """Bug visto na tela (Fatia 9): o favorito dividia a linha com as cinco
+    estrelas de nota e era cortado pela borda direita. A nota saiu de vez
+    na Fatia 62 (só favorito ficou) — o teste continua garantindo que o
+    botão cabe no painel."""
     painel.resize(300, 700)
     painel.show()
     qapp.processEvents()
 
     direita_do_fav = painel.fav_btn.mapTo(painel, painel.fav_btn.rect().topRight()).x()
     assert direita_do_fav <= painel.width(), "o botão Favorito sai do painel"
-
-    # E não divide mais a linha com as estrelas.
-    y_estrelas = painel.star_btns[0].mapTo(painel, painel.star_btns[0].rect().center()).y()
-    y_fav = painel.fav_btn.mapTo(painel, painel.fav_btn.rect().center()).y()
-    assert y_fav > y_estrelas
     painel.close()
 
 

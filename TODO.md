@@ -1374,3 +1374,35 @@ falhando contra o código antigo antes do fix (`git stash` no arquivo só
 do fix): `test_checkbox_de_tag_atualiza_a_grid_sem_filtro_ativo` e
 `test_arrastar_para_tag_atualiza_a_grid_sem_filtro_ativo`. 739 testes
 verdes no total.
+
+### ☑ Fatia 62 — Remover "Nota" (rating), manter só Favorito
+Pedido do Rafael: as 5 estrelas de nota saem da UI, fica só o favorito.
+**Só UI — não mexe no schema.** Coluna `assets.rating`,
+`assets_repo.set_rating()`, o campo no sidecar `.json` e o protocolo da
+ponte com o Blender (que expõe `rating` no JSON) continuam intactos —
+removê-los quebraria a leitura de sidecars antigos que já têm nota salva
+e o contrato externo da ponte, fora do escopo do pedido (só a UI).
+
+- `details_panel.py`: removida a fileira de 5 `QPushButton` de estrela
+  (`star_btns`) e `_on_star_clicked`/`_paint_stars`. `load_rating(rating,
+  starred)` virou `load_starred(starred)` — só favorito. O sinal
+  `rating_changed` saiu da classe.
+- `main_window.py`: removido o `rating_filter` (FilterButton "Nota:
+  todas…") da linha de filtros, `_on_rating_changed`, o parâmetro
+  `min_rating` em `_current_filters_dict()` e a restauração dele em
+  `_restore_filters()` (Smart Collection antiga com `min_rating` salvo é
+  ignorada — mesmo padrão já usado pra `include_subdirs` na Fatia 28c).
+- **Repositório (`assets_repo`) mantido de propósito:** `min_rating` como
+  parâmetro de `_build_where`/`list_for_grid` continua existindo — é
+  usado por `tests/test_ratings.py` e pelo protocolo da ponte
+  (`bridge/handlers.py` aceita `min_rating` vindo do Blender), então
+  "ninguém mais chama" não era bem verdade fora da UI.
+- 3 testes ajustados: `test_details_panel.py` (removida a comparação com
+  estrelas, mantida a checagem de que o Favorito cabe no painel),
+  `test_main_window.py` (assert de alinhamento trocado de `rating_filter`
+  pra `res_filter`), `test_ui_state.py` (teste inteiro de persistência do
+  filtro de nota removido — não existe mais o que persistir).
+
+**Deu certo quando:** testado contra a testlib real — painel de detalhes
+mostra só "☆ Favorito" (sem fileira de estrelas), barra de filtros só tem
+Resolução/Cor (sem "Nota: todas"). 738 testes verdes.
