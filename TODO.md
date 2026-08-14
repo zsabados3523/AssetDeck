@@ -1324,4 +1324,26 @@ teoria): textura `TreeBark1_diffuse` (4096×4096, preenche o quadrado
 inteiro) — antes do fix, canto superior-esquerdo reto/quadrado vazando;
 depois, acompanha a curva do card. 737 testes verdes (mesma ressalva de
 falhas pré-existentes da Fatia 59, sem relação com esta mudança).
-dependem do Blender de verdade, ambiente sem Blender funcional agora).
+
+### ☑ Fatia 61 — Badge de "asset tem tag" no card
+Pedido do Rafael, comparando com o Polydex: um selo no card avisando que o
+asset já está taggeado, igual ao badge de favorito/oculto que já existiam.
+O único canto ainda livre era o inferior-direito (superior-esquerdo =
+oculto, superior-direito = favorito, inferior-esquerdo = chip de extensão).
+
+- `assets_repo.list_for_grid` (`assetdeck/db/repos/assets.py`) ganhou
+  `EXISTS(SELECT 1 FROM asset_tags at WHERE at.asset_id = a.id) AS
+  has_tags` no SELECT principal — mesmo padrão de `files_count`, uma
+  subquery a mais, sem JOIN novo (evita duplicar linha por tag).
+- `HAS_TAGS_ROLE` novo em `asset_grid.py` (papel Qt, mesmo padrão de
+  `STARRED_ROLE`/`HIDDEN_ROLE`) e o desenho do badge em
+  `_paint_thumb()` (`asset_card_delegate.py`), reusando `_badge()` — o
+  mesmo ícone `nav-tags` (etiqueta) já usado na seção "Tags" da lateral,
+  pra manter o significado consistente em vez de inventar um glifo novo.
+- Em modo expandido (cada mapa de um set PBR como card próprio), `has_tags`
+  reflete o ASSET, não o arquivo — todos os mapas do mesmo set mostram o
+  badge junto, mesmo comportamento de `starred`/`hidden` hoje.
+
+**Verificado contra a testlib real:** taggeei um asset direto no banco só
+pra teste visual (removido depois — não é dado real da testlib), o badge
+apareceu certo no canto inferior-direito. 737 testes verdes.
