@@ -108,6 +108,19 @@ def _to_safe_mode(img: Image.Image) -> Image.Image:
     RGB/L/RGBA ANTES de reamostrar). Converter primeiro é estrutural: cobre
     qualquer modo exótico, não só os que apareceram na testlib.
     """
+    if img.mode == "P" and "transparency" in img.info:
+        # Paleta com um índice marcado transparente (chunk `tRNS`) não
+        # aparece em `getbands()` — modo "P" não tem banda "A" — então caía
+        # direto no `.convert("RGB")` de baixo, que ignora a transparência e
+        # PINTA o pixel com a cor CRUA daquele índice de paleta. Como esse
+        # índice costuma ser um valor de placeholder nunca desenhado de
+        # propósito, a cor que aparece é praticamente aleatória de arquivo
+        # pra arquivo — no caso do Rafael, saiu verde (Fatia 58, achado ao
+        # testar o preview automático por nome: sumia no card da grade mas
+        # o preview grande do painel de detalhes, que carrega o arquivo
+        # direto pelo Qt em vez de passar por aqui, sempre esteve certo).
+        # Ganha alpha de verdade ANTES de qualquer decisão de modo abaixo.
+        img = img.convert("RGBA")
     if "A" in img.getbands():
         # Cutouts: transparência REAL — o fundo do app aparece por trás
         # (feedback do Rafael; o xadrez da v2 foi descartado)

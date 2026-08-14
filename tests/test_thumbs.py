@@ -66,6 +66,41 @@ def test_modo_exotico_e_convertido(tmp_path):
     assert dest.exists()
 
 
+def test_png_paletado_com_transparencia_nao_pinta_cor_da_paleta(tmp_path):
+    """Bug relatado pelo Rafael (Fatia 58): previews assinalados
+    automaticamente apareciam com manchas verdes ALEATÓRIAS na grade, mas
+    normais no preview grande do painel de detalhes.
+
+    Causa: uma imagem em modo 'P' com um índice de paleta marcado
+    transparente (`tRNS`) não tem banda 'A' em `getbands()` — caía direto
+    no `.convert("RGB")`, que ignora a transparência e pinta o pixel com a
+    cor CRUA daquele índice (por isso "aleatório": depende de qual cor
+    cada arquivo tinha ali). O painel de detalhes nunca teve o bug porque
+    carrega o arquivo direto via Qt (`QPixmap`), não por aqui."""
+    src = tmp_path / "paleta_transparente.png"
+    img = Image.new("P", (32, 32), color=0)
+    paleta = [0, 0, 0] * 256
+    paleta[0:3] = [255, 0, 255]  # índice 0: cor "lixo" do slot transparente
+    paleta[3:6] = [200, 60, 60]  # índice 1: conteúdo real (opaco)
+    img.putpalette(paleta)
+    px = img.load()
+    for y in range(32):
+        for x in range(32):
+            px[x, y] = 1 if 10 <= x < 22 and 10 <= y < 22 else 0
+    img.info["transparency"] = 0
+    img.save(src)
+    dest = tmp_path / "thumb.png"
+
+    make_thumbnail(src, dest)
+
+    with Image.open(dest) as t:
+        assert t.mode == "RGBA"
+        # canto (índice 0, "transparente"): alpha zero, não a cor da paleta
+        assert t.getpixel((2, 2))[3] == 0
+        # miolo (índice 1, conteúdo real): continua opaco e com a cor certa
+        assert t.getpixel((16, 16)) == (200, 60, 60, 255)
+
+
 def test_arquivo_corrompido_levanta_erro_e_nao_deixa_lixo(tmp_path):
     src = tmp_path / "quebrada.jpg"
     src.write_bytes(b"isto nao e um jpeg")
