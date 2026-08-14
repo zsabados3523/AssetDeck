@@ -34,7 +34,6 @@ def human_size(n: int) -> str:
 class DetailsPanel(QWidget):
     notes_saved = Signal(int, str)        # asset_id, texto da nota
     tag_toggled = Signal(int, int, bool)  # asset_id, tag_id, marcado?
-    rating_changed = Signal(object)       # int 1–5 ou None (limpar)
     starred_changed = Signal(bool)
     preview_add_requested = Signal(int)   # asset_id (botão 'Adicionar…')
     preview_cover_requested = Signal(int)  # preview_id
@@ -122,11 +121,9 @@ class DetailsPanel(QWidget):
         self.add_preview_btn = QPushButton("Adicionar preview…")
         self.add_preview_btn.clicked.connect(self._request_add_preview)
 
-        # Rating (5 estrelas clicáveis) + favorito — Fatia 9
-        from PySide6.QtWidgets import QHBoxLayout as _QHBox
-
-        # Ícone, não texto: nenhuma fonte da máquina tem o glifo ★ (medido com
-        # QRawFont na Fatia 24) — o Qt caía numa fonte substituta e saía torto.
+        # Favorito — Fatia 9. Nota em estrelas removida na Fatia 62 (pedido
+        # do Rafael: só favorito, sem nota) — ficou só o ícone de estrela
+        # para o próprio favorito.
         from PySide6.QtCore import QSize as _QSize
 
         from assetdeck.ui import icons as _icons
@@ -134,22 +131,6 @@ class DetailsPanel(QWidget):
         self._star_filled = _icons.icon("star-filled", theme.current_colors()["accent"])
         self._star_outline = _icons.icon("star-outline", theme.current_colors()["text_muted"])
 
-        self._rating: int | None = None
-        stars_row = _QHBox()
-        self.star_btns: list[QPushButton] = []
-        for i in range(1, 6):
-            b = QPushButton()
-            b.setObjectName("ghost")
-            b.setIconSize(_QSize(16, 16))
-            b.setMaximumWidth(28)
-            b.clicked.connect(lambda _c=False, n=i: self._on_star_clicked(n))
-            self.star_btns.append(b)
-            stars_row.addWidget(b)
-        stars_row.addStretch()
-
-        # O favorito ficava NA MESMA linha das cinco estrelas e era cortado
-        # pela borda do painel (visto na tela): 5 botões + um botão com texto
-        # não cabem em ~250px úteis. Linha própria, largura inteira.
         self.fav_btn = QPushButton("Favorito")
         self.fav_btn.setIconSize(_QSize(16, 16))
         self.fav_btn.setCheckable(True)
@@ -208,7 +189,6 @@ class DetailsPanel(QWidget):
         layout.addWidget(self.open_file_btn)
         layout.addWidget(self.open_folder_btn)
         layout.addWidget(self.check_textures_btn)
-        layout.addLayout(stars_row)
         layout.addWidget(self.fav_btn)
         layout.addWidget(self.multi_label)
         gallery_label = QLabel("GALERIA DE PREVIEWS")
@@ -246,7 +226,6 @@ class DetailsPanel(QWidget):
         outer.setSpacing(0)
         outer.addWidget(scroll)
 
-        self._paint_stars()
         self.fav_btn.setIcon(self._star_outline)
 
     @staticmethod
@@ -368,7 +347,7 @@ class DetailsPanel(QWidget):
         if self._current_asset_id is not None:
             self.preview_add_requested.emit(self._current_asset_id)
 
-    # ---- rating / favorito ----
+    # ---- favorito ----
 
     def set_multi_count(self, n: int) -> None:
         """n>1: avisa que as edições valem para todos os selecionados."""
@@ -377,34 +356,18 @@ class DetailsPanel(QWidget):
 
     def refresh_theme(self) -> None:
         """Reconstrói os ícones de estrela com a cor do modo atual (Fatia
-        43) e redesenha o estado atual de nota/favorito com eles."""
+        43) e redesenha o estado atual de favorito com eles."""
         from assetdeck.ui import icons as _icons
 
         self._star_filled = _icons.icon("star-filled", theme.current_colors()["accent"])
         self._star_outline = _icons.icon("star-outline", theme.current_colors()["text_muted"])
-        self._paint_stars()
         self.fav_btn.setIcon(self._star_filled if self.fav_btn.isChecked() else self._star_outline)
 
-    def _paint_stars(self) -> None:
-        for i, b in enumerate(self.star_btns, start=1):
-            b.setIcon(
-                self._star_filled if self._rating and i <= self._rating
-                else self._star_outline
-            )
-
-    def load_rating(self, rating: int | None, starred: bool) -> None:
-        self._rating = rating
-        self._paint_stars()
+    def load_starred(self, starred: bool) -> None:
         self.fav_btn.blockSignals(True)
         self.fav_btn.setChecked(starred)
         self.fav_btn.setIcon(self._star_filled if starred else self._star_outline)
         self.fav_btn.blockSignals(False)
-
-    def _on_star_clicked(self, n: int) -> None:
-        # Clicar na estrela da nota atual limpa a nota
-        self._rating = None if self._rating == n else n
-        self._paint_stars()
-        self.rating_changed.emit(self._rating)
 
     def _on_fav_toggled(self, checked: bool) -> None:
         self.fav_btn.setIcon(self._star_filled if checked else self._star_outline)
