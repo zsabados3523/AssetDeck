@@ -63,6 +63,7 @@ HIDDEN_ROLE = Qt.ItemDataRole.UserRole + 2
 TYPE_ROLE = Qt.ItemDataRole.UserRole + 3
 EXT_ROLE = Qt.ItemDataRole.UserRole + 4       # ".FBX", ".EXR"... para o chip
 HAS_THUMB_ROLE = Qt.ItemDataRole.UserRole + 5  # False = decoração é placeholder
+HAS_TAGS_ROLE = Qt.ItemDataRole.UserRole + 6  # True = asset tem 1+ tag (Fatia 61)
 
 
 class AssetGridModel(QAbstractListModel):
@@ -229,6 +230,8 @@ class AssetGridModel(QAbstractListModel):
             return row["asset_type"]
         if role == EXT_ROLE:
             return Path(row["rel_path"]).suffix.upper()
+        if role == HAS_TAGS_ROLE:
+            return bool(row.get("has_tags"))
         if role == HAS_THUMB_ROLE:
             # A pintura sempre pede DecorationRole antes (é o delegate quem
             # decide a ordem), então esta chave já está populada.

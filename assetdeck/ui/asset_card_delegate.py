@@ -24,6 +24,7 @@ from assetdeck.ui.asset_grid import (
     CARD_PAD,
     CELL,
     EXT_ROLE,
+    HAS_TAGS_ROLE,
     HAS_THUMB_ROLE,
     HIDDEN_ROLE,
     MAX_ICON,
@@ -61,6 +62,7 @@ class AssetCardDelegate(QStyledItemDelegate):
         self._pen_chip = QPen(QColor("#FFFFFF"))  # texto do chip sobre o selo escuro — fixo
         self._icon_star = icons.pixmap("star-filled", "#FFFFFF", 12)
         self._icon_hidden = icons.pixmap("eye-off", "#FFFFFF", 12)
+        self._icon_tags = icons.pixmap("nav-tags", "#FFFFFF", 12)
 
         self._cell = CELL  # tamanho devolvido por sizeHint(); ver set_icon_size
         self.refresh_theme()
@@ -216,6 +218,14 @@ class AssetCardDelegate(QStyledItemDelegate):
             self._badge(painter, rect.x() + 4, rect.y() + 4, self._icon_hidden)
         if bool(index.data(STARRED_ROLE)):
             self._badge(painter, rect.right() - _BADGE - 4, rect.y() + 4, self._icon_star)
+        # Canto inferior-direito (Fatia 61) — o único que ainda estava livre:
+        # oculto = superior-esquerdo, favorito = superior-direito, extensão =
+        # inferior-esquerdo (`_chip`, mais abaixo). Fica fora do `_chip` de
+        # extensão de propósito: são informações diferentes, não competem
+        # pelo mesmo canto.
+        if bool(index.data(HAS_TAGS_ROLE)):
+            self._badge(painter, rect.right() - _BADGE - 4, rect.bottom() - _BADGE - 4,
+                        self._icon_tags)
 
         ext = index.data(EXT_ROLE)
         if ext:

@@ -582,12 +582,28 @@ class MainWindow(QMainWindow):
     # ---- tags ----
 
     def _after_tags_changed(self, asset_ids: list[int], mensagem: str) -> None:
-        """Rotina comum pós-mudança de tags: FTS, sidecars e refresh."""
+        """Rotina comum pós-mudança de tags: FTS, sidecars e refresh.
+
+        BUG relatado pelo Rafael (2026-08-14): taggear "parecia não fazer
+        nada" arrastando, pelo Ctrl+T ou pelo checkbox do painel de
+        detalhes. A gravação no banco sempre funcionou (conferido direto
+        com `tags_repo.assign`/`tags_of`) — o que faltava era a grid
+        refletir a mudança: só chamava `_apply_filters()` quando havia
+        filtro de tag ou busca ativos, então navegando uma pasta normal
+        (o caso mais comum) nada na tela mudava. Antes da Fatia 61 isso já
+        era um bug (silencioso, sem nenhum indício visual de tag na grid);
+        o badge novo só expôs o sintoma. Mesmo padrão que `_on_rating_changed`/
+        `_on_starred_changed` já usavam: `_reload_grid()` sempre roda (barato,
+        preserva rolagem/seleção — Fatia 45); `_apply_filters()` continua só
+        quando o FILTRO ativo pode mudar de resultado (tag/busca).
+        """
         assets_repo.rebuild_fts(self._conn)
         for aid in asset_ids:
             sidecar_writer.write_for_asset(self._conn, self._library_root, aid)
         if self.tags.current_tag_id() is not None or self.search_box.text().strip():
             self._apply_filters()  # o filtro ativo pode ter mudado de resultado
+        else:
+            self._reload_grid()  # sem filtro: só repinta os badges/estado dos cards
         self.statusBar().showMessage(mensagem)
 
     def _on_assets_dropped(self, tag_id: int, asset_ids: list[int]) -> None:
