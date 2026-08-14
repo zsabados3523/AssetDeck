@@ -100,3 +100,41 @@ def test_salvar_grava_a_cena_de_render(qapp, tmp_path, monkeypatch):
     assert novo["render_bg_color"] == "#abcdef"
     assert novo["render_bg_strength"] == 2.5
     assert novo["render_sun_energy"] == 6.0
+
+
+# ---- preview automático por nome igual (Fatia 57) ----
+
+def test_preview_automatico_desligado_por_padrao(qapp, tmp_path, monkeypatch):
+    _isolar(tmp_path, monkeypatch)
+    config.load_config()
+
+    dlg = PreferencesDialog()
+
+    assert dlg.auto_match_previews.isChecked() is False
+    assert dlg.auto_match_hide_source.isEnabled() is False  # sem sentido sem o pai ligado
+
+
+def test_ocultar_origem_so_habilita_com_o_toggle_ligado(qapp, tmp_path, monkeypatch):
+    _isolar(tmp_path, monkeypatch)
+    config.load_config()
+    dlg = PreferencesDialog()
+
+    dlg.auto_match_previews.setChecked(True)
+    assert dlg.auto_match_hide_source.isEnabled() is True
+
+    dlg.auto_match_previews.setChecked(False)
+    assert dlg.auto_match_hide_source.isEnabled() is False
+
+
+def test_salvar_grava_os_dois_toggles(qapp, tmp_path, monkeypatch):
+    _isolar(tmp_path, monkeypatch)
+    config.load_config()
+
+    dlg = PreferencesDialog()
+    dlg.auto_match_previews.setChecked(True)
+    dlg.auto_match_hide_source.setChecked(True)
+    dlg._salvar()
+
+    novo = config.load_config()
+    assert novo["auto_match_previews_by_name"] is True
+    assert novo["auto_match_hide_source"] is True

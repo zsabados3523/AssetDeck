@@ -66,6 +66,29 @@ class PreferencesDialog(QDialog):
         atual = self._cfg.get("hide_preview_source", "ask")
         self.hide_preview_source.setCurrentText(_ORIGEM_LABEL.get(atual, _ORIGEM_LABEL["ask"]))
 
+        # Preview automático por nome igual (Fatia 57): 'Cadeira.blend' +
+        # 'Cadeira.jpg' na mesma pasta vira capa sozinha, a cada varredura.
+        # Desligado por padrão — mexe em vários assets de uma vez.
+        self.auto_match_previews = QCheckBox("Assinalar previews automaticamente por nome igual")
+        self.auto_match_previews.setChecked(
+            bool(self._cfg.get("auto_match_previews_by_name", False)))
+        self.auto_match_previews.setToolTip(
+            "Ao reindexar, um modelo sem capa que tenha uma imagem de mesmo "
+            "nome na mesma pasta ('Cadeira.blend' + 'Cadeira.jpg') ganha essa "
+            "imagem como capa automaticamente. Ambíguo (2+ imagens com o "
+            "mesmo nome) é pulado, nunca adivinhado."
+        )
+
+        self.auto_match_hide_source = QCheckBox("Ocultar a imagem usada como preview")
+        self.auto_match_hide_source.setChecked(
+            bool(self._cfg.get("auto_match_hide_source", False)))
+        self.auto_match_hide_source.setToolTip(
+            "Reversível em \"Mostrar ocultos\" — só some da grade, o arquivo "
+            "na biblioteca não é tocado."
+        )
+        self.auto_match_previews.toggled.connect(self.auto_match_hide_source.setEnabled)
+        self.auto_match_hide_source.setEnabled(self.auto_match_previews.isChecked())
+
         self.backup_keep = QSpinBox()
         self.backup_keep.setRange(1, 365)
         self.backup_keep.setValue(int(self._cfg.get("backup_keep", 14)))
@@ -105,6 +128,8 @@ class PreferencesDialog(QDialog):
         layout.addRow(self.bridge_enabled)
         layout.addRow("Porta da ponte:", self.bridge_port)
         layout.addRow("Imagem da biblioteca como preview:", self.hide_preview_source)
+        layout.addRow(self.auto_match_previews)
+        layout.addRow(self.auto_match_hide_source)
         layout.addRow("Backups diários a manter:", self.backup_keep)
         layout.addRow("Cor do fundo do render:", self.render_bg_color_btn)
         layout.addRow("Força do fundo:", self.render_bg_strength)
@@ -123,6 +148,8 @@ class PreferencesDialog(QDialog):
         self._cfg["bridge_enabled"] = self.bridge_enabled.isChecked()
         self._cfg["bridge_port"] = self.bridge_port.value()
         self._cfg["hide_preview_source"] = _LABEL_ORIGEM[self.hide_preview_source.currentText()]
+        self._cfg["auto_match_previews_by_name"] = self.auto_match_previews.isChecked()
+        self._cfg["auto_match_hide_source"] = self.auto_match_hide_source.isChecked()
         self._cfg["backup_keep"] = self.backup_keep.value()
         self._cfg["render_bg_color"] = self._render_bg_color
         self._cfg["render_bg_strength"] = self.render_bg_strength.value()
