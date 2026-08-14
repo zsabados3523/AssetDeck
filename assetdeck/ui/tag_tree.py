@@ -97,6 +97,18 @@ class TagTree(QTreeWidget):
             it += 1
         return expandidas
 
+    def set_expanded(self, ids: set[int]) -> None:
+        """Aplica um conjunto de tags expandidas vindo de fora (Fatia 54:
+        restaurar da sessão anterior). Espelho de `_tags_expandidas()` —
+        assume que a árvore já foi carregada (chamar depois de `reload`)."""
+        it = QTreeWidgetItemIterator(self)
+        while it.value():
+            item = it.value()
+            tag_id = item.data(0, _TAG_ROLE)
+            if tag_id is not None:
+                item.setExpanded(tag_id in ids)
+            it += 1
+
     def current_tag_id(self) -> int | None:
         item = self.currentItem()
         return item.data(0, _TAG_ROLE) if item else None
