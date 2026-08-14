@@ -1224,3 +1224,52 @@ verdes (era 582).
   o projeto usa o 5.2 do Flatpak).
 - ☐ Quando o app estiver maduro: cadastrar a biblioteca real do SSD como
   segunda library (o caminho é configuração, nunca hardcoded).
+
+### ☑ Fatia 53 — biblioteca que muda de ponto de montagem (o app acha sozinho)
+Rafael relatou em 2026-08-09: arrastar imagem pra definir preview "não
+acontece nada", mesmo com o cursor mostrando "+", e **com o SSD montado**.
+
+**O drag-and-drop estava certo** — a Fatia 52 resolveu de verdade. O log
+mostra o gesto chegando inteiro ao fim: `dropEvent` → `_apply_drop` →
+`_on_asset_preview_dropped`. Quebrava no passo seguinte, ao COPIAR:
+
+    FileNotFoundError: Imagem de preview não existe:
+      /media/rafael/SSD/Documentos/{cura}/.../CURA_Poltrona Calligaris_Lazy.jpg
+
+**Causa:** o SSD é montado automaticamente e o ponto de montagem MUDA entre
+sessões. Estava gravado `/media/rafael/SSD/...`; naquele dia o mesmo disco
+apareceu em `/mnt/284A670E4A66D7D8/...` (`lsblk`: `sdb1 LABEL=SSD` montado
+em `/mnt/<uuid>`, e `/media/rafael/` vazio). É a MESMA classe de problema
+do "achado à parte" da Fatia 52 — só que ali o disco estava desmontado e
+aqui ele está montado em outro lugar, que é bem mais traiçoeiro: parece
+tudo certo na tela.
+
+**Por que era invisível:** a grade continua inteira (as miniaturas vêm do
+cache), então nada denuncia o problema até você tentar LER um arquivo
+original. E o único aviso era uma mensagem discreta no rodapé.
+
+**Fix — `assetdeck/library_root.py` (novo):**
+- `resolve(caminho)` — se o caminho não existir, procura a MESMA biblioteca
+  nos pontos de montagem do sistema (`/media/<user>/*`, `/run/media/<user>/*`,
+  `/mnt/*`), casando o FINAL do caminho. Vence o sufixo mais longo que
+  existir (quanto mais pedaços batem, menor a chance de coincidência).
+- `repoint(conn, antiga, nova)` — grava a raiz nova em `libraries.root_path`.
+
+**Os DOIS lugares têm de mudar juntos** (config.json + `libraries.root_path`):
+só o config faria `libraries.get_or_create` criar uma library NOVA e vazia,
+e os 72 mil assets do Rafael sumiriam da grade. `assets.rel_path` é
+relativo, então nada mais precisa mudar.
+
+**Na abertura (`app._confirmar_biblioteca`)**, depois do `QApplication` e
+antes da janela:
+- achou em outro lugar → pergunta "quer que eu passe a usar o caminho novo?"
+  e reaponta os dois lugares no "Sim";
+- não achou em lugar nenhum → avisa (disco desconectado?) e oferece escolher
+  a pasta;
+- `--screenshot` → só loga e segue (diálogo modal travaria a captura).
+
+9 testes novos (`tests/test_library_root.py`), incluindo o caso real do
+Rafael e ponto de montagem ilegível (disco removido no meio do caminho não
+pode derrubar a abertura do app).
+
+**Fecha a "ideia de melhoria que ficou de fora" registrada na Fatia 52.**
