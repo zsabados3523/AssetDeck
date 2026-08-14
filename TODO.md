@@ -1503,3 +1503,73 @@ apareceria de novo). Arquivo devolvido ao lugar depois do teste.
 falhando contra o código antigo (`git stash` só no `main_window.py`):
 `test_on_finished_pula_warmup_quando_so_sumiu_arquivo` e
 `..._so_restaurou_sidecar`. 759 testes verdes no total.
+
+### ☑ Fatia 65 — Preview e visualizador de HDRI embutidos, sem "piscar"
+Rafael relatou dois sintomas do mesmo problema: o visualizador de HDRI
+"pisca" (fecha e abre) ao carregar, e o popup de preview (duplo clique)
+parece "abrir outra janela" quando o pedido era algo integrado ao
+programa.
+
+**Causa raiz, a mesma dos dois:** `PreviewPopup` e `HdriViewer` eram
+`QDialog` com `setWindowFlag(Qt.WindowType.Window)` — cada abertura fazia
+o Qt criar uma SUPERFÍCIE NATIVA de janela nova (mais custoso ainda no
+HDRI, que carrega contexto OpenGL próprio), e o compositor remapeia essa
+superfície — é o "piscar". E por serem janelas de topo de verdade,
+apareciam como item separado no alt-tab/barra de tarefas — daí "parece
+abrir outra janela".
+
+**Fix — `assetdeck/ui/overlay.py` (novo), `OverlayPanel(QWidget)`:**
+widget comum, filho do WIDGET CENTRAL da janela (não da `MainWindow`
+direto — evita interferir no layout interno do `QMainWindow`) — nunca
+vira janela própria, nunca tem superfície nativa nova, então não tem o
+que "piscar". Cobre a área de conteúdo inteira com um fundo
+semi-transparente (`QPainter.fillRect`, não `setStyleSheet` — regra do
+projeto) atrás de um cartão central (`theme.make_card`) onde o conteúdo
+mora. Esc ou clicar no FUNDO fecha; clicar no CARTÃO não fecha — de graça
+pela própria propagação de eventos do Qt (o cartão é widget filho e
+consome o clique antes de chegar no overlay), sem precisar calcular
+retângulo nenhum. Redimensionar a janela do AssetDeck com o overlay
+aberto acompanha (`installEventFilter` no host, capturado no
+`QEvent.Type.Resize`).
+
+- `PreviewPopup`/`HdriViewer` viraram `OverlayPanel` em vez de `QDialog`.
+  Perderam `setWindowFlag`/`resize()` fixo (agora o CARTÃO tem tamanho
+  padronizado — mesma ideia de antes ("não pula de tamanho trocando de
+  imagem"), só que calculado a partir do tamanho da JANELA, não mais da
+  tela inteira, já que agora mora dentro dela).
+  `self.setWindowTitle(...)` (não existe mais título de janela) virou um
+  `QLabel` dentro do cartão pro `PreviewPopup`; o `HdriViewer` já mostrava
+  o nome do arquivo na barra de status, sem mudança aí.
+- `HdriViewer.closeEvent` (limpeza da textura na GPU) virou conectado ao
+  sinal `closed` do `OverlayPanel` — não existe mais "fechar janela", só
+  "esconder o overlay".
+- `MainWindow`: os dois passam a ser filhos de `self._central` (o widget
+  passado a `setCentralWidget`), criado DEPOIS dele existir — antes o
+  `PreviewPopup` nascia cedo demais no `__init__`, sem host com tamanho
+  real ainda.
+
+**Verificado com a MainWindow real contra a testlib** (script manual —
+`_open_preview()` chamado direto, sem precisar de mouse de verdade, já
+que `--screenshot` não simula duplo clique): os dois screenshots mostram
+o overlay claramente EMBUTIDO — barra de menus, lateral e painel de
+detalhes do AssetDeck visíveis ao redor/atrás do fundo escurecido. O
+visualizador de HDRI foi testado com um arquivo de verdade da testlib
+(`birchwood_4k.hdr`, floresta de bétulas na neve) — renderizou certo
+dentro do overlay, confirmando que o `QOpenGLWidget` funciona normal
+como widget filho comum (não precisa ser o único conteúdo de uma janela
+de topo, suposição que motivava o design antigo).
+
+**9 testes novos** (`tests/test_preview_popup.py`, reescrito — os 2
+testes antigos de "fecha ao perder foco de janela" não fazem mais
+sentido, viraram "Esc fecha"/"clique no fundo fecha"): tamanho do
+cartão, fit de imagem grande/pequena/panorâmica, abrir/fechar,
+Esc, clique no fundo, acompanhar redimensionamento do host.
+`test_hdri_roteamento.py`/`test_hdri_viewer.py` passaram sem mudança
+(não instanciam `HdriViewer` de verdade — sem contexto OpenGL no
+pytest — e o roteamento continua olhando só `preview_popup`/
+`_hdri_viewer()`, que não mudaram de nome). 761 testes verdes no total.
+
+**Pendente de confirmação do Rafael na tela real:** o "piscar" em si (é
+efeito do compositor/gerenciador de janelas — não dá pra provar 100% por
+screenshot automatizado, mesma ressalva já registrada em outras fatias
+de UI do F4).
