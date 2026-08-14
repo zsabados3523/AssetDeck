@@ -1,12 +1,13 @@
-"""Templates de tags prontos (Fatia 35).
+"""Templates de tags prontos (Fatia 35, generalizado na Fatia 55).
 
-Montar à mão uma árvore que dê conta de uma biblioteca de arquitetura são
-dezenas de tags, cada uma com nome, cor e ícone — chato o bastante para
-nunca ser feito. Aqui a estrutura vem pronta.
+Montar à mão uma árvore que dê conta de uma biblioteca inteira são dezenas
+de tags, cada uma com nome, cor e ícone — chato o bastante para nunca ser
+feito. Aqui a estrutura vem pronta, um TEMPLATE por área de trabalho
+(Arquitetura, Propaganda, Construção...).
 
-Os três níveis são **o mesmo tronco podado em profundidades diferentes**,
-não três listas soltas: aplicar o "balanceado" depois do "resumido" só
-acrescenta folhas, sem duplicar nada.
+Dentro de cada template, os três níveis são **o mesmo tronco podado em
+profundidades diferentes**, não três listas soltas: aplicar o
+"balanceado" depois do "resumido" só acrescenta folhas, sem duplicar nada.
 
 Aplicar SOMA, nunca substitui: `tags_repo.create()` devolve a tag
 existente sem tocar em cor, ícone ou nos assets já marcados.
@@ -144,13 +145,217 @@ ARQUITETURA: tuple[No, ...] = (
     )),
 )
 
+# ---- Propaganda/Publicidade (Fatia 55) ----
+PROPAGANDA: tuple[No, ...] = (
+    No("Formato", "tag-papel", AMBAR, (
+        No("Anúncio impresso"), No("Banner digital"), No("Vídeo/Comercial"),
+        No("Social media", None, None, (
+            No("Stories"), No("Feed"), No("Reels/Shorts"),
+        )),
+        No("Outdoor"),
+    )),
+    No("Mídia", "tag-camera", AZUL, (
+        No("Still"), No("Motion"), No("3D render"), No("Mockup"),
+    )),
+    No("Produto/Cena", "tag-movel", ROXO, (
+        No("Embalagem"), No("Produto em cena"), No("Still life"), No("Cenário/set"),
+    )),
+    No("Elementos gráficos", "tag-pincel", PETROLEO, (
+        No("Logo/Marca"), No("Tipografia"), No("Ícone"), No("Textura de fundo"),
+    )),
+    No("Iluminação/Estúdio", "tag-luz", TERRA, (
+        No("Softbox"), No("Fundo infinito"), No("Ring light"),
+        No("HDRI de estúdio"),
+    )),
+    No("Composição/Câmera", "tag-camera", VERDE, (
+        No("Ângulo baixo"), No("Close-up"), No("Plano aberto"), No("Simetria"),
+    )),
+    No("Estilo", "tag-espelho", CINZA, (
+        No("Minimalista"), No("Vibrante"), No("Corporativo"), No("Luxo"),
+        No("Retrô"),
+    )),
+    No("Referência", "tag-papel", AREIA, (
+        No("Moodboard"), No("Briefing"), No("Cliente"),
+    )),
+)
 
-def arvore(nivel: str) -> tuple[No, ...]:
-    """O tronco podado na profundidade do nível."""
+# ---- Construção (Fatia 55) ----
+CONSTRUCAO: tuple[No, ...] = (
+    No("Materiais de construção", "tag-concreto", TERRA, (
+        No("Cimento/Argamassa"), No("Tijolo/Bloco"), No("Aço estrutural"),
+        No("Madeira de obra"), No("Telha"), No("Impermeabilizante"),
+    )),
+    No("Equipamentos/Maquinário", "tag-metal", CINZA, (
+        No("Escavadeira"), No("Guindaste"), No("Betoneira"),
+        No("Andaime"), No("Empilhadeira"),
+    )),
+    No("Estrutura", "tag-tijolo", AZUL, (
+        No("Fundação"), No("Laje"), No("Pilar"), No("Viga"),
+        No("Alvenaria"), No("Cobertura"),
+    )),
+    No("Canteiro de obras", "tag-bandeira", AREIA, (
+        No("Tapume"), No("Container"), No("Sinalização"), No("Depósito"),
+    )),
+    No("EPI/Segurança", "tag-alerta", AMBAR, (
+        No("Capacete"), No("Colete"), No("Bota"), No("Cinto de segurança"),
+    )),
+    No("Instalações", "tag-luz", PETROLEO, (
+        No("Elétrica"), No("Hidráulica"), No("HVAC"), No("Gás"),
+    )),
+    No("Documentação técnica", "tag-papel", ROXO, (
+        No("Planta baixa"), No("Corte"), No("Detalhe construtivo"), No("Memorial"),
+    )),
+    No("Fases da obra", "tag-estrela", VERDE, (
+        No("Terraplenagem"), No("Estrutural"), No("Acabamento"), No("Entrega"),
+    )),
+)
+
+# ---- Filme & Animação (Fatia 55) ----
+FILME_ANIMACAO: tuple[No, ...] = (
+    No("Cenário/Set", "tag-movel", TERRA, (
+        No("Interior"), No("Exterior"), No("Estúdio virtual"), No("Matte painting"),
+    )),
+    No("Personagem/Prop", "tag-estrela", ROXO, (
+        No("Rig"), No("Vestuário"), No("Adereço"), No("Veículo de cena"),
+    )),
+    No("Câmera", "tag-camera", AZUL, (
+        No("Lente"), No("Movimento de câmera"), No("Ângulo"),
+        No("Profundidade de campo"),
+    )),
+    No("Iluminação", "tag-luz", AMBAR, (
+        No("Três pontos"), No("Prática"), No("HDRI de locação"), No("Contraluz"),
+    )),
+    No("Efeitos", "tag-alerta", PETROLEO, (
+        No("Partículas"), No("Fumaça/Fogo"), No("Destruição"),
+        No("Fluido"), No("Simulação de tecido"),
+    )),
+    No("Pós-produção", "tag-pincel", CINZA, (
+        No("Color grading"), No("Compositing"), No("LUT"), No("Grão de filme"),
+    )),
+    No("Gênero/Estilo", "tag-bandeira", VERDE, (
+        No("Drama"), No("Ação"), No("Ficção científica"),
+        No("Animação 2D"), No("Stop motion"),
+    )),
+    No("Referência", "tag-papel", AREIA, (
+        No("Storyboard"), No("Shotlist"), No("Continuidade"),
+    )),
+)
+
+# ---- Game Dev (Fatia 55) ----
+GAMEDEV: tuple[No, ...] = (
+    No("Categoria de asset", "tag-movel", ROXO, (
+        No("Prop"), No("Terreno/Environment"), No("Personagem"),
+        No("Arma"), No("UI/HUD"), No("VFX"),
+    )),
+    No("Engine/Pipeline", "tag-metal", CINZA, (
+        No("Unreal"), No("Unity"), No("Godot"), No("Substance"),
+    )),
+    No("Nível técnico", "tag-estrela", AZUL, (
+        No("Low poly"), No("High poly (baked)"), No("PBR"),
+        No("Rigged"), No("Animado"),
+    )),
+    No("Estilo visual", "tag-pincel", AMBAR, (
+        No("Realista"), No("Stylized"), No("Cartoon"),
+        No("Pixel art"), No("Low poly art"),
+    )),
+    No("Gameplay", "tag-bandeira", VERDE, (
+        No("Interativo"), No("Colecionável"), No("Obstáculo"), No("Colisão"),
+    )),
+    No("Otimização", "tag-alerta", PETROLEO, (
+        No("LOD"), No("Texture atlas"), No("Occlusion"), No("Draw call"),
+    )),
+    No("Plataforma", "tag-espelho", TERRA, (
+        No("PC"), No("Mobile"), No("Console"), No("VR/AR"),
+    )),
+    No("Referência", "tag-papel", AREIA, (
+        No("Concept art"), No("Style guide"),
+    )),
+)
+
+# ---- Design de Produto (Fatia 55 — proposta) ----
+DESIGN_PRODUTO: tuple[No, ...] = (
+    No("Tipo de produto", "tag-movel", ROXO, (
+        No("Eletrônico"), No("Mobiliário"), No("Utensílio"),
+        No("Embalagem"), No("Wearable"),
+    )),
+    No("Material/Acabamento", "tag-plastico", TERRA, (
+        No("Plástico injetado"), No("Metal usinado"), No("Vidro"),
+        No("Silicone"), No("Fosco/Brilhante"),
+    )),
+    No("Processo de fabricação", "tag-metal", CINZA, (
+        No("Impressão 3D"), No("Injeção"), No("Usinagem CNC"), No("Corte a laser"),
+    )),
+    No("Embalagem", "tag-papel", AREIA, (
+        No("Caixa"), No("Blister"), No("Rótulo"), No("Unboxing"),
+    )),
+    No("Ergonomia/Escala", "tag-estrela", AZUL, (
+        No("Mão"), No("Corpo"), No("Ambiente de uso"),
+    )),
+    No("Renderização", "tag-camera", PETROLEO, (
+        No("Estúdio de produto"), No("Explodido"), No("Corte técnico"),
+    )),
+    No("Estilo", "tag-espelho", AMBAR, (
+        No("Minimalista"), No("Industrial"), No("Orgânico"),
+    )),
+    No("Referência", "tag-papel", VERDE, (
+        No("Moodboard"), No("Concorrente"), No("Patente"),
+    )),
+)
+
+# ---- VFX & Simulação (Fatia 55 — proposta) ----
+VFX_SIMULACAO: tuple[No, ...] = (
+    No("Tipo de efeito", "tag-alerta", AMBAR, (
+        No("Explosão"), No("Fumaça"), No("Fogo"), No("Água"),
+        No("Destruição"), No("Magia/Energia"),
+    )),
+    No("Simulação física", "tag-metal", CINZA, (
+        No("Rígida"), No("Tecido"), No("Fluido"), No("Cabelo/Pelo"), No("Softbody"),
+    )),
+    No("Partículas", "tag-estrela", AZUL, (
+        No("Emissor"), No("Força/Campo"), No("Colisão"), No("Instância"),
+    )),
+    No("Ambiente/Elemento", "tag-folha", VERDE, (
+        No("Poeira"), No("Névoa"), No("Faísca"), No("Detrito"),
+    )),
+    No("Integração/Comp", "tag-camera", PETROLEO, (
+        No("Green screen"), No("Matte"), No("Passes/AOV"), No("Motion tracking"),
+    )),
+    No("Estilo", "tag-espelho", ROXO, (
+        No("Realista"), No("Estilizado"), No("Cartoon FX"),
+    )),
+    No("Referência", "tag-papel", AREIA, (
+        No("Reference footage"), No("Breakdown"),
+    )),
+)
+
+
+class Template(NamedTuple):
+    rotulo: str
+    raizes: tuple[No, ...]
+
+
+# Chave usada no seletor do diálogo e como argumento de `arvore`/`aplicar`/
+# `previa` — a ordem aqui é a ordem que aparece na lista do diálogo.
+TEMPLATES: dict[str, Template] = {
+    "arquitetura": Template("Arquitetura", ARQUITETURA),
+    "propaganda": Template("Propaganda/Publicidade", PROPAGANDA),
+    "construcao": Template("Construção", CONSTRUCAO),
+    "filme_animacao": Template("Filme & Animação", FILME_ANIMACAO),
+    "gamedev": Template("Game Dev", GAMEDEV),
+    "design_produto": Template("Design de Produto", DESIGN_PRODUTO),
+    "vfx_simulacao": Template("VFX & Simulação", VFX_SIMULACAO),
+}
+
+
+def arvore(template: str, nivel: str) -> tuple[No, ...]:
+    """O tronco do `template` podado na profundidade do `nivel`."""
+    tpl = TEMPLATES.get(template)
+    if tpl is None:
+        raise ValueError(f"Template de tags desconhecido: {template!r}")
     profundidade = dict((k, p) for k, _, p in NIVEIS).get(nivel)
     if profundidade is None:
         raise ValueError(f"Nível de template desconhecido: {nivel!r}")
-    return _podar(ARQUITETURA, profundidade)
+    return _podar(tpl.raizes, profundidade)
 
 
 def _podar(nos: tuple[No, ...], restante: int) -> tuple[No, ...]:
@@ -168,7 +373,7 @@ class Resultado(NamedTuple):
     existentes: int
 
 
-def aplicar(conn: sqlite3.Connection, nivel: str) -> Resultado:
+def aplicar(conn: sqlite3.Connection, template: str, nivel: str) -> Resultado:
     """Cria o que falta e reaproveita o que já existe.
 
     Nunca sobrescreve: uma tag com o mesmo nome no mesmo pai mantém a cor,
@@ -176,7 +381,7 @@ def aplicar(conn: sqlite3.Connection, nivel: str) -> Resultado:
     """
     criadas = existentes = 0
     fila: list[tuple[No, int | None, str | None]] = [
-        (n, None, None) for n in arvore(nivel)
+        (n, None, None) for n in arvore(template, nivel)
     ]
     while fila:
         no, pai_id, cor_herdada = fila.pop(0)
@@ -189,12 +394,13 @@ def aplicar(conn: sqlite3.Connection, nivel: str) -> Resultado:
                                   color=cor, icon=no.icone)
         fila.extend((f, tag_id, cor) for f in no.filhos)
 
-    log.info("Template de tags %r aplicado: %d criadas, %d já existiam.",
-             nivel, criadas, existentes)
+    log.info("Template de tags %r/%r aplicado: %d criadas, %d já existiam.",
+             template, nivel, criadas, existentes)
     return Resultado(criadas, existentes)
 
 
-def previa(conn: sqlite3.Connection, nivel: str) -> list[tuple[No, int, str | None, bool]]:
+def previa(conn: sqlite3.Connection, template: str,
+          nivel: str) -> list[tuple[No, int, str | None, bool]]:
     """(nó, profundidade, cor efetiva, já existe?) em ordem de árvore —
     alimenta a pré-visualização do diálogo sem tocar no banco."""
     saida: list[tuple[No, int, str | None, bool]] = []
@@ -207,7 +413,7 @@ def previa(conn: sqlite3.Connection, nivel: str) -> list[tuple[No, int, str | No
             saida.append((no, nivel_prof, cor, tag_id is not None))
             caminhar(no.filhos, nivel_prof + 1, tag_id, cor)
 
-    caminhar(arvore(nivel), 0, None, None)
+    caminhar(arvore(template, nivel), 0, None, None)
     return saida
 
 
