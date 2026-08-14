@@ -131,6 +131,25 @@ class MainWindow(QMainWindow):
         self.color_filter = FilterButton("palette", PALETA_CORES, swatch=True)
         self.color_filter.changed.connect(self._apply_filters)
 
+        # Ordenação (Fatia 63) — mesmo padrão dos filtros acima: um botão
+        # ícone-only com popup de escolha única. O valor é o par
+        # (coluna, direção) direto, sem widget de direção separado — cada
+        # opção do menu já é uma combinação completa e legível.
+        self.sort_filter = FilterButton(
+            "sort",
+            [
+                ("Nome (A→Z)", ("name", "asc")),
+                ("Nome (Z→A)", ("name", "desc")),
+                ("Modificado (mais recente)", ("modified", "desc")),
+                ("Modificado (mais antigo)", ("modified", "asc")),
+                ("Tamanho (maior)", ("size", "desc")),
+                ("Tamanho (menor)", ("size", "asc")),
+                ("Resolução (maior)", ("resolution", "desc")),
+                ("Resolução (menor)", ("resolution", "asc")),
+            ],
+        )
+        self.sort_filter.changed.connect(self._apply_filters)
+
         # fav_check/group_check/deps_check/hidden_check saíram daqui (Fatia
         # 43) — viram QAction marcável no menu Janela, junto dos toggles de
         # painel (_setup_window_menu). QAction tem isChecked()/setChecked()/
@@ -302,6 +321,7 @@ class MainWindow(QMainWindow):
         list_header_row.addWidget(self.list_scope)
         list_header_row.addWidget(self.list_count)
         list_header_row.addStretch(1)
+        list_header_row.addWidget(self.sort_filter)
         list_header_row.addWidget(self.res_filter)
         list_header_row.addWidget(self.color_filter)
         list_header_row.addSpacing(4)
@@ -433,6 +453,7 @@ class MainWindow(QMainWindow):
         Collection (Fatia 18)."""
         current = self.folders.currentItem()
         dir_prefix = current.data(0, 32) if current else ""
+        sort_by, sort_dir = self.sort_filter.value()
         return dict(
             search=self.search_box.text().strip(),
             category_filters=self.categories.selection(),
@@ -447,6 +468,7 @@ class MainWindow(QMainWindow):
             include_dependencies=self.deps_check.isChecked(),
             collection_id=self.collections.current_collection_id(),
             dominant_color=self.color_filter.value(),
+            sort_by=sort_by, sort_dir=sort_dir,
         )
 
     def _apply_filters(self) -> None:
@@ -841,6 +863,7 @@ class MainWindow(QMainWindow):
         self.grid.viewport().update()
 
         self.categories.refresh_theme()
+        self.sort_filter.refresh_theme()
         self.res_filter.refresh_theme()
         self.color_filter.refresh_theme()
         self.details.refresh_theme()
@@ -1137,6 +1160,11 @@ class MainWindow(QMainWindow):
         self.fav_check.setChecked(bool(query.get("starred_only")))
         self.res_filter.set_value(query.get("min_resolution"))
         self.color_filter.set_value(query.get("dominant_color"))
+        # Sem valor salvo (query de antes da Fatia 63): cai no padrão do
+        # próprio FilterButton, que é a primeira opção — nome A→Z.
+        self.sort_filter.set_value(
+            (query.get("sort_by", "name"), query.get("sort_dir", "asc"))
+        )
         self.hidden_check.setChecked(bool(query.get("include_hidden")))
         self.deps_check.setChecked(bool(query.get("include_dependencies")))
         self.tags.select(query.get("tag_id"))

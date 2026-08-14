@@ -1406,3 +1406,47 @@ e o contrato externo da ponte, fora do escopo do pedido (só a UI).
 **Deu certo quando:** testado contra a testlib real — painel de detalhes
 mostra só "☆ Favorito" (sem fileira de estrelas), barra de filtros só tem
 Resolução/Cor (sem "Nota: todas"). 738 testes verdes.
+
+### ☑ Fatia 63 — Ordenar assets (nome, modificado, tamanho, resolução)
+Pedido do Rafael: `list_for_grid` tinha `ORDER BY` fixo em `a.name` — sem
+nenhum controle de ordenação na UI. Ícone novo (`sort.svg`, duas setas
+opostas — mesmo estilo desenhado à mão dos outros 27) na linha de
+filtros, ANTES de Resolução/Cor — mesmo padrão de `FilterButton`
+(ícone + popup de escolha única) já usado pelos dois.
+
+- `assets_repo.list_for_grid`/`_order_by_sql` (`assetdeck/db/repos/
+  assets.py`) — 4 critérios (`name`/`modified`/`size`/`resolution`) ×
+  2 direções, tabela `_ORDER_BY_COLUMNS` mapeando pra coluna real
+  (`f.mtime_ns`, `f.size_bytes`, a mesma expressão de `MAX(width,
+  height)` que o filtro de resolução mínima já usa). Critério
+  desconhecido cai no padrão (nome) em vez de estourar — protege Smart
+  Collection salva com um valor que deixou de existir. Desempate sempre
+  pelo nome (exceto quando o critério JÁ é nome, aí desempata por
+  `rel_path`) — evita ordem instável quando dois arquivos têm o mesmo
+  tamanho/data/resolução exatos.
+- **Dentro de uma coleção manual, `sort_by`/`sort_dir` são ignorados** —
+  a ordem de arraste sempre vence, mesmo comportamento de antes.
+- **Achado revisando o código, não só escrevendo o teste:**
+  `count_by_category` recebe o MESMO dicionário de filtros que
+  `list_for_grid` (`_current_filters_dict()` serve os dois) e repassa
+  `**filtros` direto pra `_build_where` — que não conhece `sort_by`/
+  `sort_dir`. Sem popar essas duas chaves antes, toda contagem por
+  categoria (a barra inteira) quebrava com `TypeError` assim que o
+  Rafael trocasse a ordenação uma vez.
+- `AssetGridModel.set_filters()`/`_requery()` (`asset_grid.py`) e
+  `_current_filters_dict()`/`_restore_filters()` (`main_window.py`)
+  carregam os dois campos novos pelo mesmo caminho que os outros
+  filtros — persistem entre sessões (Fatia 54) e em Smart Collections
+  do mesmo jeito.
+
+**10 testes novos** (`tests/test_sort.py`) — biblioteca sintética com
+nome/tamanho/data DESENCONTRADOS de propósito (nome alfabético cresce,
+tamanho decresce, data de modificação cresce na ordem oposta ao nome),
+pra nenhum teste passar por acidente batendo com outro critério. Provados
+falhando contra o código antigo (`git stash` só em `assets.py`): 9 de 10
+falharam (`TypeError`), só o de ordem padrão (nome A→Z, igual ao
+comportamento de sempre) passou.
+
+**Deu certo quando:** testado contra a testlib real — ícone aparece na
+barra antes de Resolução/Cor, biblioteca carrega ordenada por nome por
+padrão. 751 testes verdes.
