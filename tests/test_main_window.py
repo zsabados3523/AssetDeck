@@ -404,7 +404,7 @@ def test_o_topo_tem_tres_faixas_separadas(janela, qapp):
     )
     # Os filtros finos moram na MESMA faixa do escopo da lista (agem sobre a
     # lista que já está na tela), não junto das categorias.
-    assert abs(linha_do(janela.rating_filter) - y_escopo) < 5
+    assert abs(linha_do(janela.res_filter) - y_escopo) < 5
     assert abs(linha_do(janela.color_filter) - y_escopo) < 5
 
 

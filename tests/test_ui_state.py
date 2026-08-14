@@ -101,17 +101,6 @@ def test_fechar_e_reabrir_restaura_tamanho_do_slider(biblioteca, qapp):
     w2.close()
 
 
-def test_fechar_e_reabrir_restaura_filtro_de_nota(biblioteca, qapp):
-    w1 = _abrir(biblioteca)
-    w1.rating_filter.set_value(3)
-    w1._apply_filters()
-    w1.close()
-
-    w2 = _abrir(biblioteca)
-    assert w2.rating_filter.value() == 3
-    w2.close()
-
-
 def test_fechar_e_reabrir_restaura_tag_recolhida(biblioteca, qapp):
     """Uma tag com filho abre expandida na primeira carga (comportamento
     de sempre). Recolher, fechar e reabrir tem de manter recolhida —
