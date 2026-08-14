@@ -1304,3 +1304,24 @@ Acoelorrhaphe_wrig...`) — nome aparece alinhado à esquerda com "…" no
 corte, em vez de cortar/quebrar sem aviso. 758 testes verdes (4 falhas
 pré-existentes, sem relação com esta fatia — testes de render/textura que
 dependem do Blender de verdade, ambiente sem Blender funcional agora).
+
+### ☑ Fatia 60 — Cantos do preview vazando da máscara arredondada
+Rafael relatou: preview quadrado tem os cantos vazando por fora da linha
+arredondada do card. Causa confirmada em `_paint_thumb()`
+(`assetdeck/ui/asset_card_delegate.py`): o `drawPixmap` desenhava a
+miniatura direto, sem recorte — a borda arredondada era só um CONTORNO
+por cima da imagem, nunca uma máscara de verdade. Numa imagem quadrada
+que preenche o thumb inteiro (ex.: textura 4096×4096), o canto reto da
+imagem aparecia por baixo da curva fina da borda.
+
+**Fix:** `QPainterPath.addRoundedRect()` com o mesmo raio da borda
+(`self._radius - 2`), aplicado via `painter.setClipPath()` só ao redor do
+`drawPixmap` (`save()`/`restore()` isola o clip, não afeta o desenho da
+borda logo depois).
+
+**Verificado com comparação antes/depois na testlib real** (não só
+teoria): textura `TreeBark1_diffuse` (4096×4096, preenche o quadrado
+inteiro) — antes do fix, canto superior-esquerdo reto/quadrado vazando;
+depois, acompanha a curva do card. 737 testes verdes (mesma ressalva de
+falhas pré-existentes da Fatia 59, sem relação com esta mudança).
+dependem do Blender de verdade, ambiente sem Blender funcional agora).

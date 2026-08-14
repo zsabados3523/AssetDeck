@@ -14,7 +14,7 @@ canto com a extensão real (`.FBX`, `.EXR`...), estilo Connecter.
 from __future__ import annotations
 
 from PySide6.QtCore import QRect, QRectF, QSize, Qt
-from PySide6.QtGui import QColor, QFont, QFontMetrics, QPainter, QPen
+from PySide6.QtGui import QColor, QFont, QFontMetrics, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import QStyle, QStyledItemDelegate
 
 from assetdeck.ui import icons, theme
@@ -178,7 +178,18 @@ class AssetCardDelegate(QStyledItemDelegate):
                 )
             x = rect.x() + (rect.width() - pix.width()) // 2
             y = rect.y() + (rect.height() - pix.height()) // 2
+            # Recorte arredondado de verdade (Fatia 60): antes a borda fina
+            # era só um contorno desenhado POR CIMA da imagem, nunca uma
+            # máscara — os cantos retos de uma imagem quadrada apareciam
+            # vazando por baixo dela. `setClipPath` recorta o desenho da
+            # miniatura no mesmo raio da borda, então os cantos somem de
+            # verdade.
+            path = QPainterPath()
+            path.addRoundedRect(QRectF(rect), self._radius - 2, self._radius - 2)
+            painter.save()
+            painter.setClipPath(path)
             painter.drawPixmap(x, y, pix)
+            painter.restore()
         else:
             painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(self._type_tint_color)
