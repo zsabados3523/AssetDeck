@@ -234,14 +234,17 @@ class AssetCardDelegate(QStyledItemDelegate):
         painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, texto)
 
     def _paint_name(self, painter: QPainter, index, rect: QRect) -> None:
-        """Nome em até 2 linhas, CENTRALIZADO no espaço reservado — pedido do
-        Rafael: um nome curto de 1 linha não deve ficar colado no topo com o
-        resto do espaço vazio embaixo."""
+        """Nome em 1 linha, alinhado à ESQUERDA, com reticências no final
+        quando não cabe (Fatia 59). Antes era centralizado com quebra em até
+        2 linhas: um nome comprido cortava tanto o começo quanto o fim sem
+        aviso nenhum de que havia mais texto. Alinhado à esquerda pelo menos
+        mostra o início do nome, e a elisão deixa claro que foi cortado.
+        Continua verticalmente centrado no espaço reservado (mesmo motivo de
+        antes: nome curto não pode ficar colado no topo)."""
         nome = index.data(Qt.ItemDataRole.DisplayRole) or ""
         painter.setFont(self._font_name)
         painter.setPen(self._pen_name)
-        painter.setClipRect(rect)  # nunca vaza pra baixo do card em nomes longos
+        elidido = self._fm_name.elidedText(nome, Qt.TextElideMode.ElideRight, rect.width())
         painter.drawText(
-            rect, Qt.AlignmentFlag.AlignCenter | Qt.TextFlag.TextWordWrap, nome
+            rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, elidido
         )
-        painter.setClipping(False)
