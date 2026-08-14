@@ -9,6 +9,7 @@ from pathlib import Path
 from PySide6.QtCore import QModelIndex, QSize, Qt, QTimer
 from PySide6.QtGui import QPixmapCache
 from PySide6.QtWidgets import (
+    QApplication,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -420,13 +421,25 @@ class MainWindow(QMainWindow):
 
     # ---- filtros e contagem ----
 
-    def _reload_all(self) -> None:
-        """Recarga completa: pastas, tags, checklist de tipos e grid — E o
-        pré-aquecimento de thumbnails da biblioteca inteira (`warmup_library`,
-        não o `reload()` barato). Só é chamada depois de algo que pode ter
-        trazido arquivo novo pra biblioteca (varredura, rename em lote,
-        agrupar/desagrupar) — nunca a cada mudancinha, por isso pode pagar
-        o custo do pré-aquecimento aqui sem travar a UI o tempo todo.
+    def _reload_all(self, *, warmup: bool = True) -> None:
+        """Recarga completa: pastas, tags, checklist de tipos e grid — E (se
+        `warmup=True`) o pré-aquecimento de thumbnails da biblioteca inteira
+        (`warmup_library`, não o `reload()` barato). Só é chamada depois de
+        algo que pode ter trazido arquivo novo pra biblioteca (varredura,
+        rename em lote, agrupar/desagrupar) — nunca a cada mudancinha, por
+        isso pode pagar o custo do pré-aquecimento aqui sem travar a UI o
+        tempo todo.
+
+        `warmup=False` (Fatia 64): pula o pré-aquecimento — usado quando o
+        Rafael reportou que a reindexação automática ao abrir "demora
+        demais" e uma causa real era rodar esse pente-fino (medido na Fatia
+        45: ~1,1s numa biblioteca de 23 mil assets, SÓ nisso) duas vezes
+        seguidas sem necessidade — uma na abertura, outra de novo aqui
+        depois do scan — mesmo quando o scan não trouxe NADA que precise de
+        thumbnail nova (arquivo só sumiu, ou só voltou metadado de sidecar
+        pra um arquivo que já tinha thumb). `_on_finished` decide qual caso
+        é este. Pastas/tags/contagens continuam sempre atualizadas — só o
+        `_warmup()` caro fica de fora.
 
         `folders.reload` reseta a seleção para a raiz — antes da Fatia 32
         isso jogava o Rafael de volta pra "tudo" no fim de cada varredura, e
@@ -438,7 +451,10 @@ class MainWindow(QMainWindow):
         self.collections.reload(self._conn)
         self.smart_collections.reload(self._conn)
         self.categories.reload(self._conn, self._category_counts())
-        self.model.warmup_library()
+        if warmup:
+            self.model.warmup_library()
+        else:
+            self.model.reload()
         self._go_to_dir(anterior, record=False)
 
     def _category_counts(self) -> dict:
@@ -1845,9 +1861,28 @@ class MainWindow(QMainWindow):
     def _on_finished(self, stats: ScanStats) -> None:
         self.progress.setVisible(False)
         self.rescan_btn.setEnabled(True)
-        if (stats.added or stats.updated or stats.missing or stats.reappeared
-                or stats.restored or stats.grouped_sets):
-            self._reload_all()  # árvore/tipos/grid só se algo mudou
+        # Fatia 64: só `added`/`updated`/`reappeared`/`grouped_sets` podem
+        # trazer conteúdo visual NOVO (arquivo que nunca teve thumbnail, ou
+        # cujo conteúdo mudou) — só esses justificam pagar o pré-aquecimento
+        # caro de novo. `missing` (arquivo sumiu, nada novo pra desenhar) e
+        # `restored` (metadado de sidecar voltou pra um arquivo que já
+        # estava indexado e já tinha thumbnail) não precisam.
+        precisa_thumb_nova = bool(
+            stats.added or stats.updated or stats.reappeared or stats.grouped_sets
+        )
+        precisa_atualizar_algo = bool(
+            precisa_thumb_nova or stats.missing or stats.restored
+        )
+        if precisa_atualizar_algo:
+            # Mensagem ANTES da recarga (que pode travar a UI por um
+            # instante) — sem isso a barra de status ficava com o texto de
+            # "Indexando… X/Y arquivos" congelado durante o freeze, dando a
+            # impressão de app travado. `processEvents()` força o repaint
+            # AGORA — sem ele o Qt só pintaria depois que este método
+            # (síncrono) terminasse, tarde demais pra servir de feedback.
+            self.statusBar().showMessage("Sincronizando biblioteca…")
+            QApplication.processEvents()
+            self._reload_all(warmup=precisa_thumb_nova)
         else:
             self.refresh_count()
         self.statusBar().showMessage(f"Indexação concluída: {stats.summary()}")
