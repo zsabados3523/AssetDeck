@@ -1273,3 +1273,34 @@ Rafael e ponto de montagem ilegível (disco removido no meio do caminho não
 pode derrubar a abertura do app).
 
 **Fecha a "ideia de melhoria que ficou de fora" registrada na Fatia 52.**
+
+## F6 — Polydex + ajustes de UX/visual (a fazer)
+
+Roadmap fechado com o Rafael em 2026-08-14, comparando com o Polydex
+(importador de assets da Poliigon) e a lista de ajustes que ele levantou
+usando o app. Plano completo com arquivo:linha de cada item em
+`/home/rafael/.claude/plans/ok-coisas-que-achei-iterative-barto.md`. Ordem:
+baratos primeiro, depois médios, depois as fatias grandes (multi-biblioteca,
+visualizador 3D, redesenho de menu/barra superior).
+
+### ☑ Fatia 59 — Nome do asset cortado no card
+Rafael relatou: nomes grandes não cabiam no card e não dava pra saber o
+nome (texto centralizado, cortava sem aviso — nem o começo nem o fim
+completos). Trocado `_paint_name()`
+(`assetdeck/ui/asset_card_delegate.py`) de centralizado + quebra em até 2
+linhas para **alinhado à esquerda, 1 linha, com reticências** no que não
+couber (`QFontMetrics.elidedText`). Continua verticalmente centrado no
+espaço reservado (`NAME_HEIGHT`, sem mudar — não mexe na geometria do
+card).
+
+**Achado no caminho:** o app estava com `config.json` apontando pra
+biblioteca REAL do Rafael (419GB, 50 mil assets) em vez da testlib —
+sobra de sessão anterior, contra a regra do `CLAUDE.md`. Reapontado pra
+`assetdeck-testlib` antes de qualquer teste. Confirmado com ele que era
+sobra, não intencional.
+
+**Deu certo quando:** testado contra a testlib real (`MT_PM_V148_
+Acoelorrhaphe_wrig...`) — nome aparece alinhado à esquerda com "…" no
+corte, em vez de cortar/quebrar sem aviso. 758 testes verdes (4 falhas
+pré-existentes, sem relação com esta fatia — testes de render/textura que
+dependem do Blender de verdade, ambiente sem Blender funcional agora).
