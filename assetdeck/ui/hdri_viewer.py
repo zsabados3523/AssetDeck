@@ -294,7 +294,20 @@ class HdriGLView(QOpenGLWidget):
 
 
 class HdriViewer(QDialog):
-    """A janela: superfície GL + alternador de modo."""
+    """Janela própria — superfície GL + alternador de modo.
+
+    Fatia 65 tinha tentado virar `OverlayPanel` (embutido na janela
+    principal, como o `PreviewPopup`) — revertido no mesmo dia: Rafael
+    relatou que o "piscar" piorou, o APP INTEIRO parecia fechar e abrir,
+    não só uma janelinha pequena. Causa real (achada revisando depois do
+    relato): um `QOpenGLWidget` em QUALQUER lugar da árvore de widgets de
+    um top-level muda o modo de composição da JANELA INTEIRA daquele
+    top-level (Qt reflui todo o conteúdo por uma textura em vez do caminho
+    raster normal) — isso só acontece na primeira vez que aparece na tela.
+    Com o GL dentro da MainWindow, era a janela inteira do AssetDeck que
+    sofria essa transição; como janela PRÓPRIA (aqui), só ela.
+    `PreviewPopup` continua `OverlayPanel` — não usa OpenGL, não tem esse
+    problema."""
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
