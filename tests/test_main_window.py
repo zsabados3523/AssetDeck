@@ -340,9 +340,13 @@ def test_restaurar_layout_reexibe_paineis_ocultos(janela, qapp):
 def test_desligar_todos_os_paineis_nao_incha_a_barra_de_busca(janela, qapp):
     """Bug relatado pelo Rafael (Fatia 43): desligar os painéis pelo menu
     Janela fazia a barra de busca inchar até quase tomar a tela — os dois
-    itens do QVBoxLayout central disputavam o espaço sobrando sem
-    prioridade nenhuma entre eles. `setStretchFactor` garante que o
-    splitter (painéis + grade) sempre fica com o espaço extra."""
+    itens do QVBoxLayout central (barra de busca + splitter) disputavam o
+    espaço sobrando sem prioridade nenhuma entre eles.
+
+    Desde a Fatia 66 a busca nem tem mais item próprio nesse layout (mora
+    dentro do `grid_card`, dentro do splitter) — a causa estrutural do bug
+    sumiu de vez. Mantido como guarda de regressão: a fileira continua
+    compacta mesmo com todos os painéis desligados."""
     janela.resize(1200, 800)
     janela.show()
     qapp.processEvents()
@@ -370,24 +374,25 @@ def test_checks_de_filtro_moraram_no_menu_janela(janela):
         assert acao in janela._menu_janela.actions()
 
 
-def test_size_slider_mora_na_faixa_de_nota_resolucao_e_cor(janela):
+def test_size_slider_mora_na_faixa_de_navegacao_com_os_filtros(janela):
     """Fatia 56: o slider saiu do rodapé (longe da grade, alça "bola"
-    destoando dos botões de filtro) e foi pra faixa 3, ao lado de
-    nota/resolução/cor — mesma linha que já refina o que está na tela."""
+    destoando dos botões de filtro) — hoje mora na faixa de navegação,
+    junto de busca/ordenar/resolução/cor (Fatia 66 consolidou pra lá)."""
     from PySide6.QtWidgets import QStatusBar
 
     assert not isinstance(janela.size_slider.parentWidget(), QStatusBar)
     assert janela.size_slider.parentWidget() is janela.color_filter.parentWidget()
 
 
-def test_o_topo_tem_tres_faixas_separadas(janela, qapp):
-    """Fatia 46. O Rafael olhou a linha única (navegação + caminho + 6
-    categorias + 3 filtros) e disse que estava "absurdamente atolado".
+def test_o_topo_tem_duas_faixas_separadas(janela, qapp):
+    """Fatia 46 empilhou em 3 faixas (a linha única, com tudo junto, estava
+    "absurdamente atolada" segundo o Rafael). Fatia 66 consolidou busca e
+    filtros finos na faixa de navegação, sobrando 2 — mockup aprovado por
+    ele antes de implementar.
 
-    Cada faixa responde uma pergunta diferente, e o que este teste protege é
-    que elas continuem SEPARADAS — se alguém voltar a empilhar tudo numa
-    linha, o caminho de pasta funda volta a ser cortado por falta de espaço.
-    """
+    O que este teste protege: as duas faixas continuam SEPARADAS — se
+    alguém voltar a empilhar tudo numa linha, o caminho de pasta funda
+    volta a ser cortado por falta de espaço."""
     janela.resize(1200, 800)
     janela.show()
     qapp.processEvents()
@@ -397,15 +402,18 @@ def test_o_topo_tem_tres_faixas_separadas(janela, qapp):
 
     y_caminho = linha_do(janela.breadcrumb)
     y_categorias = linha_do(janela.categories)
-    y_escopo = linha_do(janela.list_scope)
 
-    assert y_caminho < y_categorias < y_escopo, (
-        "as três faixas do topo têm de estar empilhadas, não na mesma linha"
+    assert y_caminho < y_categorias, (
+        "as duas faixas do topo têm de estar empilhadas, não na mesma linha"
     )
-    # Os filtros finos moram na MESMA faixa do escopo da lista (agem sobre a
-    # lista que já está na tela), não junto das categorias.
-    assert abs(linha_do(janela.res_filter) - y_escopo) < 5
-    assert abs(linha_do(janela.color_filter) - y_escopo) < 5
+    # Busca e filtros finos moram na MESMA faixa da navegação/caminho
+    # (Fatia 66) — não têm mais faixa própria.
+    assert abs(linha_do(janela.search_box) - y_caminho) < 5
+    assert abs(linha_do(janela.res_filter) - y_caminho) < 5
+    assert abs(linha_do(janela.color_filter) - y_caminho) < 5
+    # A contagem de itens desce pra linha das categorias — não sobrou faixa
+    # própria pra ela.
+    assert abs(linha_do(janela.list_scope) - y_categorias) < 5
 
 
 def test_o_escopo_da_lista_acompanha_a_pasta(janela, qapp):
