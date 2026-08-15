@@ -95,11 +95,18 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("AssetDeck")
         self.resize(1280, 800)
 
-        # --- barra superior: busca + filtros ---
+        # --- busca + filtros ---
+        # Fatia 66: a barra de busca saiu de uma faixa própria (ocupando a
+        # linha inteira) e virou um campo compacto na linha de navegação,
+        # do lado dos filtros (pedido do Rafael — "barra de pesquisa
+        # enorme"). Largura fixa em vez de esticar; a dica de sintaxe (E/OU)
+        # que cabia no placeholder virou tooltip, já que o campo encolheu.
         self.search_box = QLineEdit()
-        self.search_box.setPlaceholderText(
-            "Buscar por nome…  (ex.: concreto, wood 4k, madeira E rústico, pedra OU metal)"
+        self.search_box.setPlaceholderText("Buscar por nome…")
+        self.search_box.setToolTip(
+            "Buscar por nome — ex.: concreto, wood 4k, madeira E rústico, pedra OU metal"
         )
+        self.search_box.setFixedWidth(220)
         self.search_box.setClearButtonEnabled(True)
         self._search_icon_action = self.search_box.addAction(
             icons.icon("search", theme.current_colors()["text_muted"]),
@@ -158,20 +165,11 @@ class MainWindow(QMainWindow):
         # precisou mudar, só o tipo do widget.
         self.progress = QProgressBar()
         self.progress.setVisible(False)
-        self.progress.setMaximumWidth(220)
+        self.progress.setMaximumWidth(140)
         self.rescan_btn = QPushButton("Reindexar")
         self.rescan_btn.setObjectName("primary")
         self.rescan_btn.setIcon(icons.icon("refresh", theme.current_colors()["on_accent"]))
         self.rescan_btn.clicked.connect(self.start_scan)
-
-        # Busca + reindexar (Fatia 28d/43). "Incluir subpastas" saiu de vez
-        # (ele não via caso de uso pra desligar), Tipos/Nota/Resolução foram
-        # pra linha do breadcrumb como ícone (Fatia 28c), e os 4 checkboxes
-        # de filtro foram pro menu Janela (Fatia 43).
-        top = QHBoxLayout()
-        top.addWidget(self.search_box, stretch=1)
-        top.addWidget(self.progress)
-        top.addWidget(self.rescan_btn)
 
         # --- pastas + grid + detalhes ---
         self.model = AssetGridModel(conn, self._library_root, self._pipeline, parent=self)
@@ -293,52 +291,57 @@ class MainWindow(QMainWindow):
         self.up_btn = self._nav_button("arrow-up", "Subir um nível (Alt+↑)",
                                        self._go_up)
 
-        # Topo em TRÊS faixas (Fatia 46). Até a Fatia 43 era uma linha só
-        # carregando navegação, caminho, 6 categorias e 3 filtros — o Rafael
-        # olhou e disse que estava "absurdamente atolado", e o caminho de
-        # pasta funda já vinha sendo cortado pelo `_elide_breadcrumb` por
-        # falta de espaço. Cada faixa agora responde uma pergunta diferente:
+        # Topo em DUAS faixas (Fatia 66, era três desde a Fatia 46). O
+        # Rafael pediu pra parar de dedicar uma faixa própria só pra busca
+        # ("barra de pesquisa enorme") — ela virou um campo compacto na
+        # MESMA linha da navegação, junto dos filtros finos que já moravam
+        # ali do lado (resolução/cor/ordenar/tamanho) e do botão de
+        # reindexar (que tinha uma faixa só pra ele também). Mockup
+        # aprovado por ele antes de mexer no código:
         #
-        #   1. onde estou           → setas + caminho
-        #   2. o que quero ver      → as 6 categorias
-        #   3. como ordenar/refinar → escopo da lista + nota/resolução/cor
+        #   1. onde estou + refino     → setas + caminho + busca + filtros +
+        #                                 tamanho + reindexar
+        #   2. o que quero ver + conta → as 6 categorias + quantos itens
         #
-        # Os três filtros finos descem para a faixa 3 porque agem sobre a
-        # lista que já está na tela, não sobre a pasta — e ali ficam ao lado
-        # do rótulo que diz quantos itens sobraram.
+        # A contagem ("N assets") desce pra linha das categorias — não tinha
+        # mais faixa própria sobrando pra ela.
         path_row = QHBoxLayout()
-        path_row.setSpacing(2)
+        path_row.setSpacing(6)
         path_row.addWidget(self.back_btn)
         path_row.addWidget(self.fwd_btn)
         path_row.addWidget(self.up_btn)
-        path_row.addSpacing(6)
+        path_row.addSpacing(4)
         path_row.addWidget(self.breadcrumb, stretch=1)
+        path_row.addWidget(self.search_box)
+        path_row.addWidget(self.sort_filter)
+        path_row.addWidget(self.res_filter)
+        path_row.addWidget(self.color_filter)
+        path_row.addSpacing(4)
+        path_row.addWidget(self.size_slider)
+        path_row.addSpacing(4)
+        path_row.addWidget(self.progress)
+        path_row.addWidget(self.rescan_btn)
+        # objectName próprio: controles mais baixos SÓ nesta fileira
+        # (padding menor) — pedido do Rafael de enxutar verticalmente,
+        # herdado de quando só a busca morava aqui (Fatia 28d).
+        path_row_widget = QWidget()
+        path_row_widget.setObjectName("searchBar")
+        path_row_widget.setLayout(path_row)
 
         category_row = QHBoxLayout()
         category_row.setContentsMargins(0, 0, 0, 0)
         category_row.addWidget(self.categories)
         category_row.addStretch(1)
-
-        list_header_row = QHBoxLayout()
-        list_header_row.setSpacing(8)
-        list_header_row.addWidget(self.list_scope)
-        list_header_row.addWidget(self.list_count)
-        list_header_row.addStretch(1)
-        list_header_row.addWidget(self.sort_filter)
-        list_header_row.addWidget(self.res_filter)
-        list_header_row.addWidget(self.color_filter)
-        list_header_row.addSpacing(4)
-        list_header_row.addWidget(self.size_slider)
+        category_row.addWidget(self.list_scope)
+        category_row.addWidget(self.list_count)
 
         grid_container = QWidget()
         grid_layout = QVBoxLayout(grid_container)
         grid_layout.setContentsMargins(0, 0, 0, 0)
         grid_layout.setSpacing(6)
-        grid_layout.addLayout(path_row)
+        grid_layout.addWidget(path_row_widget)
         grid_layout.addWidget(self._breadcrumb_divider(horizontal=True))
         grid_layout.addLayout(category_row)
-        grid_layout.addWidget(self._breadcrumb_divider(horizontal=True))
-        grid_layout.addLayout(list_header_row)
         grid_layout.addWidget(self.grid)
 
         # A grade NUNCA leva sombra: ela rola com centenas de assets, e o
@@ -361,29 +364,16 @@ class MainWindow(QMainWindow):
         splitter.setSizes(self._main_default_sizes)
         self._main_splitter = splitter
 
-        # objectName próprio: controles mais baixos SÓ nesta fileira (padding
-        # menor), sem afetar botão/campo em nenhum outro lugar do app —
-        # pedido do Rafael de enxutar a barra de busca verticalmente.
-        top_widget = QWidget()
-        top_widget.setObjectName("searchBar")
-        top_widget.setLayout(top)
-        top_card = theme.make_card(top_widget)
-
+        # A busca não tem mais faixa/card próprio (Fatia 66) — mora dentro
+        # do `grid_card`, junto do resto da navegação. `central` agora só
+        # empilha o splitter (painéis + grade + detalhes).
         central = QWidget()
         central.setObjectName("appSurface")
         central.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         layout = QVBoxLayout(central)
         layout.setContentsMargins(14, 14, 14, 14)
         layout.setSpacing(12)
-        layout.addWidget(top_card)
         layout.addWidget(splitter)
-        # Bug relatado pelo Rafael: sem isso, desligar os painéis pelo menu
-        # Janela deixava a barra de busca inchar até quase tomar a tela
-        # inteira — os dois itens do QVBoxLayout disputavam o espaço extra
-        # sem prioridade nenhuma entre eles. O splitter (painéis + grade)
-        # SEMPRE fica com o espaço sobrando; a barra de busca nunca cresce
-        # além do próprio conteúdo.
-        layout.setStretchFactor(splitter, 1)
         self.setCentralWidget(central)
         self._central = central  # host dos overlays (preview, HDRI) — Fatia 65
 
