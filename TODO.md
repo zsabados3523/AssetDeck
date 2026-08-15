@@ -1617,3 +1617,41 @@ AssetDeck — ele não voltou a mencionar depois do revert, então talvez
 tenha resolvido junto (a janela separada pode capturar diferente no
 RustDesk do que o widget embutido capturava) — vale confirmar quando ele
 usar de novo.
+
+### ☑ Fatia 66 — Barra superior consolidada (2 faixas, era 4)
+Pedido do Rafael: "barra de pesquisa enorme" (faixa própria, esticando a
+linha toda) e "mover nota/resolução/cor/tamanho [e agora também busca]
+pra barrinha que tem voltar/avançar". **Mockup aprovado por ele antes de
+mexer no código de verdade** (ferramenta de visualização, comparando
+"hoje — 4 faixas" com a proposta) — só programei depois do "sim, pode
+implementar assim".
+
+- **Busca perdeu a faixa própria** (`top`/`top_widget`/`top_card`,
+  removidos): virou campo compacto (`setFixedWidth(220)`, era
+  `stretch=1` ocupando a linha inteira) dentro da faixa de navegação
+  (`path_row`), junto de ordenar/resolução/cor/tamanho/Reindexar/barra de
+  progresso — todos que antes tinham faixa própria ou moravam na faixa 3
+  (que deixou de existir). O texto longo do placeholder ("ex.: concreto,
+  wood 4k...") não cabe mais num campo estreito — virou tooltip.
+- **Contagem ("N assets") desceu pra faixa das categorias** — não sobrou
+  faixa própria pra ela sozinha.
+- `objectName("searchBar")` (controles mais baixos, regra do projeto:
+  nada de `setStyleSheet` fora de `theme.py`) migrou do widget da busca
+  sozinha pra um `QWidget` novo envolvendo a faixa de navegação inteira
+  (`path_row_widget`) — mesmo seletor de QSS, só apontando pro container
+  novo.
+- `central` (o layout mais externo da janela) perdeu o
+  `setStretchFactor(splitter, 1)` que existia especificamente pra impedir
+  a barra de busca de inchar quando os painéis eram desligados (Fatia
+  43) — a causa raiz daquele bug (dois itens disputando espaço no mesmo
+  `QVBoxLayout`) sumiu de vez: `central` agora só tem o `splitter` como
+  filho, não tem mais o que disputar espaço com ele.
+- 2 testes de `test_main_window.py` reescritos pro novo modelo de 2
+  faixas (`test_o_topo_tem_duas_faixas_separadas`, era "três faixas") —
+  a asserção de que busca/filtros ficam na MESMA linha do caminho, e a
+  contagem na linha das categorias.
+
+**Deu certo quando:** testado contra a testlib real — uma faixa só com
+setas + caminho + busca + ordenar/resolução/cor + tamanho + reindexar;
+outra com categorias + contagem. 761 testes verdes.
+usar de novo.
