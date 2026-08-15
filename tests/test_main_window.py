@@ -246,34 +246,19 @@ def test_ponte_e_render_ficam_prontos(janela):
     assert janela._render.running is False
 
 
-def _titulos_dos_menus(janela):
-    """Todos os QMenu da barra, recursivo (pega submenu tipo "Blender"
-    dentro de "Ferramentas") — findChildren atravessa a árvore de objetos
-    Qt inteira, não só o primeiro nível."""
-    from PySide6.QtWidgets import QMenu
-
-    return [m.title() for m in janela.menuBar().findChildren(QMenu)]
-
-
 def test_menu_blender_tem_as_acoes(janela):
-    assert any("Blender" in t for t in _titulos_dos_menus(janela))
+    """Fatia 67: o submenu "Blender" virou a página "Blender" da
+    SettingsWindow — mesmos botões, container diferente."""
     assert janela.render_action.isEnabled()
     assert janela.cancel_render_action.isEnabled() is False
 
 
 def test_menu_ferramentas_tem_relocalizar_e_duplicados(janela):
     """Fatia 36: "Biblioteca" (menu ad hoc da Fatia 19) virou parte de
-    "Ferramentas" — as ações continuam as mesmas, só o container mudou."""
-    assert any("Ferramentas" in t for t in _titulos_dos_menus(janela))
+    "Ferramentas"; Fatia 67 moveu "Ferramentas" pra SettingsWindow — as
+    ações continuam as mesmas, só o container mudou de novo."""
     assert janela.relocate_action.isEnabled()
     assert janela.duplicates_action.isEnabled()
-
-
-def test_menu_ferramentas_tem_assinalar_previews_automaticamente(janela):
-    """Fatia 57: rodar o casamento por nome igual sob demanda, sem esperar
-    a próxima varredura."""
-    textos = [a.text() for a in janela._menu_ferramentas.actions()]
-    assert any("previews automaticamente" in t for t in textos)
 
 
 def test_assinalar_previews_automaticamente_sem_par_de_nome_nao_cria_nada(janela):
@@ -283,23 +268,33 @@ def test_assinalar_previews_automaticamente_sem_par_de_nome_nao_cria_nada(janela
     assert "Nenhum modelo" in janela.statusBar().currentMessage()
 
 
-def test_barra_de_menus_tem_os_cinco_menus(janela):
-    """Fatia 36: Arquivo, Editar, Ferramentas, Configurações, Janela —
-    antes só existiam "Biblioteca" e "Blender" soltos.
+def test_settings_window_tem_as_seis_categorias(janela):
+    """Fatia 67: os 5 menus de topo (Arquivo/Editar/Ferramentas/
+    Configurações/Janela) viraram uma janela única de configurações,
+    acessada pela engrenagem — pedido do Rafael, mockup aprovado antes de
+    programar. Categorias na lateral, uma página por categoria."""
+    nomes = [janela.settings_window._lista.item(i).text()
+             for i in range(janela.settings_window._lista.count())]
+    for esperado in ("Ferramentas", "Blender", "Preferências", "Aparência",
+                     "Painéis e filtros", "Geral"):
+        assert esperado in nomes, f"categoria {esperado!r} não encontrada em {nomes}"
+    # E a barra de menus propriamente dita fica vazia — nenhum QMenu de topo.
+    from PySide6.QtWidgets import QMenu
 
-    Usa `janela._top_menus` (referência guardada na própria MainWindow), não
-    `menuBar().actions()[i].menu()` — reconstruir o QMenu a partir da QAction
-    se mostrou frágil nesta versão do PySide6/shiboken (achado escrevendo
-    este teste: o wrapper Python intermediário podia derrubar o QMenu de
-    verdade). Ver `_setup_menu_bar`."""
-    topo = [m.title() for m in janela._top_menus]
-    for esperado in ("Arquivo", "Editar", "Ferramentas", "Configurações", "Janela"):
-        assert any(esperado in t for t in topo), f"menu {esperado!r} não encontrado em {topo}"
+    assert janela.menuBar().findChildren(QMenu) == []
 
 
-def test_menu_janela_alterna_visibilidade_dos_paineis(janela, qapp):
+def test_engrenagem_abre_a_settings_window(janela, qapp):
+    assert not janela.settings_window.isVisible()
+    janela._abrir_configuracoes()
+    assert janela.settings_window.isVisible()
+    janela.settings_window.close()
+
+
+def test_paineis_e_filtros_alterna_visibilidade_dos_paineis(janela, qapp):
     """Fatia 36: cada painel esquerdo + o de detalhes ganha um toggle
-    checável no menu "Janela"."""
+    checável — era menu "Janela", Fatia 67 moveu pra página "Painéis e
+    filtros" da SettingsWindow (mesma mecânica, container diferente)."""
     janela.show()
     qapp.processEvents()
 
@@ -362,16 +357,18 @@ def test_desligar_todos_os_paineis_nao_incha_a_barra_de_busca(janela, qapp):
     assert barra_de_busca.height() < 100
 
 
-def test_checks_de_filtro_moraram_no_menu_janela(janela):
+def test_checks_de_filtro_moraram_na_pagina_paineis_e_filtros(janela):
     """Fatia 43: fav_check/group_check/deps_check/hidden_check saíram da
-    barra de busca e viram QAction marcável no menu Janela."""
-    from PySide6.QtGui import QAction
+    barra de busca e viraram QAction marcável no menu Janela. Fatia 67 moveu
+    de novo — QCheckBox de verdade na página "Painéis e filtros" da
+    SettingsWindow (mesma API isChecked/setChecked/toggled de uma QAction
+    marcável, nada que já lia esses 4 atributos precisou mudar)."""
+    from PySide6.QtWidgets import QCheckBox
 
     for atributo in ("fav_check", "group_check", "deps_check", "hidden_check"):
-        acao = getattr(janela, atributo)
-        assert isinstance(acao, QAction)
-        assert acao.isCheckable()
-        assert acao in janela._menu_janela.actions()
+        check = getattr(janela, atributo)
+        assert isinstance(check, QCheckBox)
+        assert check.window() is janela.settings_window
 
 
 def test_size_slider_mora_na_faixa_de_navegacao_com_os_filtros(janela):
@@ -448,7 +445,9 @@ def test_a_marca_e_o_contexto_ficam_na_faixa_dos_menus(janela, qapp):
 
     `setCornerWidget` é o que permite isso sem trocar a QMenuBar por uma
     barra própria, o que custaria atalho de teclado e navegação por Alt.
-    """
+
+    Fatia 67: os cinco menus saíram (viraram a SettingsWindow); a faixa
+    fica só com marca + engrenagem + contexto."""
     from PySide6.QtCore import Qt as _Qt
 
     barra = janela.menuBar()
@@ -456,11 +455,11 @@ def test_a_marca_e_o_contexto_ficam_na_faixa_dos_menus(janela, qapp):
     direita = barra.cornerWidget(_Qt.Corner.TopRightCorner)
 
     assert esquerda is not None, "a marca não está na faixa dos menus"
-    assert direita is janela.brand_context
-    # E os cinco menus continuam lá: a faixa GANHOU conteúdo, não trocou.
-    assert [a.text() for a in barra.actions()] == [
-        "Arquivo", "Editar", "Ferramentas", "Configurações", "Janela"
-    ]
+    assert direita is not None
+    assert janela.brand_context.parentWidget() is direita
+    assert janela.settings_btn.parentWidget() is direita
+    # A faixa de menus em si fica vazia — tudo virou a SettingsWindow.
+    assert barra.actions() == []
 
 
 def test_o_contexto_mostra_a_biblioteca_e_o_modo(janela, qapp):
@@ -618,13 +617,17 @@ def test_editar_menu_colar_tags_sem_nada_copiado(janela):
     assert "Nenhuma tag copiada" in janela.statusBar().currentMessage()
 
 
-def test_menu_arquivo_reindexar_e_sair_tem_atalho(janela):
+def test_reindexar_e_sair_tem_atalho_global(janela):
+    """Fatia 67: o menu "Arquivo" sumiu (Reindexar já era botão na barra de
+    navegação desde a Fatia 66; Sair virou botão na página "Geral" da
+    SettingsWindow). Os atalhos Ctrl+R/Ctrl+Q têm de continuar funcionando
+    em QUALQUER lugar do app — `self.addAction(...)` registra isso direto
+    na MainWindow, sem precisar de menu nenhum pra existir."""
     from PySide6.QtGui import QKeySequence
 
-    assert janela.reindex_action.shortcut() == QKeySequence("Ctrl+R")
+    assert janela.rescan_btn.shortcut() == QKeySequence("Ctrl+R")
     assert janela.sair_action.shortcut() == QKeySequence.StandardKey.Quit
-    assert janela.reindex_action in janela._menu_arquivo.actions()
-    assert janela.sair_action in janela._menu_arquivo.actions()
+    assert janela.sair_action in janela.actions()
 
 
 # ---- Fatia 61 (bug pós-tela): taggear "não fazia nada" sem filtro ativo ----

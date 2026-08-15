@@ -392,7 +392,18 @@ class MainWindow(QMainWindow):
         QShortcut(QKeySequence("Alt+Up"), self, activated=self._go_up)
         self._tag_clipboard: list[int] | None = None
 
-        self._setup_menu_bar()  # Fatia 36 — Arquivo/Editar/Ferramentas/Configurações/Janela
+        # Fatia 67: os 5 menus de topo (Arquivo/Editar/Ferramentas/
+        # Configurações/Janela — Fatia 36) viraram uma janela única de
+        # configurações, acessada por um ícone de engrenagem — pedido do
+        # Rafael. `SettingsWindow` cria os botões/checkboxes e os atribui
+        # DIRETO nesta MainWindow (`self.group_check`, `self.render_action`
+        # etc.) — precisa vir depois de tudo que ela referencia já existir
+        # (`self.sidebar`, `self.details`, `self.model`, `self.tags`).
+        from assetdeck.ui.settings_window import SettingsWindow
+
+        self.settings_window = SettingsWindow(self)
+        self._setup_atalhos_globais()
+        self._setup_bridge()  # ponte com o Blender + RenderController (F2)
         self._setup_brand_bar()  # Fatia 50 — marca e contexto na mesma faixa
 
         # Contagem sempre visível no rodapé (Fatia 28) — antes vivia num
@@ -699,10 +710,13 @@ class MainWindow(QMainWindow):
         self._apply_filters()
         self.statusBar().showMessage(f"{len(asset_ids)} asset(s) removidos da coleção")
 
-    # ---- barra de menus (Fatia 36) ----
+    # ---- barra de menus (Fatia 36, redistribuída na Fatia 67) ----
 
     def _setup_brand_bar(self) -> None:
-        """Marca à esquerda e contexto à direita, NA MESMA faixa dos menus.
+        """Marca à esquerda e contexto + engrenagem à direita, NA MESMA
+        faixa dos menus (que agora não têm mais nenhum QMenu de topo —
+        Fatia 67 moveu Arquivo/Editar/Ferramentas/Configurações/Janela pra
+        `SettingsWindow`, aberta por essa engrenagem).
 
         O mockup escolhido pelo Rafael tinha aqui uma faixa com marca e abas
         (Biblioteca / Coleções / Duplicados). As abas foram descartadas
@@ -741,14 +755,31 @@ class MainWindow(QMainWindow):
         self._brand_widget = marca
         barra.setCornerWidget(marca, Qt.Corner.TopLeftCorner)
 
-        # À direita vai o que NÃO aparece em nenhum outro lugar da tela: qual
-        # biblioteca está aberta (são várias desde a Fatia 41) e em que modo.
-        # A contagem de assets, que o mockup punha aqui, já está no cabeçalho
-        # da lista E no rodapé — um terceiro lugar seria ruído.
+        # À direita: engrenagem (Fatia 67, abre a SettingsWindow) + contexto
+        # — qual biblioteca está aberta (são várias desde a Fatia 41) e em
+        # que modo. A contagem de assets, que o mockup punha aqui, já está
+        # no cabeçalho da lista E no rodapé — um terceiro lugar seria ruído.
+        direita = QWidget()
+        direita_layout = QHBoxLayout(direita)
+        direita_layout.setContentsMargins(0, 0, 10, 0)
+        direita_layout.setSpacing(8)
+
+        self.settings_btn = QToolButton()
+        self.settings_btn.setIcon(icons.icon("settings", theme.current_colors()["text_muted"]))
+        self.settings_btn.setToolTip("Configurações")
+        self.settings_btn.clicked.connect(self._abrir_configuracoes)
+        direita_layout.addWidget(self.settings_btn)
+
         self.brand_context = QLabel()
         self.brand_context.setObjectName("brandContext")
+        direita_layout.addWidget(self.brand_context)
+
         self.statusBar()  # garante a barra criada antes do primeiro update
-        barra.setCornerWidget(self.brand_context, Qt.Corner.TopRightCorner)
+        # Mesma pegadinha do `_brand_widget` acima: sem a referência em
+        # `self`, o Qt/PySide deixa o canto direito vazio pouco depois de
+        # `setCornerWidget` retornar.
+        self._brand_right_widget = direita
+        barra.setCornerWidget(direita, Qt.Corner.TopRightCorner)
         self._update_brand_context()
 
     def _update_brand_context(self) -> None:
@@ -757,97 +788,33 @@ class MainWindow(QMainWindow):
         modo = "Escuro" if config.load_config().get("theme_mode") == "escuro" else "Claro"
         self.brand_context.setText(f"{self._library_root.name}  ·  {modo}   ")
 
-    def _setup_menu_bar(self) -> None:
-        """Arquivo, Editar, Ferramentas, Configurações, Janela.
+    def _setup_atalhos_globais(self) -> None:
+        """Fatia 67: os 5 menus de topo viraram a janela de configurações
+        (`SettingsWindow`), mas 3 atalhos de teclado precisam continuar
+        funcionando em QUALQUER lugar do app, não só quando aquela janela
+        está aberta — um atalho preso a um botão dentro dela só dispararia
+        com ela em foco. `self.addAction(...)` registra o atalho na
+        MAINWINDOW; sem um menu pra morar, a ação fica "invisível" de
+        propósito (`Sair`/`Editar tags` já têm um lugar visível: o botão na
+        janela de configurações e o menu de contexto da grade)."""
+        from PySide6.QtGui import QAction, QKeySequence
 
-        Reorganiza o que já existia solto (menu ad hoc "Biblioteca" da
-        Fatia 19, "Blender" da F2, Ctrl+T como QShortcut avulso) num menu de
-        topo de verdade — o app não tinha nenhum até aqui. Nenhuma ação nova
-        de lógica: só descoberta (o Rafael não tinha como saber que
-        "Relocalizar assets perdidos" existia sem clicar em "Biblioteca" às
-        cegas).
+        self.rescan_btn.setShortcut(QKeySequence("Ctrl+R"))
 
-        Cada QMenu de topo é guardado em `self._top_menus` (além do atributo
-        próprio, tipo `self._menu_arquivo`) — PySide/shiboken nesta versão
-        derruba o QMenu de verdade se a única referência Python a ele for
-        uma variável local que sai de escopo (`QAction.menu()` reconstrói um
-        wrapper nem sempre ligado à mesma contagem de referência do C++);
-        guardar a referência aqui é o que evita reconstruir a árvore de menus
-        via `menuBar().actions()` — caminho que se mostrou frágil (achado
-        escrevendo os testes desta fatia)."""
-        self._top_menus: list = []
-        self._menu_arquivo = self._setup_file_menu()
-        self._menu_editar = self._setup_edit_menu()
-        self._menu_ferramentas = ferramentas = self.menuBar().addMenu("Ferramentas")
-        self._top_menus.append(ferramentas)
-        self.relocate_action = ferramentas.addAction(
-            "Relocalizar assets perdidos…", self._relocate_lost_assets
-        )
-        self.duplicates_action = ferramentas.addAction(
-            "Duplicados por conteúdo visual…", self._find_duplicates
-        )
-        ferramentas.addSeparator()
-        ferramentas.addAction("Aplicar template de tags…", self.tags.apply_template_dialog)
-        ferramentas.addSeparator()
-        ferramentas.addAction(
-            "Assinalar previews automaticamente por nome agora",
-            self._assinalar_previews_automaticamente,
-        )
-        ferramentas.addSeparator()
-        self._setup_bridge(ferramentas)  # ponte + submenu "Blender" (F2)
-        self._menu_configuracoes = self._setup_settings_menu()
-        self._menu_janela = self._setup_window_menu()
-
-    def _setup_file_menu(self):
-        from PySide6.QtGui import QKeySequence
-
-        menu = self.menuBar().addMenu("Arquivo")
-        self._top_menus.append(menu)
-        self.reindex_action = menu.addAction("Reindexar biblioteca", self.start_scan)
-        self.reindex_action.setShortcut(QKeySequence("Ctrl+R"))
-        menu.addSeparator()
-        self.sair_action = menu.addAction("Sair", self.close)
-        self.sair_action.setShortcut(QKeySequence.StandardKey.Quit)
-        return menu
-
-    def _setup_edit_menu(self):
-        from PySide6.QtGui import QKeySequence
-
-        menu = self.menuBar().addMenu("Editar")
-        self._top_menus.append(menu)
-        tag_action = menu.addAction("Editar tags dos selecionados…", self._quick_tag_dialog)
+        tag_action = QAction(self)
         tag_action.setShortcut(QKeySequence("Ctrl+T"))
-        menu.addSeparator()
-        menu.addAction("Copiar tags", self._copy_tags_selected)
-        menu.addAction("Colar tags (adicionar)", lambda: self._paste_tags_selected(replace=False))
-        menu.addAction("Substituir tags (colar por cima)",
-                       lambda: self._paste_tags_selected(replace=True))
-        menu.addSeparator()
-        menu.addAction("Renomear em lote…", self._batch_rename_dos_selecionados)
-        menu.addSeparator()
-        menu.addAction("Propriedades customizadas…", self._manage_properties)
-        return menu
+        tag_action.triggered.connect(self._quick_tag_dialog)
+        self.addAction(tag_action)
 
-    def _setup_settings_menu(self):
-        from assetdeck import config
+        self.sair_action = QAction(self)
+        self.sair_action.setShortcut(QKeySequence.StandardKey.Quit)
+        self.sair_action.triggered.connect(self.close)
+        self.addAction(self.sair_action)
 
-        menu = self.menuBar().addMenu("Configurações")
-        self._top_menus.append(menu)
-        menu.addAction("Preferências…", self._open_preferences)
-        menu.addSeparator()
-
-        # Modo escuro (Fatia 43) — aplica na hora, mesmo padrão checkable
-        # do menu Janela; não precisa reabrir o app (diferente de
-        # bridge_port/bridge_enabled, que já estão de pé quando o app abre).
-        self.dark_mode_action = menu.addAction("Modo escuro")
-        self.dark_mode_action.setCheckable(True)
-        self.dark_mode_action.setChecked(config.load_config().get("theme_mode") == "escuro")
-        self.dark_mode_action.toggled.connect(self._toggle_dark_mode)
-
-        menu.addSeparator()
-        menu.addAction("Abrir pasta de configuração", self._abrir_pasta_config)
-        menu.addAction("Abrir pasta de logs", self._abrir_pasta_logs)
-        return menu
+    def _abrir_configuracoes(self) -> None:
+        self.settings_window.show()
+        self.settings_window.raise_()
+        self.settings_window.activateWindow()
 
     def _toggle_dark_mode(self, escuro: bool) -> None:
         from PySide6.QtWidgets import QApplication
@@ -889,94 +856,17 @@ class MainWindow(QMainWindow):
             (self.back_btn, "arrow-left"),
             (self.fwd_btn, "arrow-right"),
             (self.up_btn, "arrow-up"),
+            (self.settings_btn, "settings"),
         ):
             botao.setIcon(icons.icon(nome_icone, pal["text_muted"]))
 
-    def _setup_window_menu(self):
-        menu = self.menuBar().addMenu("Janela")
-        self._top_menus.append(menu)
-        # Seções da lateral passam pelo Sidebar (Fatia 45) em vez de esconder o
-        # widget direto: assim o rail e o menu ficam sincronizados nos dois
-        # sentidos — clicar no ícone desmarca o item do menu e vice-versa.
-        # O painel de detalhes não é seção da lateral, então continua sendo um
-        # `setVisible` no widget.
-        # `_panel_toggles` continua sendo (widget, rótulo): o painel de uma
-        # seção da lateral agora é o `SidebarSection`, não um QFrame#card
-        # solto. A chave anda junto porque esconder uma seção precisa passar
-        # pelo Sidebar (para o rail acompanhar), e o painel de detalhes — que
-        # não é seção — segue com `setVisible` direto.
-        self._secoes_do_menu = [
-            ("pastas", "Pastas"),
-            ("tags", "Tags"),
-            ("colecoes", "Coleções"),
-            ("smart", "Smart Collections"),
-        ]
-        self._panel_toggles = [
-            (self.sidebar.section_widget(chave), rotulo)
-            for chave, rotulo in self._secoes_do_menu
-        ] + [(self.details, "Painel de detalhes")]
-
-        self._window_menu_actions = []
-        self._acoes_por_secao: dict[str, object] = {}
-        chaves = [chave for chave, _r in self._secoes_do_menu] + [None]
-        for chave, (widget, rotulo) in zip(chaves, self._panel_toggles):
-            acao = menu.addAction(rotulo)
-            acao.setCheckable(True)
-            acao.setChecked(True)
-            if chave is None:
-                acao.toggled.connect(widget.setVisible)
-            else:
-                acao.toggled.connect(
-                    lambda visivel, k=chave: self.sidebar.set_section_visible(k, visivel)
-                )
-                self._acoes_por_secao[chave] = acao
-            self._window_menu_actions.append(acao)
-
-        # O caminho de volta: rail → menu. Sem isto, desligar uma seção pelo
-        # ícone deixaria o item do menu marcado, mentindo sobre o estado.
-        self.sidebar.rail.section_toggled.connect(self._on_secao_alternada_pelo_rail)
-        menu.addSeparator()
-
-        # Filtros que saíram da barra de busca (Fatia 43) — mesmo padrão
-        # marcável dos toggles de painel acima, não entram no "Restaurar
-        # layout padrão" (são filtro de conteúdo, não layout de painel).
-        self.group_check = menu.addAction("Agrupar PBR")
-        self.group_check.setCheckable(True)
-        self.group_check.setChecked(True)
-        self.group_check.toggled.connect(
-            lambda c: (self.model.set_expand_sets(not c), self.refresh_count())
-        )
-
-        self.fav_check = menu.addAction("Só favoritos")
-        self.fav_check.setCheckable(True)
-        self.fav_check.setToolTip("Mostrar só favoritos")
-        self.fav_check.toggled.connect(lambda _c: self._apply_filters())
-
-        self.deps_check = menu.addAction("Mostrar dependências")
-        self.deps_check.setCheckable(True)
-        self.deps_check.setToolTip(
-            "Texturas que acompanham um .blend/.fbx irmão (mapas de um material\n"
-            "convertido, texturas de um modelo). Desmarcado, você vê só o .blend."
-        )
-        self.deps_check.toggled.connect(lambda _c: self._apply_filters())
-
-        self.hidden_check = menu.addAction("Mostrar ocultos")
-        self.hidden_check.setCheckable(True)
-        self.hidden_check.setToolTip(
-            "Inclui imagens ocultadas por terem virado preview de um modelo"
-        )
-        self.hidden_check.toggled.connect(lambda _c: self._apply_filters())
-
-        menu.addSeparator()
-        menu.addAction("Restaurar layout padrão", self._restaurar_layout)
-        return menu
-
     def _on_secao_alternada_pelo_rail(self, chave: str, visivel: bool) -> None:
-        """Rail → menu Janela. `blockSignals` evita o laço de volta (o menu
-        chamaria `set_section_visible`, que remarcaria o rail)."""
+        """Rail → checkbox da janela de configurações (Fatia 67, era o menu
+        Janela). `blockSignals` evita o laço de volta (o checkbox chamaria
+        `set_section_visible`, que remarcaria o rail)."""
         acao = self._acoes_por_secao.get(chave)
         if acao is None:
-            log.error("Seção '%s' alternada pelo rail não tem ação no menu.", chave)
+            log.error("Seção '%s' alternada pelo rail não tem checkbox correspondente.", chave)
             return
         acao.blockSignals(True)
         acao.setChecked(visivel)
@@ -1498,11 +1388,14 @@ class MainWindow(QMainWindow):
 
     # ---- ponte com o Blender (F2) ----
 
-    def _setup_bridge(self, ferramentas_menu) -> None:
-        """`ferramentas_menu`: onde o submenu "Blender" entra (Fatia 36 —
-        antes era um menu de topo próprio, `self.menuBar().addMenu("Blender")`)."""
+    def _setup_bridge(self) -> None:
+        """Fatia 67: os botões de "Blender" (instalar add-on, gerar/parar
+        capas, como usar) saíram do submenu "Ferramentas" pra página
+        própria da `SettingsWindow`. Aqui sobra só o setup de verdade: o
+        servidor da ponte e o `RenderController`."""
         from assetdeck import config
         from assetdeck.bridge.server import BridgeServer
+        from assetdeck.ui.render_worker import RenderController
 
         # LED + texto (Fatia 49). Só o texto ("Blender: ouvindo :45017") exige
         # ler para saber se está tudo bem; o ponto colorido responde de
@@ -1511,6 +1404,18 @@ class MainWindow(QMainWindow):
         self.statusBar().addPermanentWidget(self._bridge_led)
         self.bridge_status = QLabel()
         self.statusBar().addPermanentWidget(self.bridge_status)
+
+        # RenderController roda o Blender headless por conta própria — não
+        # depende da ponte estar ligada. Bug achado nesta fatia ao mover os
+        # botões pra cá: antes, `self._render` só nascia DEPOIS do "return"
+        # de baixo, então desligar a ponte desligava sem querer a geração
+        # de capas também (o botão só existia dentro do submenu "Blender",
+        # que só era montado se a ponte estivesse ativa) — agora que o
+        # botão sempre existe (página própria), criar `self._render`
+        # incondicionalmente é obrigatório, não só desejável.
+        self._render = RenderController(
+            self._db_path, self._library_root, config.previews_dir(), parent=self
+        )
 
         cfg = config.load_config()
         self._bridge = None
@@ -1538,26 +1443,6 @@ class MainWindow(QMainWindow):
         )
         # O Blender salvou algo novo na biblioteca → reindexar
         self._bridge.rescan_requested.connect(self.start_scan)
-
-        menu = ferramentas_menu.addMenu("Blender")
-        menu.addAction("Instalar / atualizar add-on…", self._install_addon)
-        menu.addSeparator()
-        self.render_action = menu.addAction(
-            "Gerar capas dos modelos (render)…", self._start_render
-        )
-        self.cancel_render_action = menu.addAction(
-            "Parar geração de capas", self._stop_render
-        )
-        self.cancel_render_action.setEnabled(False)
-        menu.addSeparator()
-        menu.addAction("Como usar", self._bridge_help)
-
-        from assetdeck import config as _cfg
-        from assetdeck.ui.render_worker import RenderController
-
-        self._render = RenderController(
-            self._db_path, self._library_root, _cfg.previews_dir(), parent=self
-        )
 
     # ---- render de capas em lote ----
 
