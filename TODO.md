@@ -1573,3 +1573,31 @@ pytest — e o roteamento continua olhando só `preview_popup`/
 efeito do compositor/gerenciador de janelas — não dá pra provar 100% por
 screenshot automatizado, mesma ressalva já registrada em outras fatias
 de UI do F4).
+
+**Correção no mesmo dia — o HDRI voltou a ser janela própria:** testando
+de verdade (via RustDesk, celular controlando o PC), o Rafael relatou que
+o "piscar" PIOROU — não era mais a janelinha do HDRI que piscava, era o
+AssetDeck INTEIRO parecendo fechar e abrir. Investigado: um
+`QOpenGLWidget` em QUALQUER lugar da árvore de widgets de uma janela
+muda o modo de composição da JANELA INTEIRA daquela janela (Qt passa a
+refluir todo o conteúdo por uma textura em vez do caminho raster normal)
+— só na primeira vez que aparece na tela. Com o `HdriGLView` dentro da
+`MainWindow` (como a Fatia 65 fez), era a janela do AssetDeck inteira que
+sofria essa transição.
+
+**Fix:** `HdriViewer` voltou a ser `QDialog` com `setWindowFlag(Window)`
+— janela própria, como antes da Fatia 65 (revertido só essa classe).
+`PreviewPopup` continua `OverlayPanel` (embutido): não usa OpenGL, não
+tem esse problema — e o Rafael confirmou que ele está funcionando bem.
+761 testes verdes (mesma contagem — `test_hdri_viewer.py`/
+`test_hdri_roteamento.py` nunca instanciaram `HdriViewer` de verdade,
+sem contexto OpenGL no pytest).
+
+**Ainda em aberto, esperando o Rafael testar de novo:** se o "piscar" da
+janelinha do HDRI sozinha (não mais o app inteiro) ainda incomoda, e se
+a tela preta que ele viu ao abrir um HDRI (suspeita dele: pode ser o
+RustDesk, não o AssetDeck) continua acontecendo agora que voltou a ser
+janela separada — ele confirmou que o preview de imagem comum (sem
+OpenGL) não tem esse problema, o que aponta pra alguma interação
+específica de OpenGL com a captura de tela do RustDesk, possivelmente
+fora do nosso controle.

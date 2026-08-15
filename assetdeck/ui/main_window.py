@@ -1403,12 +1403,17 @@ class MainWindow(QMainWindow):
 
     def _hdri_viewer(self):
         """Criado sob demanda: o contexto OpenGL só é montado se o Rafael
-        realmente abrir um HDRI — quem nunca abre não paga nada. Overlay
-        embutido no widget central (Fatia 65), não janela separada."""
+        realmente abrir um HDRI — quem nunca abre não paga nada.
+
+        Janela PRÓPRIA, não overlay embutido (revertido no dia da Fatia 65 —
+        `QOpenGLWidget` embutido na MainWindow mudava o modo de composição
+        da JANELA INTEIRA do AssetDeck na primeira vez que aparecia,
+        piorando o "piscar" pra afetar o app inteiro em vez de só uma
+        janelinha pequena — ver docstring de `HdriViewer`)."""
         if getattr(self, "_hdri_win", None) is None:
             from assetdeck.ui.hdri_viewer import HdriViewer
 
-            self._hdri_win = HdriViewer(self._central)
+            self._hdri_win = HdriViewer(self)
         return self._hdri_win
 
     def _grid_menu(self, pos) -> None:
