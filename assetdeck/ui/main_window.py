@@ -181,8 +181,10 @@ class MainWindow(QMainWindow):
         self.model.dataChanged.connect(self._on_data_changed)
         self.grid.image_dropped.connect(self._on_image_dropped)
         self.grid.asset_preview_dropped.connect(self._on_asset_preview_dropped)
-        # Duplo clique = preview ampliado (NÃO abre o arquivo — pedido do Rafael)
-        self.preview_popup = PreviewPopup(self)
+        # Duplo clique = preview ampliado (NÃO abre o arquivo — pedido do
+        # Rafael). `self.preview_popup` é criado mais abaixo, depois do
+        # widget central existir (Fatia 65: overlay embutido, não janela
+        # separada — precisa de um host com tamanho real pra caber dentro).
         self.grid.doubleClicked.connect(self._open_preview)
         # Menu de contexto: agrupar/desagrupar à mão
         self.grid.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
@@ -383,6 +385,11 @@ class MainWindow(QMainWindow):
         # além do próprio conteúdo.
         layout.setStretchFactor(splitter, 1)
         self.setCentralWidget(central)
+        self._central = central  # host dos overlays (preview, HDRI) — Fatia 65
+
+        # Duplo clique num asset = preview ampliado, embutido na própria
+        # janela (Fatia 65) — precisa do widget central já existir.
+        self.preview_popup = PreviewPopup(self._central)
 
         # Navegação de pastas (Fatia 32), mesmas teclas de um navegador.
         # Ctrl+T (tags) virou QAction da Fatia 36 — ver _setup_menu_bar
@@ -1396,7 +1403,13 @@ class MainWindow(QMainWindow):
 
     def _hdri_viewer(self):
         """Criado sob demanda: o contexto OpenGL só é montado se o Rafael
-        realmente abrir um HDRI — quem nunca abre não paga nada."""
+        realmente abrir um HDRI — quem nunca abre não paga nada.
+
+        Janela PRÓPRIA, não overlay embutido (revertido no dia da Fatia 65 —
+        `QOpenGLWidget` embutido na MainWindow mudava o modo de composição
+        da JANELA INTEIRA do AssetDeck na primeira vez que aparecia,
+        piorando o "piscar" pra afetar o app inteiro em vez de só uma
+        janelinha pequena — ver docstring de `HdriViewer`)."""
         if getattr(self, "_hdri_win", None) is None:
             from assetdeck.ui.hdri_viewer import HdriViewer
 
