@@ -1654,4 +1654,71 @@ implementar assim".
 **Deu certo quando:** testado contra a testlib real — uma faixa só com
 setas + caminho + busca + ordenar/resolução/cor + tamanho + reindexar;
 outra com categorias + contagem. 761 testes verdes.
-usar de novo.
+
+### ☑ Fatia 67 — Janela única de configurações (era 5 menus de topo)
+Pedido do Rafael: quando perguntei sobre redistribuir os 5 menus por uso
+(mockup com "Ferramentas"/"Janela" continuando como menu de texto +
+engrenagem só pra Configurações), ele corrigiu — queria TODAS as opções
+numa janela SÓ, acessada por uma engrenagem, organizada em categorias
+numa lateral (tipo tela de preferências de um app de verdade). 2 mockups
+aprovados por ele antes de programar: o primeiro (redistribuir em menus)
+foi rejeitado; o segundo (janela única com 6 categorias — Ferramentas,
+Blender, Preferências, Aparência, Painéis e filtros, Geral) foi aprovado.
+
+**`assetdeck/ui/settings_window.py` (novo), `SettingsWindow(QDialog)`:**
+`QListWidget` de categorias na lateral + `QStackedWidget` de páginas,
+não-modal (`setModal(False)`) — dá pra deixar aberta enquanto mexe na
+janela principal, importante pros toggles de painel/filtro (o Rafael
+quer ver o efeito na hora). Aberta pelo ícone de engrenagem novo
+(`settings.svg`, desenhado à mão no mesmo estilo dos outros 28) no canto
+direito da barra de menus, ao lado do contexto (biblioteca + modo).
+
+- **Truque de reuso:** os botões/checkboxes de cada página são atribuídos
+  DIRETO na `MainWindow` (`mw.group_check = QCheckBox(...)`, etc.) em vez
+  de guardados só na `SettingsWindow` — mesmo padrão da Fatia 43 ao
+  contrário: lá QAction virou QCheckBox porque a API é idêntica
+  (`isChecked`/`setChecked`/`toggled`); aqui QAction/QMenu vira
+  QPushButton/QCheckBox comuns, e TODO o código que já lia
+  `self.render_action.setEnabled(...)`, `self.fav_check.isChecked()` etc.
+  continuou funcionando sem mudar uma linha.
+- **"Arquivo" e "Editar" somem inteiros** — Reindexar já era botão na
+  barra de navegação (Fatia 66); Sair vira botão em "Geral"; tudo de
+  Editar (editar/copiar/colar/substituir tags, renomear em lote) já
+  existia no menu de contexto da grade. Só "Propriedades customizadas…"
+  muda de casa, pra "Ferramentas".
+- **Atalhos de teclado continuam funcionando em QUALQUER lugar do app**
+  (não só com a janela de configurações aberta): `Ctrl+R` vai direto pro
+  `self.rescan_btn.setShortcut(...)` (já existe como botão visível);
+  `Ctrl+T` e `Ctrl+Q` viram `QAction` "invisíveis" (sem menu nenhum) só
+  registradas via `self.addAction(...)` — é o que dá o atalho global sem
+  precisar de um item de menu pra existir.
+- **Bug achado ao mover os botões do Blender pra cá:** `self._render`
+  (RenderController) só nascia DEPOIS do "return" antecipado de
+  `_setup_bridge()` quando a ponte estava desligada — ou seja, desligar a
+  ponte desligava sem querer a geração de capas junto (o botão só existia
+  dentro do submenu "Blender", que só era montado se a ponte estivesse
+  ativa). Como agora o botão "Gerar capas" sempre existe (página própria,
+  não depende de menu condicional), criar `self._render`
+  incondicionalmente virou obrigatório — RenderController roda o Blender
+  headless por conta própria, nunca dependeu da ponte de verdade. Não
+  havia teste cobrindo `bridge_enabled=False` antes, então isso não
+  quebrava nada visível — mas era uma bomba-relógio.
+- **"Preferências" não foi totalmente embutida** (decisão de escopo, não
+  do mockup): o diálogo `PreferencesDialog` já existente e bem testado
+  (10 testes) continua como está — a página "Preferências" da
+  SettingsWindow só tem um resumo + botão "Abrir preferências…". Refazer
+  o diálogo pra virar um formulário embutido sem OK/Cancel exigiria mexer
+  numa peça estável demais pro ganho (ainda fica tudo a 1 clique da
+  engrenagem, só não é o campo direto).
+
+**7 testes reescritos em `test_main_window.py`** (os que dependiam de
+`QMenu`/`_top_menus`/`_menu_arquivo` etc., que não existem mais):
+confirmam as 6 categorias, o menu de topo vazio (`menuBar().findChildren
+(QMenu) == []`), os atalhos globais, e que os checkboxes de painel/filtro
+continuam QCheckBox de verdade dentro da `SettingsWindow`.
+
+**Verificado com a MainWindow real contra a testlib** (script manual —
+chama `_abrir_configuracoes()` direto): screenshot mostra a janela com as
+6 categorias, "Ferramentas" com os 5 botões certos, "Painéis e filtros"
+com os checkboxes no estado certo (Coleções/Smart Collections
+desmarcados, batendo com a sessão salva do Rafael). 764 testes verdes.
