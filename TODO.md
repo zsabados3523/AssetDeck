@@ -1283,6 +1283,17 @@ usando o app. Plano completo com arquivo:linha de cada item em
 baratos primeiro, depois médios, depois as fatias grandes (multi-biblioteca,
 visualizador 3D, redesenho de menu/barra superior).
 
+**Checklist de pendências soltas** (menores que uma fatia própria, não
+travam o roadmap — revisar quando sobrar uma folga):
+- ☐ Visualizador de HDRI ainda pisca na PRIMEIRA vez que abre um HDRI numa
+  sessão (Fatia 65 corrigiu o app inteiro piscar; a janelinha sozinha
+  piscar uma vez por sessão é o problema original, nunca resolvido de
+  verdade — Rafael confirmou em 2026-08-14, pediu pra registrar e seguir
+  em frente). Candidato: pré-aquecer o contexto GL antes do primeiro uso
+  real, num momento que ele não note.
+
+### ☑ Fatia 59 — Nome do asset cortado no card
+
 ### ☑ Fatia 59 — Nome do asset cortado no card
 Rafael relatou: nomes grandes não cabiam no card e não dava pra saber o
 nome (texto centralizado, cortava sem aviso — nem o começo nem o fim
@@ -1593,11 +1604,16 @@ tem esse problema — e o Rafael confirmou que ele está funcionando bem.
 `test_hdri_roteamento.py` nunca instanciaram `HdriViewer` de verdade,
 sem contexto OpenGL no pytest).
 
-**Ainda em aberto, esperando o Rafael testar de novo:** se o "piscar" da
-janelinha do HDRI sozinha (não mais o app inteiro) ainda incomoda, e se
-a tela preta que ele viu ao abrir um HDRI (suspeita dele: pode ser o
-RustDesk, não o AssetDeck) continua acontecendo agora que voltou a ser
-janela separada — ele confirmou que o preview de imagem comum (sem
-OpenGL) não tem esse problema, o que aponta pra alguma interação
-específica de OpenGL com a captura de tela do RustDesk, possivelmente
-fora do nosso controle.
+**Confirmado pelo Rafael na tela real (via RustDesk):** o app inteiro não
+pisca mais — o fix funcionou. **Ainda pendente, registrado por ele pra
+não travar o resto do roadmap:** a janelinha do HDRI sozinha continua
+piscando na PRIMEIRA vez que abre um HDRI numa sessão (o "fecha e abre
+rápido" volta a ser só dela, não do app — é o problema original, de
+antes da Fatia 65, que nunca tinha sido resolvido de verdade). Não
+investigado ainda se dá pra reduzir mais (ex.: pré-aquecer o contexto GL
+antes do primeiro uso real, num momento que o Rafael nem note). Também
+não confirmado ainda se a tela preta que ele via era RustDesk ou
+AssetDeck — ele não voltou a mencionar depois do revert, então talvez
+tenha resolvido junto (a janela separada pode capturar diferente no
+RustDesk do que o widget embutido capturava) — vale confirmar quando ele
+usar de novo.
