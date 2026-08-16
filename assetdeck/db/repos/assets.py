@@ -32,31 +32,44 @@ def _order_by_sql(sort_by: str, sort_dir: str) -> str:
     return f" ORDER BY {coluna} {direcao}, {desempate}"
 
 
-def count_active(conn: sqlite3.Connection) -> int:
-    """Quantos assets existem (soft-deleted não contam)."""
-    row = conn.execute(
-        "SELECT COUNT(*) AS n FROM assets WHERE deleted_at IS NULL"
-    ).fetchone()
+def count_active(conn: sqlite3.Connection, library_id: int | None = None) -> int:
+    """Quantos assets existem (soft-deleted não contam).
+
+    `library_id`: restringe à biblioteca ativa (Fatia 70) — None = todas
+    (comportamento de antes).
+    """
+    sql = "SELECT COUNT(*) AS n FROM assets WHERE deleted_at IS NULL"
+    params: list = []
+    if library_id is not None:
+        sql += " AND library_id = ?"
+        params.append(library_id)
+    row = conn.execute(sql, params).fetchone()
     return row["n"]
 
 
-def total_bytes(conn: sqlite3.Connection) -> int:
+def total_bytes(conn: sqlite3.Connection, library_id: int | None = None) -> int:
     """Soma o tamanho de todos os arquivos indexados (soft-deleted fora).
 
     Soma em `files`, não em `assets`: um asset PBR é um conjunto de vários
     arquivos, e somar só a linha do asset contaria um mapa e ignoraria os
     outros seis. `COALESCE` porque `SUM` de conjunto vazio devolve NULL —
     biblioteca recém-criada mostraria "None B" no rodapé.
+
+    `library_id`: restringe à biblioteca ativa (Fatia 70) — None = todas
+    (comportamento de antes).
     """
-    row = conn.execute(
-        """
+    sql = """
         SELECT COALESCE(SUM(f.size_bytes), 0) AS total
           FROM files f
           JOIN assets a ON a.id = f.asset_id
          WHERE a.deleted_at IS NULL
            AND f.deleted_at IS NULL
         """
-    ).fetchone()
+    params: list = []
+    if library_id is not None:
+        sql += " AND a.library_id = ?"
+        params.append(library_id)
+    row = conn.execute(sql, params).fetchone()
     return int(row["total"])
 
 
@@ -262,6 +275,16 @@ def list_for_grid(
                 r["name"] = r["rel_path"].rsplit("/", 1)[-1].rsplit(".", 1)[0]
                 r["cover_path"] = None
     return rows
+
+
+def count_for_library(conn: sqlite3.Connection, library_id: int) -> int:
+    """Quantos assets ativos essa biblioteca tem (Fatia 70) — número mostrado
+    no seletor de biblioteca, pra dar uma ideia do tamanho antes de trocar."""
+    row = conn.execute(
+        "SELECT COUNT(*) AS n FROM assets WHERE library_id = ? AND deleted_at IS NULL",
+        (library_id,),
+    ).fetchone()
+    return row["n"]
 
 
 def list_files(conn: sqlite3.Connection, asset_id: int) -> list[sqlite3.Row]:

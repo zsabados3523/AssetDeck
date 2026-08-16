@@ -70,3 +70,33 @@ def test_count_by_category_filtra_pela_biblioteca_ativa(duas_bibliotecas):
     contagem_b = assets_repo.count_by_category(conn, CATEGORIES, library_id=lib_b)
     assert contagem_b["modelos"] == 0
     assert contagem_b["imagens"] == 2
+
+
+def test_count_for_library(duas_bibliotecas):
+    conn, lib_a, lib_b = duas_bibliotecas
+    assert assets_repo.count_for_library(conn, lib_a) == 1
+    assert assets_repo.count_for_library(conn, lib_b) == 2
+
+
+def test_libraries_list_all(duas_bibliotecas):
+    conn, lib_a, lib_b = duas_bibliotecas
+    nomes = {lib["id"]: lib["name"] for lib in libraries_repo.list_all(conn)}
+    assert nomes == {lib_a: "lib_a", lib_b: "lib_b"}
+
+
+def test_count_active_e_total_bytes_filtram_pela_biblioteca_ativa(duas_bibliotecas):
+    """Achado com screenshot real testando o LibrarySwitcher (Fatia 70): o
+    rodapé ("N de M assets", tamanho total) usava count_active/total_bytes
+    sem library_id — mesma classe de bug da Fatia 69, só que no rodapé em
+    vez da grade."""
+    conn, lib_a, lib_b = duas_bibliotecas
+
+    assert assets_repo.count_active(conn) == 3  # sem library_id: soma tudo
+    assert assets_repo.count_active(conn, library_id=lib_a) == 1
+    assert assets_repo.count_active(conn, library_id=lib_b) == 2
+
+    total_a = assets_repo.total_bytes(conn, library_id=lib_a)
+    total_b = assets_repo.total_bytes(conn, library_id=lib_b)
+    assert total_a == 40  # só o .blend de 40 bytes
+    assert total_b > 0
+    assert assets_repo.total_bytes(conn) == total_a + total_b
