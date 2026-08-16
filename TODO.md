@@ -2352,8 +2352,54 @@ pytest pintando os 3 estados lado a lado nos dois modos — sombra cresce
 visivelmente no hover, encolhe no clique, os dois modos claro/escuro
 corretos.
 
-**Pendente:** confirmação do Rafael na tela real (esta fatia + a
-73 seguem juntas, ainda não mergeadas) antes do merge — e o resto da
-Etapa 1 (barra de navegação/categorias, sidebar, painel de detalhes,
-rodapé, `PreviewPopup`) continua por fazer, nenhuma dessas telas foi
-tocada ainda.
+**Rodada de ajuste, depois do Rafael ver na tela** — 3 pontos:
+"os cards dos assets parecem estar com uma sombra permanente... ao
+passar o mouse por cima a animação poderia ser um pouco mais suave e as
+bordas das tags... deveriam acompanhar de acordo com a borda atual do
+grid do asset".
+
+1. **Sombra de repouso zerada** (`theme.py`, `SHADOW_REST`/
+   `SHADOW_REST_DARK` → alfa `0.0`, era `0.07`/`0.35`). A primeira
+   versão nunca tinha repouso INVISÍVEL, só mais fraco — na tela real
+   isso lia como uma borda cinza fixa em todo card, exatamente a queixa.
+   Card fica plano de verdade até o mouse chegar.
+2. **Animação de hover de verdade** (`asset_card_delegate.py`): antes o
+   `paint()` lia `option.state & State_MouseOver` — um booleano, sem
+   transição, o card "aparecia pronto" no frame seguinte. Agora cada
+   LINHA tem um progresso 0→1 (`_hover_progress`/`_hover_target`)
+   interpolado por um `QTimer` de 16ms (`_tick_hover`) proporcional ao
+   tempo real decorrido — sombra (alfa) e elevação (±2px) andam juntas
+   ao longo de ~150ms. `AssetGridView` ganhou `mouseMoveEvent`/
+   `leaveEvent` novos: avisam o delegate quando o card sob o cursor
+   MUDA (`set_hover(antigo, novo)`), disparando o fade-in do novo e o
+   fade-out do antigo ao mesmo tempo. Sem `set_hover` (ex.: os testes
+   de `paint()`), cai de volta pro booleano nativo — 0 ou 1 direto, sem
+   quebrar nada que já passava.
+3. **Selos e chip acompanham o raio do card**: `_badge()`/`_chip()`
+   tinham raio FIXO (6px e 4px) escolhido quando o raio "marcante" do
+   card era 12 — ficou baixo demais depois dele virar 16 na Fatia 73 (e
+   ia ficar errado de novo em qualquer raio futuro). Agora
+   `refresh_theme()` deriva `_radius_badge`/`_radius_chip` do raio ATUAL
+   do card (`self._radius - 2`, o mesmo raio que a miniatura usa),
+   então troca de variante ao vivo já ajusta os dois juntos.
+
+**Verificado:** `pytest -q tests/test_asset_card_delegate.py
+tests/test_asset_grid_drop.py tests/test_grid_state.py
+tests/test_asset_grid_warmup.py tests/test_theme.py
+tests/test_main_window.py` — 127/127 verdes, nenhum teste precisou
+mudar por causa deste ajuste (os que já cobriam repouso/hover/seleção
+continuaram batendo, porque a animação cai de volta pro booleano nativo
+quando não há `set_hover` envolvido). Script fora do pytest simulando
+`mouseMoveEvent` de verdade entre dois cards confirmou que o progresso
+passa por valores INTERMEDIÁRIOS (ex.: 0,33 depois de ~50ms de uma
+transição de 150ms) antes de convergir em 1,0, e que mover pro card
+vizinho dispara o fade-out do antigo e o fade-in do novo ao mesmo
+tempo — não só os dois extremos. Screenshot novo mandado ao Rafael:
+repouso agora sai plano, sem sombra nenhuma.
+
+**Pendente:** confirmação do Rafael na tela real, agora com estes 3
+ajustes (esta fatia + a 73 seguem juntas, ainda não mergeadas) — a
+animação em si só dá pra sentir ao vivo, não por screenshot. Depois
+disso, o resto da Etapa 1 (barra de navegação/categorias, sidebar,
+painel de detalhes, rodapé, `PreviewPopup`) continua por fazer, nenhuma
+dessas telas foi tocada ainda.
