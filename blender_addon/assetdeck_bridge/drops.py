@@ -18,7 +18,7 @@ import bpy
 from bpy.props import CollectionProperty, StringProperty
 from bpy.types import FileHandler, Operator, OperatorFileListElement
 
-from . import materials
+from . import materials, viewport
 
 HDR_EXTS = ".hdr;.exr"
 TEX_EXTS = ".png;.jpg;.jpeg;.tif;.tiff;.webp;.bmp;.tga"
@@ -86,7 +86,8 @@ class ASSETDECK_OT_drop_texture(Operator):
     files: CollectionProperty(type=OperatorFileListElement, options={"SKIP_SAVE"})
     filepath: StringProperty(subtype="FILE_PATH", options={"SKIP_SAVE"})
 
-    def invoke(self, context, _event):
+    def invoke(self, context, event):
+        self._alvo_sob_o_mouse = viewport.objeto_sob_o_mouse(context, event)
         return self.execute(context)
 
     def execute(self, context):
@@ -115,7 +116,21 @@ class ASSETDECK_OT_drop_texture(Operator):
 
         nome = resposta.get("asset", {}).get("name") or os.path.basename(caminho)
         mat = materials.build_material(nome, mapas)
-        alvos = [o for o in context.selected_objects if hasattr(o.data, "materials")]
+
+        # Soltou em cima de um objeto? Aplica NELE e o seleciona — é o
+        # feedback visual de "onde o material foi parar" (Fatia 68). Sem
+        # objeto sob o mouse (soltou no vazio), cai no comportamento
+        # antigo: aplica em quem já estava selecionado.
+        alvo = getattr(self, "_alvo_sob_o_mouse", None)
+        if alvo is not None and hasattr(alvo.data, "materials"):
+            alvos = [alvo]
+            bpy.ops.object.select_all(action="DESELECT")
+            alvo.select_set(True)
+            context.view_layer.objects.active = alvo
+        else:
+            alvos = [o for o in context.selected_objects
+                     if hasattr(o.data, "materials")]
+
         n = materials.apply_to_objects(mat, alvos) if alvos else 0
         self.report({"INFO"},
                     f"{mat.name}: {len(mapas)} mapa(s)" +

@@ -1,9 +1,13 @@
 """Append/Link de .blend com presets — inspirado no fluxo do Connecter.
 
-Soltar um .blend vindo do AssetDeck abre um menu com o que importar
-(Objects / Materials / Collections) e como (Append ou Link), além das
-variantes "& Place", que deixam o que veio grudado no mouse para você
-posicionar com um clique.
+Soltar um .blend vindo do AssetDeck importa DIRETO, sem menu, sem
+perguntar nada (Fatia 68): olha o conteúdo do arquivo e escolhe sozinho
+Objects/Materials/Collections (o que existir), sempre em modo **Link**
+(não Append — biblioteca grande, escolha do Rafael: o .blend final não
+pode inchar copiando tudo pra dentro) e "& Place", que deixa o que veio
+grudado no mouse para você posicionar com um clique. Segurar Shift ao
+soltar abre o menu antigo (Append/Link × Objects/Materials/Collections)
+pra quem quiser escolher na mão.
 """
 
 from __future__ import annotations
@@ -13,6 +17,8 @@ import os
 import bpy
 from bpy.props import BoolProperty, EnumProperty, StringProperty
 from bpy.types import FileHandler, Menu, Operator
+
+from . import viewport
 
 TIPOS = (
     ("objects", "Objects", "Objetos do arquivo"),
@@ -30,45 +36,6 @@ def _conteudo(filepath: str) -> dict[str, list[str]]:
     return achado
 
 
-def _objeto_sob_o_mouse(context, event):
-    """Objeto que está debaixo do cursor (para 'Append & Place' de material)."""
-    if event is None or context.area is None or context.area.type != "VIEW_3D":
-        return None
-    try:
-        from bpy_extras import view3d_utils
-
-        region, rv3d = context.region, context.region_data
-        coord = (event.mouse_region_x, event.mouse_region_y)
-        origem = view3d_utils.region_2d_to_origin_3d(region, rv3d, coord)
-        direcao = view3d_utils.region_2d_to_vector_3d(region, rv3d, coord)
-        achou, _loc, _nor, _idx, obj, _m = context.scene.ray_cast(
-            context.view_layer.depsgraph, origem, direcao
-        )
-        return obj if achou else None
-    except Exception:
-        return None
-
-
-def _ponto_do_mouse(context, event):
-    """Coordenada 3D sob o cursor (plano z=0), ou None fora da viewport."""
-    if event is None or context.area is None or context.area.type != "VIEW_3D":
-        return None
-    try:
-        from bpy_extras import view3d_utils
-
-        region = context.region
-        rv3d = context.region_data
-        coord = (event.mouse_region_x, event.mouse_region_y)
-        origem = view3d_utils.region_2d_to_origin_3d(region, rv3d, coord)
-        direcao = view3d_utils.region_2d_to_vector_3d(region, rv3d, coord)
-        if abs(direcao.z) < 1e-6:
-            return None
-        t = -origem.z / direcao.z
-        return origem + direcao * t if t > 0 else None
-    except Exception:
-        return None
-
-
 class ASSETDECK_OT_import_blend(Operator):
     bl_idname = "assetdeck.import_blend"
     bl_label = "AssetDeck: importar do .blend"
@@ -80,8 +47,8 @@ class ASSETDECK_OT_import_blend(Operator):
     place: BoolProperty(default=False, options={"SKIP_SAVE"})
 
     def invoke(self, context, event):
-        self._ponto = _ponto_do_mouse(context, event)
-        self._sob_o_mouse = _objeto_sob_o_mouse(context, event)
+        self._ponto = viewport.ponto_do_mouse(context, event)
+        self._sob_o_mouse = viewport.objeto_sob_o_mouse(context, event)
         return self.execute(context)
 
     def execute(self, context):
@@ -161,15 +128,33 @@ class ASSETDECK_OT_import_blend(Operator):
             self.report({"WARNING"}, "Nada novo para trazer (já estava na cena?).")
             return {"CANCELLED"}
 
+        quantidade = len(novos)
+        alvos = novos
+        if self.datablock == "objects" and self.link:
+            # Objeto LINKADO não deixa mover/girar pela interface (G/R/S)
+            # sem virar "Library Override" — o Blender bloqueia isso no
+            # próprio operador de transformar, mesmo já tendo dado pra
+            # setar a posição inicial por código aqui embaixo. Embrulha
+            # num Empty local (sempre 100% editável) e é ELE quem recebe
+            # posição/seleção/"& Place"; o(s) linkado(s) seguem grudados
+            # nele por parentesco — mover o Empty move tudo.
+            nome_empty = os.path.splitext(os.path.basename(self.filepath))[0]
+            empty = bpy.data.objects.new(nome_empty, None)
+            colecao.objects.link(empty)
+            for obj in novos:
+                obj.parent = empty
+                obj.matrix_parent_inverse = empty.matrix_world.inverted()
+            alvos = [empty]
+
         ponto = getattr(self, "_ponto", None)
         bpy.ops.object.select_all(action="DESELECT")
-        for obj in novos:
+        for obj in alvos:
             if ponto is not None and obj.parent is None:
                 obj.location = ponto
             obj.select_set(True)
-        context.view_layer.objects.active = novos[0]
+        context.view_layer.objects.active = alvos[0]
 
-        self.report({"INFO"}, f"{verbo}: {len(novos)} {self.datablock}")
+        self.report({"INFO"}, f"{verbo}: {quantidade} {self.datablock}")
 
         if self.place and context.area and context.area.type == "VIEW_3D":
             # Deixa o que veio grudado no mouse, como o "& Place" do Connecter
@@ -256,7 +241,7 @@ class ASSETDECK_OT_drop_blend(Operator):
     filepath: StringProperty(subtype="FILE_PATH", options={"SKIP_SAVE"})
     directory: StringProperty(subtype="DIR_PATH", options={"SKIP_SAVE"})
 
-    def invoke(self, context, _event):
+    def invoke(self, context, event):
         caminho = self.filepath
         if not caminho and self.directory:
             caminho = self.directory
@@ -264,8 +249,47 @@ class ASSETDECK_OT_drop_blend(Operator):
             self.report({"ERROR"}, "Arquivo .blend não encontrado.")
             return {"CANCELLED"}
         context.window_manager.assetdeck_drop_path = caminho
-        bpy.ops.wm.call_menu(name=ASSETDECK_MT_drop_blend.bl_idname)
-        return {"FINISHED"}
+
+        if event is not None and event.shift:
+            bpy.ops.wm.call_menu(name=ASSETDECK_MT_drop_blend.bl_idname)
+            return {"FINISHED"}
+
+        # Padrão (Fatia 68): pula o menu, escolhendo sozinho o que dá pra
+        # importar — Object/Material/Collection não é exigência do
+        # Blender, é o próprio add-on que decide. Alguns .blend do
+        # Rafael são packs de MATERIAL puro (só node group, sem malha
+        # nenhuma) — nesses, "objects" sempre dava vazio e cancelava em
+        # silêncio (o bug real por trás do "nada acontece" ao soltar um
+        # material). Olhar o conteúdo primeiro custa pouco (só lista os
+        # nomes, não carrega dado nenhum) e evita isso.
+        try:
+            conteudo = _conteudo(caminho)
+        except Exception as exc:
+            self.report({"ERROR"}, f"Falha ao ler o .blend: {exc}")
+            return {"CANCELLED"}
+
+        if conteudo["objects"]:
+            datablock = "objects"
+        elif conteudo["materials"]:
+            datablock = "materials"
+        elif conteudo["collections"]:
+            datablock = "collections"
+        else:
+            self.report({"WARNING"},
+                        "Este .blend não tem objetos, materiais nem "
+                        "coleções pra importar.")
+            return {"CANCELLED"}
+
+        # Objects/Collections vêm grudados no mouse (Link & Place); um
+        # material puro aplica direto no objeto sob o mouse (mesma mira
+        # de _aplicar_materiais/drop_texture) — os dois são o feedback
+        # visual de "onde vai parar", sem precisar escolher no menu.
+        # Link (não Append) por escolha do Rafael: biblioteca grande,
+        # arquivo .blend final não pode inchar copiando tudo pra dentro.
+        return bpy.ops.assetdeck.import_blend(
+            "INVOKE_DEFAULT", filepath=caminho, datablock=datablock,
+            link=True, place=True,
+        )
 
     def execute(self, context):
         return self.invoke(context, None)

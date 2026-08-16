@@ -1175,6 +1175,27 @@ rodapé — e TODA ação de arquivo falha em silêncio prático. Valeria um
 aviso visível na abertura ("a biblioteca não está acessível: <caminho>"),
 que teria evitado esta ida e volta inteira.
 
+### ☑ Bug: instalador do add-on só achava Blender via Flatpak
+O Rafael reinstalou o Blender como versão portátil
+(`/home/rafael/Apps/blender-5.2.0-linux-x64/`). `installer.find_addon_dirs()`
+só procurava em `~/.var/app/org.blender.Blender/config/blender` (caminho
+fixo do Flatpak) — como essa pasta não existe mais de verdade em uso, a
+lista voltava vazia e o botão "Instalar add-on" falhava sempre, sem
+avisar o motivo real na UI (só o `RuntimeError` genérico "não encontrei o
+Blender").
+
+`installer.py` ganhou `STANDARD_CONFIG = ~/.config/blender` — é lá que
+QUALQUER Blender não-Flatpak (pacote do sistema, tarball, portátil) grava
+a config de usuário, mesmo rodando de fora de `/usr` ou de `Apps/`.
+`find_addon_dirs()` agora varre as duas raízes (Flatpak e padrão) e
+instala em todas as versões encontradas nas duas — se um dia o Rafael
+tiver as duas instalações ao mesmo tempo, o add-on vai pras duas.
+
+**Verificado de verdade, não só em teste:** com o fix, `installer.install()`
+achou e instalou em `~/.config/blender/5.2/scripts/addons/assetdeck_bridge/`
+— a pasta real que o Blender portátil do Rafael usa (confirmado por ele:
+os add-ons de verdade, como `vray_blender`, já moram lá).
+
 ### ☑ Fatia 46 — Teste da ponte falha com o app aberto
 `tests/test_main_window.py::test_ponte_e_render_ficam_prontos` afirmava que
 a ponte do Blender está escutando, mas ela usava a porta FIXA 45017
@@ -1759,3 +1780,144 @@ clique no rail abre a janela). 765 testes verdes.
 **Registrado, não resolvido agora (pedido do Rafael):** o visual da
 `SettingsWindow` ao abrir pode mudar mais pra frente — cuidar disso junto
 da revisão visual geral (Fase 7 do roadmap), não uma fatia isolada.
+
+### ☑ Fatia 68 — Import simplificado pro Blender (era só .blend que perguntava)
+Início da **Fase 5** do roadmap F6. Pedido do Rafael: arrastar um asset
+pro Blender deve importar automático — se é modelo 3D, importa modelo;
+se é material, importa material — com feedback VISUAL de onde vai
+parar, sem menu no meio do caminho.
+
+**Achado revisando antes de programar:** HDRI e textura/PBR já eram 100%
+automáticos desde a Fatia 11-13 (`drops.py`), sem menu nenhum — só
+`.blend` (modelos) parava tudo com um menu Object/Material/Collection ×
+Append/Link × "& Place" (`ASSETDECK_MT_drop_blend`,
+`blender_addon/assetdeck_bridge/importer.py`), construído pelo próprio
+add-on, não exigência do Blender.
+
+- **`.blend` (modelos):** `ASSETDECK_OT_drop_blend.invoke` agora importa
+  DIRETO como Objects, modo "Append & Place" (o objeto vem grudado no
+  mouse, você clica pra soltar — é o próprio feedback visual de "onde
+  vai colocar", já existia desde a Fatia 14, só não era o padrão). Segurar
+  **Shift** ao soltar mantém o menu antigo pra quem quiser Link, só
+  Materials/Collections, ou escolher na mão.
+- **Textura solta (material):** `ASSETDECK_OT_drop_texture` ganhou
+  raycast sob o mouse no momento do drop (`viewport.objeto_sob_o_mouse`,
+  a mesma técnica que o "Append & Place" de material já usava dentro do
+  .blend) — se soltou em cima de um objeto, o material vai NELE (e ele é
+  selecionado, feedback visual de "aplicou aqui"), em vez de depender de
+  algo já estar selecionado antes sem nenhum aviso. Soltar fora de
+  qualquer objeto cai no comportamento antigo (aplica nos selecionados).
+- **`viewport.py` (novo):** `objeto_sob_o_mouse`/`ponto_do_mouse` saíram
+  de `importer.py` pra cá — mesma lógica de raycast, reusada agora por
+  `drops.py` também, em vez de duplicar.
+
+**Achado no caminho, corrigido junto (não é só UI — é o Blender de
+verdade não sendo reconhecido):** o Rafael trocou o Blender de Flatpak
+para instalação nativa/portátil em 2026-08-10, numa sessão anterior que
+corrigiu o instalador (`assetdeck/bridge/installer.py` passou a procurar
+em `~/.config/blender` além de `~/.var/app/org.blender.Blender`) mas
+nunca chegou a ser mergeada — trazida agora (`git cherry-pick`) porque
+esta fatia mexe exatamente nessa área. Também corrigidas 2 mensagens de
+erro em `main_window.py` e um comentário em `render.py` que ainda só
+mencionavam Flatpak como opção de instalação — `render.py` já tinha
+fallback pro binário do PATH, só o texto estava desatualizado.
+`CLAUDE.md` atualizado (comando do Blender não é mais
+`flatpak run org.blender.Blender`).
+
+**Verificado com Blender de verdade, headless** (`blender --background
+--python`, mesmo padrão das Fatias 38/40 — não simula mouse de
+verdade, então não prova a experiência visual, só que o código não
+quebra): registro/desregistro do add-on sem erro; `import_blend` e
+`drop_blend` sem Shift trazem o objeto pra cena SEM abrir menu (antes
+disso não dava pra nem testar sem travar esperando UI); `drop_texture`
+sem a ponte configurada cancela graciosamente (sem exceção Python).
+
+**Primeiro teste do Rafael na tela real achou 3 problemas, os 3
+investigados e 2 corrigidos na mesma fatia:**
+
+1. **".blend não encontrado" ao arrastar um asset da biblioteca REAL do
+   SSD.** Causa raiz, confirmada com uma consulta direta no banco: o
+   banco de dev ainda tem **72.244 assets** da biblioteca real
+   (`library_id=2`), de um teste de 2026-08-04 que nunca foi limpo —
+   mesmo com o app configurado pra testlib agora. As consultas que
+   montam a grade/árvore de pastas não filtram por `library_id` (o
+   risco já estava registrado no roadmap, item "Múltiplas bibliotecas",
+   Fase 5). Resultado: a grade mistura os assets das duas bibliotecas, e
+   arrastar um que veio do SSD tenta montar o caminho contra a raiz da
+   testlib (a ativa) — erra sempre, porque esse arquivo nunca esteve lá.
+   **Não corrigido ainda** — Rafael pediu pra não mexer no banco por
+   ora. Continua valendo só testar com assets que são mesmo da testlib
+   até ele decidir limpar.
+2. **Material "não fazia nada".** Causa raiz: TODO `.blend` no banco
+   (as duas bibliotecas) está classificado só como `model` — não existe
+   uma categoria separada pra ".blend que é só material". Alguns packs
+   de material do Rafael são `.blend` com um Material pronto e NENHUM
+   objeto dentro — e o código só tentava "objects" primeiro, achava
+   vazio, cancelava em silêncio. **Corrigido:** `ASSETDECK_OT_drop_blend`
+   agora espia o conteúdo do arquivo (`_conteudo()`, já existia, nunca
+   tinha sido usada) antes de decidir — sem objetos mas com materiais,
+   importa como Materials e aplica no objeto sob o mouse (mesma mira do
+   `drop_texture`). Sem objetos nem materiais, mas com coleções, importa
+   Collections. Testado no Blender de verdade headless com um `.blend`
+   só-material construído na hora — aplicou certo.
+3. **Pergunta do Rafael: Append ia deixar o arquivo pesado demais numa
+   biblioteca grande — não seria melhor Link por padrão?** Decisão dele,
+   não minha: perguntei o trade-off (Link é leve mas quebra se o SSD
+   remontar em outro ponto, problema que já aconteceu antes — Fatia 53;
+   Append é pesado mas nunca quebra por isso). **Ele escolheu Link.**
+   `link=False` virou `link=True` nos dois caminhos (objects/collections
+   E materials) — confirmado no teste headless que o datablock importado
+   tem `.library` preenchido (é link de verdade, não cópia).
+
+**Verificado de novo depois dos 3 fixes:** 787 testes verdes (mesmas 4
+falhas conhecidas, sem relação).
+
+**Rafael testou nesse estado e achou um 4º problema, mais sério — não
+dava pra mover/posicionar o modelo importado de jeito nenhum.**
+
+**Causa raiz, confirmada com um experimento isolado no Blender:** o
+Blender bloqueia mover/girar/escalar um objeto LINKADO pela interface
+(tecla G/R/S, arrastar na viewport) a menos que ele vire um "Library
+Override" — é uma trava de propósito, pra impedir edição acidental de
+algo que pertence a outro arquivo. `obj.location = ponto` por código
+(o que a Fatia 68 já fazia pra posicionar no ponto do mouse) até
+funciona sem erro nenhum, mas isso não ajuda: assim que o Blender tenta
+rodar o "& Place" de verdade (`bpy.ops.transform.translate`, o mesmo
+operador por trás do G), ele se recusa a mexer num objeto linkado — e
+depois de importado, o Rafael não conseguia mais tocar nele.
+
+**Isso só apareceu agora porque a Fatia 68 (fix anterior) trocou o
+padrão de Append pra Link** — com Append, o objeto é 100% local, nunca
+tinha esse problema.
+
+**Fix — `ASSETDECK_OT_import_blend._trazer_para_a_cena`:** quando
+`datablock == "objects"` E `link=True`, os objetos linkados agora vêm
+embrulhados num **Empty local** (`bpy.data.objects.new`, nomeado pelo
+arquivo `.blend` de origem) — é o Empty que recebe a posição inicial, a
+seleção, e o "& Place" (grudar no mouse); os objetos linkados viram
+filhos dele (`obj.parent = empty`, com `matrix_parent_inverse` calculado
+pra não pular de lugar ao parentar). Mover o Empty (sempre 100% local,
+sem trava nenhuma) move o linkado junto — é o mesmo truque que já existe
+pra Collections linkadas (`inst.instance_type = "COLLECTION"`, bem
+abaixo no mesmo método), só que pra Objects soltos. **Só se aplica com
+Link** — Append continua exatamente como antes (objeto direto, sem
+Empty, nunca precisou disso).
+
+**Verificado com um experimento headless dedicado** (não dá pra simular
+G/R/S de verdade sem viewport, então a prova foi indireta): confirma que
+o alvo devolvido pra seleção/posição é o Empty (`library=None`, sempre
+editável), que o objeto linkado continua o linkado de verdade
+(`library` apontando pro arquivo de origem) e virou filho do Empty, e
+que mover o Empty (`empty.location = ...`) reflete no `matrix_world` do
+linkado depois de recalcular o depsgraph — prova que "mover o Empty
+move tudo junto" funciona mecanicamente. **Não prova a experiência de
+arrastar com o mouse de verdade** — só o Rafael consegue confirmar isso.
+
+787 testes verdes de novo, mesma contagem de antes (pytest não cobre
+`blender_addon/` — só os testes Python normais, sem relação com este
+fix).
+
+**Pendente de confirmação do Rafael na tela real:** reteste completo —
+modelo da testlib (Link & Place, agora deve dar pra mover o Empty pai),
+material `.blend` só-material, textura solta em cima de um objeto
+específico.
