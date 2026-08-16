@@ -13,14 +13,22 @@ log = logging.getLogger(__name__)
 _DIR_ROLE = 32  # Qt.UserRole
 
 
-def list_dirs(conn: sqlite3.Connection) -> list[str]:
-    """Todas as pastas (e ancestrais) que contêm arquivos indexados."""
+def list_dirs(conn: sqlite3.Connection, library_id: int | None = None) -> list[str]:
+    """Todas as pastas (e ancestrais) que contêm arquivos indexados.
+
+    `library_id`: restringe à biblioteca ativa (Fatia 69) — None = todas
+    (comportamento de antes). Sem isso, um banco com mais de uma
+    biblioteca indexada mostra pastas que não existem na raiz atual.
+    """
     dirs: set[str] = set()
-    for row in conn.execute(
-        """SELECT DISTINCT f.rel_path FROM files f
-           JOIN assets a ON a.id = f.asset_id
-           WHERE a.deleted_at IS NULL AND f.deleted_at IS NULL"""
-    ):
+    sql = """SELECT DISTINCT f.rel_path FROM files f
+             JOIN assets a ON a.id = f.asset_id
+             WHERE a.deleted_at IS NULL AND f.deleted_at IS NULL"""
+    params: list = []
+    if library_id is not None:
+        sql += " AND a.library_id = ?"
+        params.append(library_id)
+    for row in conn.execute(sql, params):
         parts = row["rel_path"].split("/")[:-1]  # tira o nome do arquivo
         for i in range(1, len(parts) + 1):
             dirs.add("/".join(parts[:i]))
@@ -37,7 +45,7 @@ class FolderTree(QTreeWidget):
         self.setHeaderHidden(True)
         self.currentItemChanged.connect(self._on_current)
 
-    def reload(self, conn: sqlite3.Connection) -> None:
+    def reload(self, conn: sqlite3.Connection, library_id: int | None = None) -> None:
         self.blockSignals(True)  # recarregar árvore não deve refiltar a grid
         self.clear()
         root = QTreeWidgetItem(["Biblioteca (tudo)"])
@@ -45,7 +53,7 @@ class FolderTree(QTreeWidget):
         self.addTopLevelItem(root)
 
         items: dict[str, QTreeWidgetItem] = {"": root}
-        for d in list_dirs(conn):
+        for d in list_dirs(conn, library_id=library_id):
             parent_path = d.rsplit("/", 1)[0] if "/" in d else ""
             item = QTreeWidgetItem([d.rsplit("/", 1)[-1]])
             item.setData(0, _DIR_ROLE, d)
