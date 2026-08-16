@@ -186,6 +186,7 @@ def run(argv: list[str]) -> int:
         log.info("Backup de hoje já existia — nada a fazer.")
 
     # Import tardio: os testes de banco/backup/scanner rodam sem Qt carregado.
+    from PySide6.QtCore import Qt
     from PySide6.QtWidgets import QApplication
 
     from assetdeck.ui.hdri_viewer import ensure_gl_format
@@ -195,6 +196,17 @@ def run(argv: list[str]) -> int:
     # usa shaders #version 330, que não compilam num contexto de
     # compatibilidade antigo — e o formato padrão é imutável depois.
     ensure_gl_format()
+
+    # Também tem de vir ANTES do QApplication. Candidato pro "piscar" do
+    # visualizador de HDRI (Fatia 65, nunca resolvido de verdade — e agora
+    # o visualizador de modelo 3D, Fatia 71, tem o mesmo sintoma): sem
+    # isso, CADA janela de topo paga sozinha o custo de negociar sua
+    # própria superfície OpenGL a primeira vez que um QOpenGLWidget
+    # aparece nela — é essa negociação que o Rafael vê como "pisca".
+    # AA_ShareOpenGLContexts é a flag padrão do Qt pra isso: monta UM
+    # contexto GL compartilhado cedo, pras janelas de topo seguintes
+    # (HdriViewer, ModelViewer) reusarem em vez de negociar do zero.
+    QApplication.setAttribute(Qt.ApplicationAttribute.AA_ShareOpenGLContexts, True)
 
     app = QApplication(sys.argv[:1])
 

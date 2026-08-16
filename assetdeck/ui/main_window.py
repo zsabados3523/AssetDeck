@@ -34,6 +34,7 @@ from assetdeck.db.repos import smart_collections as smart_collections_repo
 from assetdeck.db.repos import tags as tags_repo
 from assetdeck.indexer import duplicates as duplicates_finder
 from assetdeck.indexer import relocator
+from assetdeck.model3d import loader as model3d_loader
 from assetdeck.indexer.scanner import ScanStats
 from assetdeck.thumbs.hdr import can_hdr
 from assetdeck.thumbs.pipeline import ThumbnailPipeline
@@ -1321,10 +1322,11 @@ class MainWindow(QMainWindow):
             # HDRI achatado num QLabel não deixa avaliar a luz (Fatia 34).
             self._hdri_viewer().show_for(caminho)
             return
-        if caminho.suffix.lower() == ".obj":
-            # POC da Fase 6: só .obj por enquanto (ver TODO.md) — modelo
-            # com câmera orbitando em vez do preview achatado.
-            self._model_viewer().show_for(caminho)
+        if caminho.suffix.lower() in model3d_loader.EXTENSOES_SUPORTADAS:
+            # Fase 6: modelo com câmera orbitando em vez do preview
+            # achatado. content_hash só é usado pelo loader de .blend
+            # (cache da exportação via Blender) — o resto ignora.
+            self._model_viewer().show_for(caminho, row["content_hash"])
             return
         maps = None
         if row["asset_type"] == "pbr_set" and self.group_check.isChecked():

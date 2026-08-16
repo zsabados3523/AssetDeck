@@ -2141,3 +2141,88 @@ expandir pra outros formatos — próximo capítulo natural é `.fbx`
 (viável) — mas ainda não decidiu ONDE isso entra no viewer atual
 (substituir o `.obj`-only por um roteador de formato, ou ir fatia por
 fatia).
+
+### ☑ Fatia 72 — Visualizador 3D: .fbx e .blend de verdade
+O Rafael perguntou, direto: "não existe nenhuma forma de criar um
+visualizador de .fbx e .blend de forma integrada ao programa?" — a
+resposta da Fatia 71 (".blend está fora do alcance de qualquer
+visualizador interativo") estava certa só pela metade: verdade que não
+existe parser de terceiros confiável pro formato binário fechado do
+Blender, mas o app JÁ depende do Blender instalado (gera capas desde a
+Fatia 16) — usar o próprio Blender como "leitor" é caminho real, só não
+tinha sido considerado.
+
+- **`.fbx` → `model3d/assimp_loader.py` (novo), biblioteca `assimp-py`.**
+  `pyassimp` (o binding "oficial") foi descartado — quebrado no Python
+  3.12 (usa `distutils`, removido da stdlib). `assimp-py` é um binding
+  mais novo com a biblioteca nativa DENTRO do wheel (`pip install
+  assimp-py`, sem pacote de sistema, sem `sudo`). Achado testando com um
+  `.fbx` real (exportado do Blender): sem `Process_PreTransformVertices`
+  a malha saía deitada de lado — o Blender embute no NÓ da cena (não nos
+  vértices) a rotação Z-up→Y-up (convenção do formato) e a escala 100×
+  (metro→centímetro); essa flag do assimp achata a hierarquia de nós
+  aplicando a transformação de cada um direto nos vértices antes de
+  devolver a malha.
+- **`.blend` → `model3d/blend_loader.py` (novo), Blender headless como
+  conversor.** Exporta a geometria pra `.obj` num script novo
+  (`blender/scripts/export_obj.py`, mesmo padrão do `render_thumb.py` da
+  Fatia 16/38) e lê com o parser caseiro que já existia — cacheado por
+  `content_hash` em `config.models3d_cache_dir()` (mesma ideia da
+  `thumbs_dir()`: só reexporta se o conteúdo mudou). Medido contra a
+  testlib real: ~0,4s do zero a zero pra abrir e exportar um modelo de
+  móvel — rápido o bastante pra um preview sob demanda.
+- **`model3d/loader.py` (novo):** escolhe o loader certo pela extensão
+  (`.obj`/`.fbx`/`.blend`) — o `ModelViewer` só chama `load_mesh()`, não
+  sabe de loader nenhum. `main_window._open_preview` roteia as 3
+  extensões (`EXTENSOES_SUPORTADAS`) pro `ModelViewer`, passando
+  `content_hash` (só usado pelo `.blend`).
+
+**Achado no caminho — bug real, PRÉ-EXISTENTE, não da Fase 6:** testando
+a exportação de `.blend` com um modelo real da testlib, o Blender
+travava ~30s e falhava com erros do add-on **V-Ray** ("ZmqServer
+Community Edition cannot be run in headless mode"). Confirmado que
+`render_thumbnail()` — a geração de CAPAS, que já existia desde a Fatia
+16 — tem o MESMO problema pro mesmo arquivo: sem `--factory-startup` no
+comando do Blender, ele carrega os add-ons do PERFIL do Rafael (V-Ray
+entre eles), que tentam iniciar um servidor de render e travam em modo
+headless. **Corrigido nas duas funções** (`render_thumbnail` e
+`export_to_obj`, `assetdeck/blender/render.py`) — `--factory-startup`
+pula o perfil pessoal, carrega só os padrões de fábrica. Verificado:
+render e export do mesmo arquivo que travava antes agora levam ~3,6s
+juntos, sem erro. **Bug que provavelmente já afeta silenciosamente
+capas de outros assets com V-Ray/Cosmos** desde que o add-on foi
+instalado (fora do escopo desta fatia investigar quantos — thumbnails
+já cacheadas mascaram o problema até uma reindexação forçar regerar).
+
+**Achado com o Rafael perguntando sobre o "piscar" do visualizador:**
+registrado desde a Fatia 65 e nunca investigado a fundo
+("Candidato: pré-aquecer o contexto GL..."). Causa mais provável, nunca
+tentada: sem `Qt.AA_ShareOpenGLContexts`, cada janela de topo nova
+(HdriViewer, ModelViewer) negocia sua PRÓPRIA superfície OpenGL do
+zero na primeira vez que aparece — é essa negociação que pisca. Setado
+em `app.py`, ANTES do `QApplication` (só funciona se vier antes).
+**Não dá pra provar por captura de tela que resolveu** (é um evento de
+recomposição de um frame só) — mesma ressalva já registrada na Fatia
+65, pendente de confirmação do Rafael na tela real.
+
+**Verificado com os 3 formatos de verdade, mesmo modelo** (cadeira da
+testlib, exportada pros 3 formatos): screenshot do `ModelViewer` aberto
+pela `MainWindow` real pra cada um — os três renderizam idênticos
+(mesma orientação, mesmo enquadramento, 7.894 triângulos).
+
+**Testes novos:** `tests/test_assimp_loader.py` (mensagem de erro sem
+a lib instalada — forçada via `sys.modules`, não depende de
+desinstalar nada —, triângulo simples, leque de quad, arquivo sem
+malha), `tests/test_blend_loader.py` (sem Blender instalado, exporta e
+lê quando não tem cache, usa cache na 2ª chamada, hash diferente
+reexporta, erro de export vira `RuntimeError` legível — tudo com
+`export_to_obj`/`blender_command` mockados, não precisa de Blender de
+verdade pra rodar `pytest`), `tests/test_model3d_loader.py` (roteamento
+por extensão, `.blend` sem `content_hash` levanta erro,
+extensão desconhecida levanta erro), `tests/test_config.py` (+1,
+`models3d_cache_dir()`), 2 em `test_main_window.py` reescritos como
+`@pytest.mark.parametrize` cobrindo os 3 formatos.
+
+**Pendente de confirmação do Rafael na tela real:** os 3 formatos
+abrindo pelo app de verdade (não só pelo script de screenshot), e se o
+"piscar" do visualizador melhorou com o `AA_ShareOpenGLContexts`.
