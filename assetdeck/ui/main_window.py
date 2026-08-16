@@ -1321,6 +1321,11 @@ class MainWindow(QMainWindow):
             # HDRI achatado num QLabel não deixa avaliar a luz (Fatia 34).
             self._hdri_viewer().show_for(caminho)
             return
+        if caminho.suffix.lower() == ".obj":
+            # POC da Fase 6: só .obj por enquanto (ver TODO.md) — modelo
+            # com câmera orbitando em vez do preview achatado.
+            self._model_viewer().show_for(caminho)
+            return
         maps = None
         if row["asset_type"] == "pbr_set" and self.group_check.isChecked():
             # PBR Material Viewer: botões para alternar entre os mapas do set
@@ -1342,6 +1347,15 @@ class MainWindow(QMainWindow):
 
             self._hdri_win = HdriViewer(self)
         return self._hdri_win
+
+    def _model_viewer(self):
+        """Mesmo raciocínio do `_hdri_viewer()` acima: criado sob demanda,
+        janela própria (não overlay — mesmo motivo do HDRI)."""
+        if getattr(self, "_model_win", None) is None:
+            from assetdeck.ui.model_viewer import ModelViewer
+
+            self._model_win = ModelViewer(self)
+        return self._model_win
 
     def _grid_menu(self, pos) -> None:
         from PySide6.QtWidgets import QMenu

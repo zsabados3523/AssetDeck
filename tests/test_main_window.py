@@ -778,3 +778,39 @@ def test_on_finished_nada_mudou_nao_chama_reload_all(janela, monkeypatch):
     janela._on_finished(ScanStats())
 
     assert chamadas == []
+
+
+def test_open_preview_roteia_obj_pro_visualizador_de_modelo(janela, monkeypatch):
+    """Fase 6 (POC): duplo clique num .obj abre o ModelViewer em vez do
+    PreviewPopup achatado — mesmo padrão do .hdr/.exr (Fatia 34). Não
+    instancia o ModelViewer de verdade: QOpenGLWidget não roda no modo
+    offscreen do pytest."""
+    chamadas = []
+
+    class _FakeViewer:
+        def show_for(self, caminho):
+            chamadas.append(caminho)
+
+    monkeypatch.setattr(janela, "_model_viewer", lambda: _FakeViewer())
+    monkeypatch.setattr(janela.model, "row_at", lambda idx: {
+        "rel_path": "modelo.obj", "asset_type": "model", "id": 999,
+    })
+
+    janela._open_preview(janela.model.index(0))
+
+    assert len(chamadas) == 1
+    assert chamadas[0].name == "modelo.obj"
+
+
+def test_open_preview_nao_roteia_blend_pro_visualizador_de_modelo(janela, monkeypatch):
+    """Só .obj — .blend continua no PreviewPopup de sempre (a POC não
+    abre .blend, ver TODO.md)."""
+    chamadas = []
+    monkeypatch.setattr(janela, "_model_viewer",
+                        lambda: pytest.fail("não devia chamar o ModelViewer pra .blend"))
+    monkeypatch.setattr(janela, "preview_popup",
+                        type("Fake", (), {"show_for": lambda *a, **k: chamadas.append(1)})())
+
+    janela._open_preview(janela.model.index(0))  # modelo.blend, do fixture
+
+    assert chamadas == [1]
