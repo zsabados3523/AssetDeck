@@ -22,8 +22,8 @@ usando o app de verdade.
 
 | | |
 |---|---|
-| Testes | 802 verdes (`pytest -q`) — 4 falhas conhecidas e sem relação (`test_render.py`/`test_missing_textures.py`, dependem do Blender de verdade rodando no ambiente) |
-| Última fatia mergeada | **Fatia 70** — seletor de biblioteca (trocar/anexar pela UI), confirmado pelo Rafael na tela; ajuste visual (deixar igual ao mockup) adiado pra Fase 7 |
+| Testes | 845 verdes (`pytest -q`) — 4 falhas conhecidas e sem relação (`test_render.py`/`test_missing_textures.py`, dependem do Blender de verdade rodando no ambiente) |
+| Última fatia mergeada | **Fatia 71+72** — visualizador 3D (`.obj`/`.fbx`/`.blend`, câmera orbitando), "piscar" resolvido, confirmado pelo Rafael na tela; visual embutido (tipo `PreviewPopup`) adiado pra Fase 7 |
 | Onde trabalhar | `/home/rafael/00 - PROJETOS/assetdeck-correcoes` (worktree isolado — **NÃO** a pasta `assetdeck` original, HEAD solta de propósito lá). Ver memória `assetdeck-worktree-isolado`. |
 | Biblioteca de dev | `/home/rafael/00 - PROJETOS/assetdeck-testlib` — NUNCA apontar pra outra (regra do CLAUDE.md) |
 | Schema | migrations 001–006 aplicadas (ver SCHEMA.md) |
@@ -37,17 +37,21 @@ abaixo pra checklist completo e plano de cada fase):
   ajuste visual do `LibrarySwitcher` (checklist do F6) e `config.py`
   continuar aceitando só uma raiz por vez — não travou nada até agora,
   registrar se virar necessidade real.
-- Fase 6 — Visualizador 3D: Rafael pediu PROVA DE CONCEITO primeiro (só
-  `.obj`, câmera orbitando) antes de comprometer fatia grande.
+- Fase 6 — Visualizador 3D: **funcional, fechada por ora.** `.obj`
+  (parser caseiro), `.fbx` (assimp-py) e `.blend` (Blender headless como
+  conversor, cacheado) — todos com câmera orbitando, confirmados na tela
+  real. Visual (janela embutida tipo `PreviewPopup`, em vez de janela
+  própria do SO) fica pra Fase 7 — tem tensão técnica real com o fix do
+  "piscar", ver checklist do F6.
 - Fase 7 — Sessão de revisão visual AO VIVO com o Rafael (hover que muda
   de cor, tema escuro "ofuscando", painel de detalhes denso, "mudar
   visual" geral, visual da `SettingsWindow` nova, visual do
-  `LibrarySwitcher` — ver checklist abaixo) — precisa dele na tela, não
-  dá pra fatiar sozinho sem ele apontando o que incomoda.
+  `LibrarySwitcher`, visual do `ModelViewer`/`HdriViewer` — ver
+  checklist abaixo) — precisa dele na tela, não dá pra fatiar sozinho
+  sem ele apontando o que incomoda. **Por pedido dele, fica por ÚLTIMO**
+  — só depois de todas as mudanças funcionais estarem prontas.
 
 **Pendências registradas, não resolvidas:**
-- Janelinha do HDRI ainda pisca na primeira abertura por sessão (ver
-  checklist do F6).
 - Banco de dev (`~/.local/share/assetdeck/assetdeck.db`) tem 72.244
   assets da biblioteca real (`library_id=2`) que nunca foram limpos —
   Rafael pediu pra NÃO mexer nisso por ora (achado testando a Fatia 68).
