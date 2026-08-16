@@ -97,25 +97,36 @@ FOCUS = ACCENT                   # foco agora é o destaque, não um cinza
 SELECTION = (0, 0, 0, 0.065)
 HOVER = (0, 0, 0, 0.035)
 
-# Sombra do card da grade (Fatia 73/74) — substitui a borda reta do repouso
-# por elevação de verdade, pedido do Rafael olhando referências de
-# dashboards modernos. SEMPRE neutra (preto translúcido), nunca a cor de
-# destaque — mesma decisão já tomada em `apply_card_shadow()`: sombra
-# colorida "suja" a leitura da miniatura por baixo. Pintada à mão em
-# `QPainter` (a grade não pode ter `QListView::item` no QSS — mata a
-# rolagem, ver `tests/test_theme.py::test_qss_nao_estiliza_item_da_grade`),
-# então não passa pelo `theme.qss` — só por `current_colors()`.
+# Fundo do card da grade em hover/clique (Fatia 74).
 #
-# REPOUSO É ZERO DE PROPÓSITO (ajuste da Fatia 74, feedback do Rafael: "os
-# cards parecem estar com uma sombra permanente"). A primeira versão tinha
-# repouso levemente visível o tempo todo — olhando na tela real, isso lia
-# como uma borda cinza fixa em CADA card, não como elevação. Card plano até
-# o mouse chegar, sombra nasce animada no hover (progresso 0→1 em
-# `AssetCardDelegate`, não mais um salto binário) — é a ANIMAÇÃO quem
-# carrega a sensação de profundidade agora, não uma sombra parada.
-SHADOW_REST = (0, 0, 0, 0.0)
-SHADOW_HOVER = (0, 0, 0, 0.16)
-SHADOW_PRESS = (0, 0, 0, 0.10)
+# ISTO ERA UMA SOMBRA e não é mais. A Fatia 74 tentou primeiro sombra
+# pintada à mão (elevação estilo dashboard, como nas referências que o
+# Rafael mandou), e ela falhou por DOIS motivos concretos, os dois vistos
+# por ele na tela real ("quando passo o mouse por cima ela escurece tudo...
+# parece cortar abruptamente por conta do limite de seu grid"):
+#
+#  1. O `QListView` RECORTA a pintura do delegate no retângulo da célula.
+#     Uma sombra suave precisa vazar ~10-20px pra fora do card; aqui só há
+#     `CARD_MARGIN` (3px) de folga antes da borda da célula. O resto era
+#     cortado em linha reta — daí o "corte abrupto".
+#  2. As camadas da sombra eram retângulos PREENCHIDOS crescendo pra fora;
+#     como o card não pinta fundo opaco por cima, elas escureciam também o
+#     MIOLO do card (a área de respiro em volta da miniatura). Daí o
+#     "escurece tudo".
+#
+# Aumentar `CARD_MARGIN` até caber uma sombra de verdade engordaria TODA
+# célula da grade — menos assets por tela, num app cuja biblioteca real tem
+# 72 mil. Não compensa. Então a elevação passou a ser dada por um FUNDO
+# sólido que aparece só sob o cursor (mais um degrau de 2px pra cima),
+# inteiramente DENTRO do card: nada pra recortar, nada pra escurecer.
+#
+# Os tons são um degrau a partir de `surface` (o painel onde a grade mora):
+# no claro escurecem de leve, no escuro clareiam — em ambos o card lê como
+# "levantado" em relação ao painel. Neutros de propósito, nunca a cor de
+# destaque: o mesmo motivo já registrado em SELECTION logo acima — cor
+# atrás de uma miniatura suja a leitura da imagem.
+CARD_HOVER = "#EFEFF4"
+CARD_PRESS = "#E4E4EB"
 
 # Fundo do card quando o asset não tem miniatura. Segue NEUTRO de propósito,
 # mesmo agora que existe cor de destaque: é uma pastilha que aparece dezenas de
@@ -174,15 +185,13 @@ FOCUS_DARK = ACCENT_DARK
 SELECTION_DARK = (255, 255, 255, 0.09)
 HOVER_DARK = (255, 255, 255, 0.06)
 
-# Sombra do card no escuro (Fatia 73/74) — preto sobre fundo já quase preto
-# rende muito menos que no claro (mesmo problema já registrado em
-# `apply_card_shadow()`), por isso o alfa é bem mais alto aqui: não é
-# "a mesma sombra, cor invertida", é calibrada pra ainda dar pra ver.
-# Repouso zerado pelo mesmo motivo do modo claro — ver comentário de
-# `SHADOW_REST` acima.
-SHADOW_REST_DARK = (0, 0, 0, 0.0)
-SHADOW_HOVER_DARK = (0, 0, 0, 0.5)
-SHADOW_PRESS_DARK = (0, 0, 0, 0.4)
+# Fundo do card em hover/clique no escuro (Fatia 74) — ver `CARD_HOVER`
+# acima pro porquê de isto não ser uma sombra. Aqui os tons CLAREIAM a
+# partir de `SURFACE_DARK` (#1A1B1F): no escuro, "levantado" é mais claro,
+# não mais escuro — sombra preta sobre fundo quase preto não rende nada
+# (mesmo problema já registrado em `apply_card_shadow()`).
+CARD_HOVER_DARK = "#24252B"
+CARD_PRESS_DARK = "#2C2D34"
 
 # Mesma decisão do modo claro: pastilha neutra, não azul (ver TYPE_TINT). Aqui
 # ela é ESCURA com texto claro por cima — no escuro, a pastilha cinza-clara que
@@ -201,7 +210,7 @@ _PALETA_CLARA = {
     "warning": WARNING, "danger": DANGER, "ok": OK,
     "popover": POPOVER, "border": BORDER, "border_strong": BORDER_STRONG, "focus": FOCUS,
     "selection": SELECTION, "hover": HOVER,
-    "shadow_rest": SHADOW_REST, "shadow_hover": SHADOW_HOVER, "shadow_press": SHADOW_PRESS,
+    "card_hover": CARD_HOVER, "card_press": CARD_PRESS,
     "type_tint": TYPE_TINT, "on_type_tint": ON_TYPE_TINT,
 }
 _PALETA_ESCURA = {
@@ -214,8 +223,7 @@ _PALETA_ESCURA = {
     "popover": POPOVER_DARK, "border": BORDER_DARK, "border_strong": BORDER_STRONG_DARK,
     "focus": FOCUS_DARK,
     "selection": SELECTION_DARK, "hover": HOVER_DARK,
-    "shadow_rest": SHADOW_REST_DARK, "shadow_hover": SHADOW_HOVER_DARK,
-    "shadow_press": SHADOW_PRESS_DARK,
+    "card_hover": CARD_HOVER_DARK, "card_press": CARD_PRESS_DARK,
     "type_tint": TYPE_TINT_DARK, "on_type_tint": ON_TYPE_TINT_DARK,
 }
 

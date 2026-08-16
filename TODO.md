@@ -2397,9 +2397,114 @@ vizinho dispara o fade-out do antigo e o fade-in do novo ao mesmo
 tempo — não só os dois extremos. Screenshot novo mandado ao Rafael:
 repouso agora sai plano, sem sombra nenhuma.
 
-**Pendente:** confirmação do Rafael na tela real, agora com estes 3
-ajustes (esta fatia + a 73 seguem juntas, ainda não mergeadas) — a
-animação em si só dá pra sentir ao vivo, não por screenshot. Depois
-disso, o resto da Etapa 1 (barra de navegação/categorias, sidebar,
-painel de detalhes, rodapé, `PreviewPopup`) continua por fazer, nenhuma
-dessas telas foi tocada ainda.
+**2ª rodada de ajuste — a sombra foi REMOVIDA de vez.** O Rafael olhou
+de novo: "essa sombra parece estranha ainda, quando passo o mouse por
+cima ela escurece tudo, o que não faz sentido... porque ela ao passar o
+mouse por cima parece cortar abruptamente por conta do 'limite' do seu
+grid". As duas queixas estavam certas e tinham causa técnica concreta —
+achadas renderizando a GRADE de verdade, com cards vizinhos (os
+screenshots anteriores pintavam UM card isolado num pixmap, e é por
+isso que nenhum dos dois problemas tinha aparecido antes):
+
+1. **"Corta abruptamente"** — o `QListView` RECORTA a pintura do
+   delegate no retângulo da célula. Uma sombra suave precisa vazar
+   ~10-20px pra fora do card; ali só há `CARD_MARGIN` (3px) de folga
+   antes da borda da célula, então todo o resto era cortado em linha
+   reta.
+2. **"Escurece tudo"** — as camadas da sombra eram retângulos
+   PREENCHIDOS crescendo pra fora, e o card não pinta fundo opaco por
+   cima. Resultado: elas escureciam também o MIOLO do card (a área de
+   respiro em volta da miniatura), não só a volta.
+
+Aumentar `CARD_MARGIN` até caber uma sombra de verdade engordaria TODA
+célula da grade — menos assets por tela, num app cuja biblioteca real
+tem 72 mil arquivos. Não compensa, e o Rafael já tinha dado a saída
+("talvez o ideal seria só retirar mesmo"). Então:
+
+- **`theme.py`:** `SHADOW_*` (6 tokens) saíram; entraram `CARD_HOVER`/
+  `CARD_PRESS` (claro) e `CARD_HOVER_DARK`/`CARD_PRESS_DARK` (escuro) —
+  cores de FUNDO do card, um degrau a partir de `surface` (escurecem de
+  leve no claro, clareiam no escuro). Neutras, nunca a cor de destaque,
+  pelo motivo já registrado em `SELECTION`: cor atrás de uma miniatura
+  suja a leitura da imagem.
+- **`asset_card_delegate.py`:** `_paint_shadow()` e `_lerp_shadow()`
+  deletados; entrou `_lerp_color()`. O `paint()` agora interpola o
+  FUNDO do card (de `surface` até `card_hover`) em vez da sombra, e só
+  pinta quando há o que mostrar — em repouso e sem seleção o fundo é
+  igual ao do painel, então nem chama `drawRoundedRect`. A elevação de
+  2px continua. Card selecionado também responde ao mouse:
+  `_brush_selected_hover`/`_brush_selected_press` são o véu de seleção
+  já composto sobre os fundos novos, pré-computados em `refresh_theme`
+  (nada de compor cor por `paint()`).
+
+**Verificado:** `pytest -q` completo — 845 verdes, as mesmas 4 falhas
+conhecidas sem relação. Nenhum teste precisou mudar nas duas rodadas de
+ajuste: `test_os_tres_estados_do_card_diferem_na_tela` compara a imagem
+inteira, então continuou válido mesmo com a mecânica trocada por baixo,
+e `test_o_veu_de_selecao_e_composto_sobre_a_superficie` segue checando
+`_brush_selected` contra `blend(selection, surface)`, que não mudou.
+Screenshots novos da grade real (antes/depois, claro e escuro) mandados
+ao Rafael. **Aprendizado que vale pras próximas fatias visuais: validar
+efeito de card na GRADE montada, nunca num card isolado** — vizinho e
+recorte de célula são justamente o que quebra.
+
+**3ª rodada — animação "meio travada" + revisão geral do design.** O
+Rafael aprovou a saída da sombra ("parece bem melhor"), mas apontou que
+a animação "parece meio travada", e pediu uma revisão do que mudou até
+aqui. Duas causas reais, somadas:
+
+1. **A animação era LINEAR.** Velocidade constante do início ao fim
+   arranca e para de repente — o olho lê isso como mecânico mesmo sem
+   perder um quadro sequer. Entrou `_suavizar()`, uma curva ease-out
+   cúbica, aplicada só na hora de PINTAR (o progresso guardado continua
+   linear; aplicar a curva a cada passo a comporia sobre ela mesma).
+   Duração passou de 150ms pra 180ms.
+2. **A elevação andava em pixel INTEIRO.** O card subia 2px deslocando
+   `card_rect`, que é `QRect` (inteiro): 2px de curso = 3 posições
+   possíveis (0, -1, -2), ou seja, a animação inteira acontecia em 3
+   saltos visíveis, e a miniatura era redesenhada em Y diferente a cada
+   salto. Trocado por CRESCIMENTO da pastilha em `QRectF` (float): o
+   movimento vira subpixel antialiasado e a miniatura fica parada.
+3. **Bônus de desempenho, mesma queixa:** `_tick_hover` chamava
+   `viewport().update()` — repintar TODOS os cards visíveis, cada um com
+   sua miniatura, 60x por segundo, por causa de uma pastilha que mudou
+   de tom em UMA célula. Agora repinta só o retângulo das células que
+   estão animando.
+
+**Bug real achado na revisão do design** (não era da Fase 7, mas ficou
+gritante com o destaque laranja): o botão principal DESABILITADO
+continuava pintado com a cor de destaque. `QPushButton#primary` é
+seletor de ID e ganha de `QPushButton:disabled` (pseudo-classe) na
+especificidade do QSS — sem uma regra `#primary:disabled` própria, o
+"Abrir com app padrão" parecia clicável mesmo sem asset selecionado, ao
+lado de um "Abrir pasta" corretamente apagado. Corrigido em
+`theme.qss`, com teste que PINTA o botão e lê o pixel (nos dois modos),
+em vez de só procurar o seletor no texto.
+
+**Bug de estado achado junto:** o progresso do hover é indexado por
+LINHA, e linha não é identidade estável — depois de trocar de
+pasta/filtro a linha 3 é outro asset, e um card que nunca viu o mouse
+podia aparecer aceso. `AssetGridView.setModel` agora liga
+`modelReset` → `delegate.clear_hover()`.
+
+**Testes novos:** `test_a_curva_de_animacao_desacelera_no_fim` (a curva
+está sempre adiantada em relação à linear, o avanço por fatia de tempo
+diminui do começo pro fim, e não extrapola fora de 0..1),
+`test_o_hover_zera_quando_a_grade_recarrega`, e
+`test_botao_principal_desabilitado_nao_fica_com_a_cor_de_destaque`
+(parametrizado claro/escuro).
+
+**Ponto levantado, NÃO alterado — decisão do Rafael:** no modo claro, a
+pastilha de "sem miniatura" (`TYPE_TINT`, `#4A4A52`) é bem escura e
+vira o elemento mais pesado da tela quando há vários `.blend`/`.fbx`
+juntos (no escuro ela se comporta bem). Dá pra clarear e inverter o
+glifo, mas isso muda o peso visual de "asset ainda sem preview" — que
+talvez seja intencional. Fica registrado pra ele decidir, não mexido
+por conta própria.
+
+**Pendente:** confirmação do Rafael na tela real (esta fatia + a 73
+seguem juntas, ainda não mergeadas) — a animação só dá pra sentir ao
+vivo, não por screenshot. Depois disso, o resto da Etapa 1 (barra de
+navegação/categorias, sidebar, painel de detalhes, rodapé,
+`PreviewPopup`) continua por fazer, nenhuma dessas telas foi tocada
+ainda.
