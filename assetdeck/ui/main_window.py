@@ -1359,6 +1359,30 @@ class MainWindow(QMainWindow):
             self._model_win = ModelViewer(self)
         return self._model_win
 
+    def prewarm_gl_viewers(self) -> None:
+        """Mostra e esconde o HdriViewer e o ModelViewer uma vez, fora da
+        tela, na abertura do app — `AA_ShareOpenGLContexts` (`app.py`)
+        não bastou (Rafael confirmou na tela: o piscar continua na
+        PRIMEIRA vez que uma janela de OpenGL aparece na sessão, some da
+        segunda em diante). A troca de modo de composição da janela é
+        por JANELA DE TOPO, na primeira vez que ela ganha um
+        `QOpenGLWidget` — fazer isso acontecer aqui, escondido, evita que
+        aconteça na hora que ele abrir o primeiro HDRI/modelo de verdade.
+
+        Mover pra fora da tela (não só esconder) importa: `hide()` sem
+        nunca ter aparecido não garante que o Qt chegou a pintar um
+        frame — e é o PAINT que dispara a negociação da superfície.
+        """
+        from PySide6.QtWidgets import QApplication
+
+        for viewer in (self._hdri_viewer(), self._model_viewer()):
+            pos_original = viewer.pos()
+            viewer.move(-10000, -10000)
+            viewer.show()
+            QApplication.processEvents()
+            viewer.hide()
+            viewer.move(pos_original)
+
     def _grid_menu(self, pos) -> None:
         from PySide6.QtWidgets import QMenu
 

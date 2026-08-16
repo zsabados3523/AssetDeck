@@ -2223,6 +2223,41 @@ extensão desconhecida levanta erro), `tests/test_config.py` (+1,
 `models3d_cache_dir()`), 2 em `test_main_window.py` reescritos como
 `@pytest.mark.parametrize` cobrindo os 3 formatos.
 
-**Pendente de confirmação do Rafael na tela real:** os 3 formatos
-abrindo pelo app de verdade (não só pelo script de screenshot), e se o
-"piscar" do visualizador melhorou com o `AA_ShareOpenGLContexts`.
+**Confirmado pelo Rafael na tela real:** os 3 formatos funcionando. O
+`AA_ShareOpenGLContexts` sozinho **não resolveu o "piscar"** — ele
+confirmou que continua acontecendo só na primeira vez que uma janela de
+OpenGL abre NA SESSÃO (fecha e abre de novo a mesma janela depois,
+sem piscar) — exatamente o sintoma já registrado na Fatia 65
+("isso só acontece na primeira vez que aparece na tela"), e a prova de
+que a causa é por JANELA DE TOPO negociando sua própria superfície, não
+falta de contexto compartilhado entre elas.
+
+**Fix de verdade — `MainWindow.prewarm_gl_viewers()` (novo), chamado em
+`app.py` logo após `win.show()`:** mostra e esconde o `HdriViewer` e o
+`ModelViewer` uma vez, MOVIDOS PRA FORA DA TELA antes de aparecer —
+`processEvents()` no meio garante que o Qt chega a pintar um frame de
+verdade (só `hide()` sem nunca ter pintado não dispara a negociação da
+superfície, que é o evento caro). Assim a troca de modo de composição
+acontece escondida, na abertura do app, antes do Rafael ver qualquer
+coisa — não mais na hora que ele abre o primeiro HDRI/modelo
+de verdade. Pulado no modo `--screenshot` (evita interferir numa
+captura determinística).
+
+**Achado programando o teste — CRASH real, não só falha:** chamar
+`prewarm_gl_viewers()` de verdade no modo offscreen do pytest
+(`QT_QPA_PLATFORM=offscreen`) **derruba o interpretador com
+Segmentation fault** — `resizeGL` do `HdriGLView` desreferencia
+`self._gl`, que só existe depois de um `initializeGL` que nunca roda
+sem contexto GL de verdade (mesma fronteira já documentada em
+`test_hdri_viewer.py`: "QOpenGLWidget não roda no modo offscreen do
+pytest" — só que aqui, em vez de simplesmente não funcionar, derruba o
+processo). Teste reescrito pra só confirmar que o método existe
+(`callable`), sem chamar de verdade — mesma fronteira dos outros
+visualizadores de OpenGL do projeto. **Verificado à mão, tela real**
+(script fora do pytest): `prewarm_gl_viewers()` roda sem crash, as duas
+janelas ficam escondidas depois, e um screenshot da `MainWindow` logo
+depois não mostra nenhuma sobra visual.
+
+**Pendente de confirmação do Rafael na tela real:** se isto de fato
+elimina o "piscar" (não dá pra provar por screenshot — é um evento de
+recomposição de 1 frame só).
