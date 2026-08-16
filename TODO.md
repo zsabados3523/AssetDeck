@@ -1871,6 +1871,53 @@ investigados e 2 corrigidos na mesma fatia:**
 
 **Verificado de novo depois dos 3 fixes:** 787 testes verdes (mesmas 4
 falhas conhecidas, sem relação).
+
+**Rafael testou nesse estado e achou um 4º problema, mais sério — não
+dava pra mover/posicionar o modelo importado de jeito nenhum.**
+
+**Causa raiz, confirmada com um experimento isolado no Blender:** o
+Blender bloqueia mover/girar/escalar um objeto LINKADO pela interface
+(tecla G/R/S, arrastar na viewport) a menos que ele vire um "Library
+Override" — é uma trava de propósito, pra impedir edição acidental de
+algo que pertence a outro arquivo. `obj.location = ponto` por código
+(o que a Fatia 68 já fazia pra posicionar no ponto do mouse) até
+funciona sem erro nenhum, mas isso não ajuda: assim que o Blender tenta
+rodar o "& Place" de verdade (`bpy.ops.transform.translate`, o mesmo
+operador por trás do G), ele se recusa a mexer num objeto linkado — e
+depois de importado, o Rafael não conseguia mais tocar nele.
+
+**Isso só apareceu agora porque a Fatia 68 (fix anterior) trocou o
+padrão de Append pra Link** — com Append, o objeto é 100% local, nunca
+tinha esse problema.
+
+**Fix — `ASSETDECK_OT_import_blend._trazer_para_a_cena`:** quando
+`datablock == "objects"` E `link=True`, os objetos linkados agora vêm
+embrulhados num **Empty local** (`bpy.data.objects.new`, nomeado pelo
+arquivo `.blend` de origem) — é o Empty que recebe a posição inicial, a
+seleção, e o "& Place" (grudar no mouse); os objetos linkados viram
+filhos dele (`obj.parent = empty`, com `matrix_parent_inverse` calculado
+pra não pular de lugar ao parentar). Mover o Empty (sempre 100% local,
+sem trava nenhuma) move o linkado junto — é o mesmo truque que já existe
+pra Collections linkadas (`inst.instance_type = "COLLECTION"`, bem
+abaixo no mesmo método), só que pra Objects soltos. **Só se aplica com
+Link** — Append continua exatamente como antes (objeto direto, sem
+Empty, nunca precisou disso).
+
+**Verificado com um experimento headless dedicado** (não dá pra simular
+G/R/S de verdade sem viewport, então a prova foi indireta): confirma que
+o alvo devolvido pra seleção/posição é o Empty (`library=None`, sempre
+editável), que o objeto linkado continua o linkado de verdade
+(`library` apontando pro arquivo de origem) e virou filho do Empty, e
+que mover o Empty (`empty.location = ...`) reflete no `matrix_world` do
+linkado depois de recalcular o depsgraph — prova que "mover o Empty
+move tudo junto" funciona mecanicamente. **Não prova a experiência de
+arrastar com o mouse de verdade** — só o Rafael consegue confirmar isso.
+
+787 testes verdes de novo, mesma contagem de antes (pytest não cobre
+`blender_addon/` — só os testes Python normais, sem relação com este
+fix).
+
 **Pendente de confirmação do Rafael na tela real:** reteste completo —
-modelo da testlib (Link & Place), material `.blend` só-material, textura
-solta em cima de um objeto específico.
+modelo da testlib (Link & Place, agora deve dar pra mover o Empty pai),
+material `.blend` só-material, textura solta em cima de um objeto
+específico.
