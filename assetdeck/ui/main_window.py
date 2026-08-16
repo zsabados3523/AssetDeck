@@ -402,6 +402,9 @@ class MainWindow(QMainWindow):
         from assetdeck.ui.settings_window import SettingsWindow
 
         self.settings_window = SettingsWindow(self)
+        # Ajuste pós-tela: engrenagem no pé do rail lateral (canto
+        # inferior-esquerdo), não na barra de menus — pedido do Rafael.
+        self.sidebar.rail.settings_clicked.connect(self._abrir_configuracoes)
         self._setup_atalhos_globais()
         self._setup_bridge()  # ponte com o Blender + RenderController (F2)
         self._setup_brand_bar()  # Fatia 50 — marca e contexto na mesma faixa
@@ -713,10 +716,16 @@ class MainWindow(QMainWindow):
     # ---- barra de menus (Fatia 36, redistribuída na Fatia 67) ----
 
     def _setup_brand_bar(self) -> None:
-        """Marca à esquerda e contexto + engrenagem à direita, NA MESMA
-        faixa dos menus (que agora não têm mais nenhum QMenu de topo —
-        Fatia 67 moveu Arquivo/Editar/Ferramentas/Configurações/Janela pra
-        `SettingsWindow`, aberta por essa engrenagem).
+        """Marca à esquerda e contexto à direita, NA MESMA faixa dos menus
+        (que agora não têm mais nenhum QMenu de topo — Fatia 67 moveu
+        Arquivo/Editar/Ferramentas/Configurações/Janela pra
+        `SettingsWindow`).
+
+        A engrenagem que abre a `SettingsWindow` NÃO mora aqui — ajuste
+        pós-tela da Fatia 67: o Rafael pediu canto inferior-esquerdo em vez
+        do canto da barra de menus, então ela vive no pé do
+        `SidebarRail` (ver `sidebar.py`), perto de onde já ficavam os
+        toggles de painel.
 
         O mockup escolhido pelo Rafael tinha aqui uma faixa com marca e abas
         (Biblioteca / Coleções / Duplicados). As abas foram descartadas
@@ -755,31 +764,14 @@ class MainWindow(QMainWindow):
         self._brand_widget = marca
         barra.setCornerWidget(marca, Qt.Corner.TopLeftCorner)
 
-        # À direita: engrenagem (Fatia 67, abre a SettingsWindow) + contexto
-        # — qual biblioteca está aberta (são várias desde a Fatia 41) e em
-        # que modo. A contagem de assets, que o mockup punha aqui, já está
-        # no cabeçalho da lista E no rodapé — um terceiro lugar seria ruído.
-        direita = QWidget()
-        direita_layout = QHBoxLayout(direita)
-        direita_layout.setContentsMargins(0, 0, 10, 0)
-        direita_layout.setSpacing(8)
-
-        self.settings_btn = QToolButton()
-        self.settings_btn.setIcon(icons.icon("settings", theme.current_colors()["text_muted"]))
-        self.settings_btn.setToolTip("Configurações")
-        self.settings_btn.clicked.connect(self._abrir_configuracoes)
-        direita_layout.addWidget(self.settings_btn)
-
+        # À direita vai o que NÃO aparece em nenhum outro lugar da tela: qual
+        # biblioteca está aberta (são várias desde a Fatia 41) e em que modo.
+        # A contagem de assets, que o mockup punha aqui, já está no cabeçalho
+        # da lista E no rodapé — um terceiro lugar seria ruído.
         self.brand_context = QLabel()
         self.brand_context.setObjectName("brandContext")
-        direita_layout.addWidget(self.brand_context)
-
         self.statusBar()  # garante a barra criada antes do primeiro update
-        # Mesma pegadinha do `_brand_widget` acima: sem a referência em
-        # `self`, o Qt/PySide deixa o canto direito vazio pouco depois de
-        # `setCornerWidget` retornar.
-        self._brand_right_widget = direita
-        barra.setCornerWidget(direita, Qt.Corner.TopRightCorner)
+        barra.setCornerWidget(self.brand_context, Qt.Corner.TopRightCorner)
         self._update_brand_context()
 
     def _update_brand_context(self) -> None:
@@ -856,7 +848,6 @@ class MainWindow(QMainWindow):
             (self.back_btn, "arrow-left"),
             (self.fwd_btn, "arrow-right"),
             (self.up_btn, "arrow-up"),
-            (self.settings_btn, "settings"),
         ):
             botao.setIcon(icons.icon(nome_icone, pal["text_muted"]))
 

@@ -1722,3 +1722,24 @@ chama `_abrir_configuracoes()` direto): screenshot mostra a janela com as
 6 categorias, "Ferramentas" com os 5 botões certos, "Painéis e filtros"
 com os checkboxes no estado certo (Coleções/Smart Collections
 desmarcados, batendo com a sessão salva do Rafael). 764 testes verdes.
+
+**Ajuste pós-tela (mesmo dia):** o Rafael testou e pediu a engrenagem no
+canto INFERIOR-ESQUERDO em vez do canto da barra de menus (onde tinha
+ficado). Movida pro pé do `SidebarRail` (`assetdeck/ui/sidebar.py`) —
+mesmo padrão de Slack/Discord/VS Code, embaixo dos ícones de
+Pastas/Tags/Coleções/Smart Collections, que já moram na borda esquerda
+da janela. `SidebarRail` ganhou o sinal `settings_clicked` (o rail não
+deveria saber que a `MainWindow` existe, só avisar que alguém clicou);
+`_setup_brand_bar` voltou a ser exatamente como era antes desta fatia
+(só marca + contexto, sem engrenagem). Ícone sempre na cor apagada
+(`text_disabled`) — não é toggle de visibilidade como os outros 4, não
+faz sentido ele "acender".
+
+2 testes ajustados/novos: `test_a_marca_e_o_contexto_ficam_na_faixa_dos_
+menus` (não checa mais engrenagem na barra de menus) e
+`test_engrenagem_do_rail_abre_a_settings_window` (novo, confirma o
+clique no rail abre a janela). 765 testes verdes.
+
+**Registrado, não resolvido agora (pedido do Rafael):** o visual da
+`SettingsWindow` ao abrir pode mudar mais pra frente — cuidar disso junto
+da revisão visual geral (Fase 7 do roadmap), não uma fatia isolada.

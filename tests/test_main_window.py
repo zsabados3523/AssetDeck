@@ -291,6 +291,18 @@ def test_engrenagem_abre_a_settings_window(janela, qapp):
     janela.settings_window.close()
 
 
+def test_engrenagem_do_rail_abre_a_settings_window(janela, qapp):
+    """Ajuste pós-tela: o Rafael pediu a engrenagem no canto
+    inferior-esquerdo (pé do rail lateral), não na barra de menus."""
+    assert janela.sidebar.rail.settings_btn is not None
+    assert not janela.settings_window.isVisible()
+
+    janela.sidebar.rail.settings_btn.click()
+
+    assert janela.settings_window.isVisible()
+    janela.settings_window.close()
+
+
 def test_paineis_e_filtros_alterna_visibilidade_dos_paineis(janela, qapp):
     """Fatia 36: cada painel esquerdo + o de detalhes ganha um toggle
     checável — era menu "Janela", Fatia 67 moveu pra página "Painéis e
@@ -446,8 +458,9 @@ def test_a_marca_e_o_contexto_ficam_na_faixa_dos_menus(janela, qapp):
     `setCornerWidget` é o que permite isso sem trocar a QMenuBar por uma
     barra própria, o que custaria atalho de teclado e navegação por Alt.
 
-    Fatia 67: os cinco menus saíram (viraram a SettingsWindow); a faixa
-    fica só com marca + engrenagem + contexto."""
+    Fatia 67: os cinco menus saíram (viraram a SettingsWindow, aberta pela
+    engrenagem no pé do rail lateral — NÃO nesta faixa, ajuste pós-tela);
+    a faixa fica só com marca + contexto."""
     from PySide6.QtCore import Qt as _Qt
 
     barra = janela.menuBar()
@@ -455,9 +468,7 @@ def test_a_marca_e_o_contexto_ficam_na_faixa_dos_menus(janela, qapp):
     direita = barra.cornerWidget(_Qt.Corner.TopRightCorner)
 
     assert esquerda is not None, "a marca não está na faixa dos menus"
-    assert direita is not None
-    assert janela.brand_context.parentWidget() is direita
-    assert janela.settings_btn.parentWidget() is direita
+    assert direita is janela.brand_context
     # A faixa de menus em si fica vazia — tudo virou a SettingsWindow.
     assert barra.actions() == []
 
