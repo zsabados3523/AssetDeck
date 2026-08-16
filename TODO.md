@@ -2278,3 +2278,82 @@ depois não mostra nenhuma sobra visual.
 **Pendente de confirmação do Rafael na tela real:** se isto de fato
 elimina o "piscar" (não dá pra provar por screenshot — é um evento de
 recomposição de 1 frame só).
+
+### ☑ Fatia 73 — Fase 7, Etapa 1: fundação visual (cor de destaque, raio, sombra)
+
+Primeira fatia de código da revisão visual (Fase 7) — depois do Rafael
+aprovar o mockup "hoje vs proposta" da janela principal com as 11
+referências que ele mandou (cards com sombra suave/neumorfismo + pares
+de dashboard SaaS claro/escuro, destaque laranja). Só o `theme.py`
+(token único, regra do projeto: nenhuma cor fora dele):
+
+- **Cor de destaque:** azul (`#2A63CF` claro / `#4D8DFF` escuro) →
+  laranja (`#B8460D` claro / `#FF8A4C` escuro), com `_HOVER`/`_PRESS`/
+  `_SOFT` correspondentes. Escolhida testando `theme.contrast_ratio()`
+  contra branco e contra a pastilha suave ANTES de editar o arquivo —
+  pra não cair num tom que quebrasse os testes de contraste WCAG já
+  existentes em `test_theme.py`.
+- **Raio:** `RADII["marcante"]` de `(16, 12, 9)` pra `(20, 16, 10)`
+  (painel, card, controle) — cantos mais arredondados, como nas
+  referências.
+- **Sombra:** 3 tokens novos, `shadow_rest`/`shadow_hover`/
+  `shadow_press` (RGBA), um jogo pro claro e outro pro escuro — o
+  escuro com alpha bem mais alto (preto quase não aparece sobre fundo
+  quase preto). Usados pela Fatia 74 (delegate do card).
+
+**Testes:** `pytest tests/test_theme.py` — 48/48 verdes, primeira
+tentativa (o script de contraste evitou tentativa-e-erro). Verificado
+visualmente por captura de tela nos dois modos (claro/escuro) — laranja
+correto em botões, slider, bolinha da marca e barra de progresso do
+scan.
+
+### ☐ Fatia 74 — Fase 7, Etapa 1: card da grade com sombra/elevação (hover e clique de verdade)
+
+Continuação direta da Fatia 73, sobre a mesma fundação de tokens — o
+pedido extra que o Rafael fez na revisão do plano ("poderia incluir:
+coisas com maior feedback visual? ex: reagir ao passar o mouse por
+cima, ao clicar, etc?"). Até aqui o card não tinha moldura em repouso
+(Fatia 50) e só ganhava um contorno colorido em hover/seleção — sem
+elevação nenhuma.
+
+- **`asset_card_delegate.py`:** trocou a borda de repouso/hover por
+  sombra pintada à mão (`_paint_shadow`, 4 camadas de retângulo
+  arredondado cada vez maior e mais fraco — `QGraphicsDropShadowEffect`
+  já estava descartado por caro demais pra centenas de cards por frame,
+  ver `theme.apply_card_shadow`). Repouso = sombra fraca, parado; hover
+  = sombra maior + card sobe 2px; clique = sombra menor, sem subir
+  ("afunda"). A borda de 2px na cor de destaque continua existindo, mas
+  só pra SELEÇÃO agora — é o único estado que ainda precisa de um sinal
+  que não dependa de área/movimento.
+- **`asset_grid.py` (`AssetGridView`):** `mousePressEvent`/
+  `mouseReleaseEvent` novos, chamando `delegate.set_pressed(idx)` — não
+  dá pra confiar em `QStyle.State_Sunken` vir preenchido sozinho num
+  `QListView` customizado (mesma razão pela qual o hover já era
+  rastreado à mão desde antes). `startDrag()` limpa o estado de
+  pressionado no início — sem isso o card ficava "afundado" depois de
+  soltar um arrasto.
+
+**Testes:** os dois testes que verificavam o contorno por PIXEL num
+ponto fixo (`test_os_veus_de_estado_sao_compostos_sobre_a_superficie` e
+`test_os_tres_estados_do_card_diferem_na_tela`) quebraram — não porque
+o comportamento novo esteja errado, mas porque a mudança real agora
+vive na IMAGEM inteira (sombra atrás do card todo), não mais num pixel
+escolhido a dedo. Reescritos: o primeiro só continua checando a
+composição do véu de SELEÇÃO (o único que sobrou); o segundo agora
+compara a imagem completa pintada em cada estado
+(`repouso != hover != pressionado`, via `QImage.__eq__`) e mantém a
+checagem por pixel só pra seleção (que ainda tem contorno num lugar
+fixo). `pytest -q tests/test_asset_card_delegate.py
+tests/test_asset_grid_drop.py tests/test_grid_state.py
+tests/test_asset_grid_warmup.py` — 30/30 verdes.
+
+**Verificado visualmente** com um card real da testlib, script fora do
+pytest pintando os 3 estados lado a lado nos dois modos — sombra cresce
+visivelmente no hover, encolhe no clique, os dois modos claro/escuro
+corretos.
+
+**Pendente:** confirmação do Rafael na tela real (esta fatia + a
+73 seguem juntas, ainda não mergeadas) antes do merge — e o resto da
+Etapa 1 (barra de navegação/categorias, sidebar, painel de detalhes,
+rodapé, `PreviewPopup`) continua por fazer, nenhuma dessas telas foi
+tocada ainda.

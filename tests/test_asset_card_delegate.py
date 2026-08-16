@@ -184,7 +184,7 @@ def _cor(imagem, x, y) -> str:
     return QColor(imagem.pixelColor(x, y)).name().upper()
 
 
-def test_os_veus_de_estado_sao_compostos_sobre_a_superficie(grid):
+def test_o_veu_de_selecao_e_composto_sobre_a_superficie(grid):
     """Regressão da Fatia 44.
 
     O delegate usava `bg` como base. Enquanto fundo e painel eram o mesmo
@@ -192,9 +192,11 @@ def test_os_veus_de_estado_sao_compostos_sobre_a_superficie(grid):
     que o painel, cada célula virou um retângulo escuro sobre o painel claro.
     O card mora DENTRO do #card da grade, então a base é `surface`.
 
-    Desde a Fatia 50 o card não pinta fundo em repouso, e o que sobrou da
-    base são os véus de hover e seleção — compostos sobre ela. Compor sobre
-    `bg` daria uma pastilha de tom errado, que é a mesma falha de antes.
+    Desde a Fatia 50 o card não pinta fundo em repouso; desde a Fatia 74 o
+    hover também não tem mais véu (virou sombra, ver
+    `test_os_tres_estados_do_card_diferem_na_tela`) — só sobrou o de
+    seleção, composto sobre a superfície. Compor sobre `bg` daria uma
+    pastilha de tom errado, que é a mesma falha de antes.
     """
     from assetdeck.ui import theme
 
@@ -203,8 +205,6 @@ def test_os_veus_de_estado_sao_compostos_sobre_a_superficie(grid):
     delegate.refresh_theme()
     pal = theme.current_colors()
 
-    assert delegate._brush_hover.name().upper() == \
-        theme.blend(pal["hover"], pal["surface"]).upper()
     assert delegate._brush_selected.name().upper() == \
         theme.blend(pal["selection"], pal["surface"]).upper()
 
@@ -212,30 +212,39 @@ def test_os_veus_de_estado_sao_compostos_sobre_a_superficie(grid):
 def test_os_tres_estados_do_card_diferem_na_tela(grid, qapp):
     """Repouso, hover e seleção têm de ser distinguíveis DE VERDADE.
 
-    O hover era um véu de 3,5% de branco: sobre fundo escuro isso é quase
-    invisível, e o card não respondia ao mouse. Por isso o contorno entrou na
-    conta — e é o contorno que este teste lê, no meio da aresta esquerda do
-    card, onde ele existe em qualquer um dos três estados.
+    Até a Fatia 74, hover era um contorno de 1px num ponto fixo — fácil de
+    amostrar um único pixel. Agora hover é a SOMBRA atrás do card inteiro
+    crescendo (e o card subindo 2px), e clique é a sombra encolhendo: a
+    mudança não vive mais num pixel só, vive na imagem inteira. Por isso a
+    comparação passou a ser a imagem completa de cada estado, não um pixel
+    escolhido a dedo.
     """
     view, modelo, _conn = grid
     delegate = view.itemDelegate()
     idx = modelo.index(0)
 
-    # Desde a Fatia 50 o card não tem moldura: quem carrega os três estados é
-    # a borda da MINIATURA. Por isso a amostra é no traço dela, e não mais na
-    # aresta do card — ali, em repouso, não há contorno nenhum.
-    #
-    # O contorno é desenhado centrado na aresta e o retângulo é encolhido meia
-    # espessura, então o traço de 1px do repouso vive uma unidade para dentro.
+    repouso = _pintar(delegate, idx, view)
+    hover = _pintar(delegate, idx, view, hover=True)
+    delegate.set_pressed(idx)
+    try:
+        pressionado = _pintar(delegate, idx, view)
+    finally:
+        delegate.set_pressed(None)
+
+    assert repouso != hover, "repouso e hover têm de pintar imagens diferentes"
+    assert repouso != pressionado, "repouso e pressionado têm de pintar imagens diferentes"
+    assert hover != pressionado, "hover e pressionado têm de pintar imagens diferentes"
+
+    # Seleção continua tendo um sinal LOCAL e óbvio: é o único estado que
+    # ainda desenha um contorno de verdade, na borda da miniatura (Fatia 74,
+    # `_paint_thumb`). O contorno é centrado na aresta e o retângulo é
+    # encolhido meia espessura, então o traço vive uma unidade para dentro.
     x = asset_grid.CARD_MARGIN + asset_grid.CARD_PAD + 1
     y = CELL.height() // 2
-
-    repouso = _cor(_pintar(delegate, idx, view), x, y)
-    hover = _cor(_pintar(delegate, idx, view, hover=True), x, y)
-    selecao = _cor(_pintar(delegate, idx, view, selecionado=True), x, y)
-
-    assert len({repouso, hover, selecao}) == 3, (
-        f"os três estados do card têm de diferir: {repouso=} {hover=} {selecao=}"
+    repouso_borda = _cor(repouso, x, y)
+    selecao_borda = _cor(_pintar(delegate, idx, view, selecionado=True), x, y)
+    assert repouso_borda != selecao_borda, (
+        f"repouso e seleção têm de diferir na borda: {repouso_borda=} {selecao_borda=}"
     )
 
 
