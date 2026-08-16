@@ -2508,3 +2508,109 @@ vivo, não por screenshot. Depois disso, o resto da Etapa 1 (barra de
 navegação/categorias, sidebar, painel de detalhes, rodapé,
 `PreviewPopup`) continua por fazer, nenhuma dessas telas foi tocada
 ainda.
+
+### ☐ Fatia 75 — Fase 7, Etapa 1: feedback de verdade nos controles
+
+Rafael confirmou a 73/74 na tela ("está funcionando!") — **mergeadas na
+`main`** — e pediu o resto da Etapa 1, notando que "essa parte talvez
+seja a que mais tenha botões, então considere feedback visuais
+interessantes". Esta fatia é a camada de CONTROLES (QSS), que vale pra
+janela inteira de uma vez em vez de tela a tela.
+
+**O problema de fundo:** todo hover do app usava `$surface_hover` — o
+véu de 3,5% de preto. Quase invisível. Clique usava `$selection`
+(6,5%), idem. Não era "fraco de propósito": era herança de quando
+fundo e painel eram os dois brancos.
+
+- **Tokens renomeados e compartilhados:** `CARD_HOVER`/`CARD_PRESS`
+  viraram `SURFACE_RAISED`/`SURFACE_SUNKEN` (+ `_DARK`) e agora saem
+  também como `$surface_raised`/`$surface_sunken` no QSS. Não é só
+  renome: é o MESMO degrau de elevação do card da grade servindo botão,
+  item de árvore, cabeçalho de seção, combo e menu — "levantado" e
+  "afundado" passam a querer dizer a mesma coisa em qualquer lugar da
+  tela. Por isso o nome é do ESTADO, não do widget.
+- **Clique "afunda" de verdade:** `padding-top`/`padding-bottom`
+  assimétricos empurram o conteúdo 1px pra baixo. A soma continua igual
+  à do repouso, então o botão não muda de tamanho e nada se reposiciona.
+  Feito com a conta certa pra CADA padding do app (12px geral, 8px na
+  barra de busca, 12px no rail).
+- **Bug de borda:** hover e clique usavam `$hairline` (7,5% de preto),
+  que é MAIS FRACO que o `$border` (9%) do repouso — ou seja, o contorno
+  ENFRAQUECIA justamente quando o mouse chegava, puxando contra o
+  preenchimento. Os dois passaram a usar `$border`.
+- **Armadilha de especificidade, de novo:** `#ghost`, `#railButton` e
+  `#searchBar QPushButton` são seletores de ID e ganham do
+  `QPushButton:pressed` genérico — ficavam parados no hover durante o
+  clique, sem sinal nenhum. Cada um ganhou `:pressed` próprio. É a
+  mesma armadilha do `#primary:disabled` (Fatia 74), agora travada por
+  teste.
+
+**Limitação do Qt que precisou ser descoberta na marra:** o Qt **não
+anima QSS** — não existe `transition` como no CSS da web. Então o
+estado do botão troca instantaneamente, e o que dá pra fazer é
+torná-lo LEGÍVEL. Quem tem animação de verdade é o card da grade,
+porque é pintado à mão por um delegate (Fatia 74).
+
+**Armadilha de verificação — vale pras próximas fatias visuais:**
+headless **não dá pra forçar `:hover` num `QPushButton`**.
+`WA_UnderMouse`, `QHoverEvent(HoverEnter)` e `unpolish/polish` foram
+testados num caso mínimo: `QToolButton` aceita, `QPushButton` ignora
+os três. O primeiro mostruário de estados saiu com a coluna "hover"
+IDÊNTICA à "normal" e quase me fez ajustar a cor errada — só não
+aconteceu porque medi o pixel em vez de confiar no olho. A verificação
+final foi com **mouse real via XTEST/libXtst** (mesmo caminho já usado
+no drag-and-drop, Fatia 52): os 4 tipos de botão reagem nos 2 modos —
+comum `#FFFFFF`→`#EFEFF4`, principal `#B8460D`→`#C9520F`, ghost e rail
+materializam a pastilha.
+
+**Testes novos:** `test_o_degrau_de_elevacao_e_visivel_sobre_a_superficie`
+(parametrizado claro/escuro — trava que hover/clique não voltem a ser
+invisíveis, e que o clique seja mais marcado que o hover) e
+`test_todo_botao_com_hover_por_id_tambem_define_pressed` (varre os
+seletores do QSS e falha se algum botão com `:hover` por ID não tiver
+`:pressed`). O segundo foi **verificado removendo a regra `#ghost:pressed`
+de propósito** — falha apontando exatamente os dois seletores.
+
+**Pendente:** confirmação do Rafael na tela. E o resto da Etapa 1
+(painel de detalhes denso, `PreviewPopup`, rodapé) continua por fazer.
+
+### ☐ Investigação — app demora pra abrir (pedido do Rafael, Fase 7)
+
+Medido na máquina dele, config real (57,7 MB de banco, 45.928 thumbs),
+cronometrando as fases na ordem exata de `app.run()`:
+
+| fase | tempo |
+|---|---|
+| imports (assetdeck, PySide6, hdri_viewer, main_window) | ~200ms |
+| `QApplication()` + `apply_theme` | ~100ms |
+| `MainWindow(...)` | ~286ms |
+| **`prewarm_gl_viewers()`** | **~2.164ms** |
+| assentar UI/scan | ~2.000ms |
+| **total até a UI ficar quieta** | **~4,9s** |
+
+**A maior fatia isolada é o `prewarm_gl_viewers()` — que é o MEU fix do
+"piscar" da Fatia 72.** Ele mostra e esconde o `HdriViewer` e o
+`ModelViewer` fora da tela na abertura, justamente pra pagar
+escondido o custo que antes aparecia como piscada. Detalhado:
+criar o `HdriViewer` 828ms, `show()` dele 468ms, `show()` do
+`ModelViewer` 497ms. Numa 2ª passada os dois custam 60ms/25ms — é
+custo de PRIMEIRA vez, não recorrente.
+
+**Medido também:** prewarmar só o `HdriViewer` NÃO adianta pro
+`ModelViewer` — ele ainda paga ~600ms sozinho depois. Confirma o achado
+da Fatia 72 (o custo é por JANELA DE TOPO, não por processo).
+
+**Caminhos possíveis (decisão do Rafael, é um trade-off que ele já
+opinou dos dois lados):**
+1. **Adiar** o prewarm pra depois da janela aparecer (`QTimer`): o app
+   ABRE na hora, mas congela ~2s logo depois. Não reduz o tempo total
+   até poder usar — só muda onde a espera aparece.
+2. **Uma janela só pros dois visualizadores** (ou o overlay embutido que
+   ele já pediu e ficou adiado): corta uma negociação de superfície
+   inteira (~600ms) e resolve o pedido visual junto. É a única opção que
+   reduz o custo DE VERDADE.
+3. **Desistir do prewarm:** abre ~2s mais rápido, e o "piscar" volta na
+   primeira vez que abrir um HDRI/modelo na sessão.
+
+Os ~2s restantes ("assentar UI/scan") ainda não foram investigados a
+fundo — são varredura + miniaturas, e podem ter espaço próprio.

@@ -598,3 +598,75 @@ def test_botao_principal_desabilitado_nao_fica_com_a_cor_de_destaque(qapp, modo)
         f"o botão principal DESABILITADO ainda está pintado com o destaque "
         f"({destaque}) no modo {modo}"
     )
+
+
+# ------------------------------------------- degraus de elevação (F75) --
+
+@pytest.mark.parametrize("modo", ["claro", "escuro"])
+def test_o_degrau_de_elevacao_e_visivel_sobre_a_superficie(modo):
+    """Hover que ninguém enxerga não é feedback.
+
+    Até a Fatia 75 todo controle do app usava `$surface_hover` — o véu de
+    3,5% de preto —, e o Rafael relatou que a interface parecia não responder
+    ao mouse. `surface_raised`/`surface_sunken` são degraus de verdade a
+    partir de `surface`, e este teste trava isso: se alguém amaciar os tons
+    de novo até virarem invisíveis, falha aqui.
+    """
+    pal = theme._paleta(modo)
+    superficie = pal["surface"]
+
+    for nome in ("surface_raised", "surface_sunken"):
+        razao = theme.contrast_ratio(pal[nome], superficie)
+        assert razao >= DEGRAU_MINIMO, (
+            f"{nome} ({pal[nome]}) não se distingue de surface ({superficie}) "
+            f"no modo {modo}: {razao:.3f}"
+        )
+
+    # "Afundado" tem de ser MAIS marcado que "levantado" — é o clique, o
+    # estado mais forte dos dois. Vale nos dois modos, mesmo eles andando em
+    # direções opostas (o claro escurece, o escuro clareia).
+    assert (
+        theme.contrast_ratio(pal["surface_sunken"], superficie)
+        > theme.contrast_ratio(pal["surface_raised"], superficie)
+    ), f"o clique não é mais marcado que o hover no modo {modo}"
+
+
+def _seletores(qss: str) -> list[str]:
+    """Todos os seletores da folha, um por regra (sem os comentários)."""
+    limpo = _sem_comentarios(qss)
+    return [bloco.split("}")[-1].strip() for bloco in limpo.split("{")[:-1]]
+
+
+def test_todo_botao_com_hover_por_id_tambem_define_pressed(qapp):
+    """Armadilha de especificidade do QSS — já mordeu duas vezes (Fatia 74 e
+    75).
+
+    `QPushButton#ghost` é seletor de ID e ganha de `QPushButton:pressed`
+    (pseudo-classe). Então um botão com regra por ID NÃO herda o estado de
+    clique genérico: ele fica parado no hover enquanto está sendo apertado,
+    sem sinal nenhum de que o clique pegou. Toda regra de botão por ID que
+    define `:hover` tem de definir `:pressed` também.
+    """
+    qss = theme.build_qss()
+    seletores = _seletores(qss)
+
+    def alvos(sufixo: str) -> set[str]:
+        achados = set()
+        for seletor in seletores:
+            for parte in seletor.split(","):
+                parte = parte.strip()
+                if "#" not in parte or not parte.endswith(sufixo):
+                    continue
+                if "QPushButton" not in parte and "QToolButton" not in parte:
+                    continue
+                achados.add(parte[: -len(sufixo)])
+        return achados
+
+    com_hover = alvos(":hover")
+    com_pressed = alvos(":pressed")
+
+    faltando = com_hover - com_pressed
+    assert not faltando, (
+        "estes botões têm :hover por ID mas nenhum :pressed — o clique some "
+        f"por especificidade: {sorted(faltando)}"
+    )
