@@ -2062,3 +2062,82 @@ virar fatia isolada agora: o visual do menu (linhas de 2 alturas com
 caminho + bolinha, como no mockup) fica pra Fase 7, junto da revisão
 visual geral — o `QMenu` de `QAction`s simples que existe hoje já
 resolve funcionalmente. Fatia mergeada na `main`.
+
+### ☑ Fatia 71 — Visualizador 3D: prova de conceito (só .obj)
+Início da **Fase 6**. Rafael pediu POC antes de comprometer fatia
+grande — decidiu fazer isto ANTES da Fase 7 (revisão visual), que fica
+pra depois de todas as mudanças de funcionalidade.
+
+**Achado antes de programar, relevante pro "expandir depois":** nem a
+testlib nem a biblioteca real do Rafael têm um `.obj` sequer — os
+modelos são `.blend` (a maioria), `.fbx` (1.506 na biblioteca real) e
+`.skp`/SketchUp (339). `.obj` foi escolha do PLANO pela simplicidade de
+formato (texto aberto, parser pequeno sem dependência nova), não porque
+existisse no acervo do Rafael — testado com um `.obj` exportado de
+verdade de um `.blend` da testlib (cadeira, 7.894 triângulos), não um
+cubo de mentira.
+
+**Recado importante pro "expandir pra .fbx/.blend depois":** `.fbx` é
+viável (formato com parser de terceiros disponível) — próximo candidato
+natural. **`.blend` continua fora do alcance de qualquer visualizador
+interativo de verdade** — é formato binário fechado da própria Blender,
+sem biblioteca de terceiros confiável pra ler fora dela (mesma
+conclusão do plano original). Se `.blend` algum dia tiver alguma forma
+de "visualizar", seria via o Blender headless renderizando frames (o
+que o app já faz pras capas, Fatia 16/38), não um viewer 3D orbitável
+de verdade.
+
+- **`model3d/obj_parser.py` (novo):** parser de `.obj` só-geometria
+  (v/vn/f — sem MTL, sem UV, sem grupos), sem Qt/OpenGL, testável no
+  pytest normal (mesma separação da Fatia 34). Faces com N>3 vértices
+  viram leque de triângulos; sem `vn` no arquivo, normal por FACE
+  (produto vetorial, sombreamento "faceted"); índice negativo
+  (referência relativa) suportado.
+- **`ui/orbit_camera.py` (novo):** câmera órbita ao redor de um alvo
+  (não "olha de dentro" como `HdriCamera`) — mesmo padrão de
+  yaw/pitch/clamp sem Qt, mais `zoom()` (multiplicativo, pela roda do
+  mouse) e `enquadrar()` (centraliza e ajusta distância pro modelo
+  caber na tela sozinho ao carregar, sem o Rafael precisar achar o
+  objeto na mão).
+- **`ui/model_viewer.py` (novo), `ModelGLView`/`ModelViewer`:** mesmo
+  padrão do visualizador de HDRI (Fatia 34/65) — carregamento em thread
+  (não trava a UI abrindo um modelo grande), janela PRÓPRIA (não
+  overlay embutido, mesmo motivo do HDRI: `QOpenGLWidget` numa
+  `MainWindow` muda o modo de composição da janela INTEIRA na primeira
+  aparição). Shader simples: luz "presa na câmera" (headlight, `dot`
+  entre normal em view-space e o eixo da câmera) com piso de 0.18 —
+  garante que o modelo nunca fica preto total virando de costas pra
+  luz, sem precisar simular iluminação de verdade pra uma POC. Cor
+  única cinza-claro — sem material/textura ainda.
+- **`main_window._open_preview`:** duplo clique num `.obj` abre o
+  `ModelViewer` em vez do `PreviewPopup` achatado — mesmo ponto de
+  entrada que já roteava `.hdr`/`.exr` pro `HdriViewer` (Fatia 34).
+
+**Verificado com um modelo real, não um cubo de teste:** exportei
+"Seating_Chairs_Velvet-Blue_01.blend" da testlib pra `.obj` via Blender
+headless, montei uma biblioteca temporária isolada (env vars próprias,
+não toca a testlib nem o config do Rafael) e tirei um screenshot do
+`ModelViewer` de verdade, aberto pela `MainWindow` de verdade — a
+cadeira aparece renderizada, sombreada, enquadrada sozinha (7.894
+triângulos, sem cortar nem sobrar espaço demais). Não dá pra provar por
+aqui a SENSAÇÃO de arrastar/dar zoom com o mouse de verdade — só a
+matemática (testada) e que o resultado ESTÁTICO renderiza certo.
+
+**Testes novos:** `tests/test_obj_parser.py` (triângulo simples, leque
+de quad, índice negativo, `vn` explícito, `vt` ignorado, comentário,
+arquivo sem face/vazio levanta `ValueError` legível, `bounds()`),
+`tests/test_orbit_camera.py` (mesmo espírito de `test_hdri_camera.py`
+— arrasto, clamp de pitch, zoom multiplicativo com piso, `enquadrar`
+não deixa distância negativa), `tests/test_model_viewer.py` (buffer
+intercalado posição+normal, shader em sincronia com a câmera — só a
+parte sem contexto GL, mesma ressalva do `test_hdri_viewer.py`) e 2 em
+`test_main_window.py` (`.obj` roteia pro `ModelViewer`, `.blend`
+continua no `PreviewPopup`).
+
+**Decisão pendente com o Rafael depois de ver funcionando:** vale virar
+fatia grande (mais formatos, integração com o painel de detalhes) ou
+fica só como experimento por enquanto? Ele já decidiu adiantado que quer
+expandir pra outros formatos — próximo capítulo natural é `.fbx`
+(viável) — mas ainda não decidiu ONDE isso entra no viewer atual
+(substituir o `.obj`-only por um roteador de formato, ou ir fatia por
+fatia).
