@@ -1332,18 +1332,31 @@ visualizador 3D, redesenho de menu/barra superior).
 
 **Checklist de pendências soltas** (menores que uma fatia própria, não
 travam o roadmap — revisar quando sobrar uma folga):
-- ☐ Visualizador de HDRI ainda pisca na PRIMEIRA vez que abre um HDRI numa
-  sessão (Fatia 65 corrigiu o app inteiro piscar; a janelinha sozinha
-  piscar uma vez por sessão é o problema original, nunca resolvido de
-  verdade — Rafael confirmou em 2026-08-14, pediu pra registrar e seguir
-  em frente). Candidato: pré-aquecer o contexto GL antes do primeiro uso
-  real, num momento que ele não note.
+- ☑ ~~Visualizador de HDRI pisca na PRIMEIRA vez que abre numa sessão~~ —
+  RESOLVIDO na Fatia 72 (`MainWindow.prewarm_gl_viewers()`), confirmado
+  pelo Rafael na tela real. Registrado desde a Fatia 65 (2026-08-14),
+  nunca tinha sido investigado a fundo até agora.
 - ☐ Visual do `LibrarySwitcher` (Fatia 70) — funciona certo, mas o Rafael
   confirmou que gostaria do visual mais parecido com o mockup aprovado
   (linhas de 2 alturas com nome + caminho, bolinha cheia/vazia marcando a
   ativa, em vez do texto corrido de uma `QAction` só). Ele pediu pra
   deixar pra tratar junto da Fase 7 (revisão visual ao vivo), não como
   fatia isolada agora.
+- ☐ Visual do `ModelViewer`/`HdriViewer` (Fatia 71/72) — o Rafael pediu
+  pra virar embutido no app (centralizado, sem moldura de janela do SO
+  — nada de minimizar/maximizar —, fecha ao clicar fora), igual o
+  `PreviewPopup` (que já é um `OverlayPanel`). **Tensão técnica real,
+  registrar antes de mexer:** os dois são janela PRÓPRIA (`QDialog`) DE
+  PROPÓSITO — a Fatia 65 tentou exatamente isso pro HDRI (virar
+  `OverlayPanel` embutido) e reverteu no mesmo dia: o "piscar" piorou
+  pra afetar a `MainWindow` INTEIRA, porque um `QOpenGLWidget` embutido
+  nela muda o modo de composição da JANELA DELA na primeira aparição —
+  e o pré-aquecimento da Fatia 72 (`prewarm_gl_viewers()`) hoje só
+  pré-aquece as janelas PRÓPRIAS do HDRI/modelo, nunca a `MainWindow`.
+  Virar `OverlayPanel` provavelmente reintroduz o piscar do app inteiro,
+  a menos que o pré-aquecimento também toque a `MainWindow` (embutir um
+  `QOpenGLWidget` escondido nela cedo, na abertura) — precisa testar essa
+  hipótese ANTES de prometer o visual novo, não só trocar a classe base.
 
 ### ☑ Fatia 59 — Nome do asset cortado no card
 
