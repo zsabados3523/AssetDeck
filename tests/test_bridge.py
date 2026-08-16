@@ -252,6 +252,7 @@ def test_install_copia_e_grava_config(tmp_path, monkeypatch):
     (falso_blender / "5.2").mkdir(parents=True)
     (falso_blender / "4.2").mkdir(parents=True)
     monkeypatch.setattr(installer, "FLATPAK_CONFIG", falso_blender)
+    monkeypatch.setattr(installer, "STANDARD_CONFIG", tmp_path / "sem-config-padrao")
 
     destinos = installer.install("tok-123", port=45017)
 
@@ -265,15 +266,31 @@ def test_install_copia_e_grava_config(tmp_path, monkeypatch):
 
 
 def test_install_sem_blender_da_erro_legivel(tmp_path, monkeypatch):
-    monkeypatch.setattr(installer, "FLATPAK_CONFIG", tmp_path / "nao-existe")
-    with pytest.raises(RuntimeError, match="Flatpak"):
+    monkeypatch.setattr(installer, "FLATPAK_CONFIG", tmp_path / "nao-existe-flatpak")
+    monkeypatch.setattr(installer, "STANDARD_CONFIG", tmp_path / "nao-existe-padrao")
+    with pytest.raises(RuntimeError, match="Não encontrei nenhuma instalação"):
         installer.install("tok")
+
+
+def test_install_detecta_config_padrao_blender_portatil(tmp_path, monkeypatch):
+    """Blender portátil (ex.: /home/rafael/Apps/blender-5.2.0-linux-x64) grava
+    a config de usuário em ~/.config/blender, não na pasta do executável."""
+    falso_padrao = tmp_path / ".config/blender"
+    (falso_padrao / "5.2").mkdir(parents=True)
+    monkeypatch.setattr(installer, "FLATPAK_CONFIG", tmp_path / "nao-existe-flatpak")
+    monkeypatch.setattr(installer, "STANDARD_CONFIG", falso_padrao)
+
+    destinos = installer.install("tok-portatil")
+
+    assert len(destinos) == 1
+    assert (destinos[0] / "__init__.py").is_file()
 
 
 def test_reinstalar_substitui_versao_antiga(tmp_path, monkeypatch):
     falso_blender = tmp_path / ".var/app/org.blender.Blender/config/blender"
     (falso_blender / "5.2").mkdir(parents=True)
     monkeypatch.setattr(installer, "FLATPAK_CONFIG", falso_blender)
+    monkeypatch.setattr(installer, "STANDARD_CONFIG", tmp_path / "sem-config-padrao")
 
     destino = installer.install("tok-antigo")[0]
     (destino / "lixo_da_versao_antiga.py").write_text("x")
