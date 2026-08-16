@@ -34,6 +34,7 @@ from assetdeck.db.repos import smart_collections as smart_collections_repo
 from assetdeck.db.repos import tags as tags_repo
 from assetdeck.indexer import duplicates as duplicates_finder
 from assetdeck.indexer import relocator
+from assetdeck.model3d import loader as model3d_loader
 from assetdeck.indexer.scanner import ScanStats
 from assetdeck.thumbs.hdr import can_hdr
 from assetdeck.thumbs.pipeline import ThumbnailPipeline
@@ -1321,6 +1322,12 @@ class MainWindow(QMainWindow):
             # HDRI achatado num QLabel não deixa avaliar a luz (Fatia 34).
             self._hdri_viewer().show_for(caminho)
             return
+        if caminho.suffix.lower() in model3d_loader.EXTENSOES_SUPORTADAS:
+            # Fase 6: modelo com câmera orbitando em vez do preview
+            # achatado. content_hash só é usado pelo loader de .blend
+            # (cache da exportação via Blender) — o resto ignora.
+            self._model_viewer().show_for(caminho, row["content_hash"])
+            return
         maps = None
         if row["asset_type"] == "pbr_set" and self.group_check.isChecked():
             # PBR Material Viewer: botões para alternar entre os mapas do set
@@ -1342,6 +1349,39 @@ class MainWindow(QMainWindow):
 
             self._hdri_win = HdriViewer(self)
         return self._hdri_win
+
+    def _model_viewer(self):
+        """Mesmo raciocínio do `_hdri_viewer()` acima: criado sob demanda,
+        janela própria (não overlay — mesmo motivo do HDRI)."""
+        if getattr(self, "_model_win", None) is None:
+            from assetdeck.ui.model_viewer import ModelViewer
+
+            self._model_win = ModelViewer(self)
+        return self._model_win
+
+    def prewarm_gl_viewers(self) -> None:
+        """Mostra e esconde o HdriViewer e o ModelViewer uma vez, fora da
+        tela, na abertura do app — `AA_ShareOpenGLContexts` (`app.py`)
+        não bastou (Rafael confirmou na tela: o piscar continua na
+        PRIMEIRA vez que uma janela de OpenGL aparece na sessão, some da
+        segunda em diante). A troca de modo de composição da janela é
+        por JANELA DE TOPO, na primeira vez que ela ganha um
+        `QOpenGLWidget` — fazer isso acontecer aqui, escondido, evita que
+        aconteça na hora que ele abrir o primeiro HDRI/modelo de verdade.
+
+        Mover pra fora da tela (não só esconder) importa: `hide()` sem
+        nunca ter aparecido não garante que o Qt chegou a pintar um
+        frame — e é o PAINT que dispara a negociação da superfície.
+        """
+        from PySide6.QtWidgets import QApplication
+
+        for viewer in (self._hdri_viewer(), self._model_viewer()):
+            pos_original = viewer.pos()
+            viewer.move(-10000, -10000)
+            viewer.show()
+            QApplication.processEvents()
+            viewer.hide()
+            viewer.move(pos_original)
 
     def _grid_menu(self, pos) -> None:
         from PySide6.QtWidgets import QMenu

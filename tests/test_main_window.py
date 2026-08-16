@@ -778,3 +778,59 @@ def test_on_finished_nada_mudou_nao_chama_reload_all(janela, monkeypatch):
     janela._on_finished(ScanStats())
 
     assert chamadas == []
+
+
+@pytest.mark.parametrize("nome_arquivo", ["modelo.obj", "modelo.fbx", "modelo.blend"])
+def test_open_preview_roteia_formato_3d_pro_visualizador_de_modelo(
+    janela, monkeypatch, nome_arquivo):
+    """Fase 6: duplo clique num .obj/.fbx/.blend abre o ModelViewer em vez
+    do PreviewPopup achatado — mesmo padrão do .hdr/.exr (Fatia 34). Não
+    instancia o ModelViewer de verdade: QOpenGLWidget não roda no modo
+    offscreen do pytest."""
+    chamadas = []
+
+    class _FakeViewer:
+        def show_for(self, caminho, content_hash=None):
+            chamadas.append((caminho, content_hash))
+
+    monkeypatch.setattr(janela, "_model_viewer", lambda: _FakeViewer())
+    monkeypatch.setattr(janela.model, "row_at", lambda idx: {
+        "rel_path": nome_arquivo, "asset_type": "model", "id": 999,
+        "content_hash": "hash-de-teste",
+    })
+
+    janela._open_preview(janela.model.index(0))
+
+    assert len(chamadas) == 1
+    caminho, content_hash = chamadas[0]
+    assert caminho.name == nome_arquivo
+    assert content_hash == "hash-de-teste"
+
+
+def test_open_preview_nao_roteia_textura_pro_visualizador_de_modelo(janela, monkeypatch):
+    """Extensão fora da lista suportada (Fase 6) continua no PreviewPopup
+    de sempre — o roteamento é por extensão, não vira o padrão pra tudo."""
+    chamadas = []
+    monkeypatch.setattr(janela, "_model_viewer",
+                        lambda: pytest.fail("não devia chamar o ModelViewer pra textura"))
+    monkeypatch.setattr(janela, "preview_popup",
+                        type("Fake", (), {"show_for": lambda *a, **k: chamadas.append(1)})())
+    monkeypatch.setattr(janela.model, "row_at", lambda idx: {
+        "rel_path": "textura.jpg", "asset_type": "texture", "id": 998,
+        "content_hash": "hash-de-teste",
+    })
+
+    janela._open_preview(janela.model.index(0))
+
+    assert chamadas == [1]
+
+
+def test_prewarm_gl_viewers_existe(janela):
+    """Fatia 72 (fix do "piscar"): só confirma que o método existe e é
+    chamável pelo nome certo (`app.py` depende dele) — chamar de verdade
+    trava o interpretador no modo offscreen do pytest (QOpenGLWidget
+    real não roda sem tela; `resizeGL` desreferencia `self._gl`, que só
+    existe depois de um `initializeGL` que nunca chega a rodar aqui —
+    mesma fronteira de `test_hdri_viewer.py`/`test_model_viewer.py`, que
+    também não instanciam os widgets de OpenGL de verdade)."""
+    assert callable(janela.prewarm_gl_viewers)

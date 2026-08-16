@@ -44,6 +44,10 @@ def script_path() -> Path:
     return Path(__file__).parent / "scripts" / "render_thumb.py"
 
 
+def export_obj_script_path() -> Path:
+    return Path(__file__).parent / "scripts" / "export_obj.py"
+
+
 def blender_command() -> list[str] | None:
     """Como invocar o Blender nesta máquina, ou None se não houver.
 
@@ -89,7 +93,7 @@ def render_thumbnail(blend_path: Path, dest: Path, size: int = 512,
         return RenderResult(False, erro=f"Arquivo não existe: {blend_path}")
 
     dest.parent.mkdir(parents=True, exist_ok=True)
-    cmd = [*cmd_base, "-b", "-P", str(script_path()), "--",
+    cmd = [*cmd_base, "-b", "--factory-startup", "-P", str(script_path()), "--",
            str(blend_path), str(dest), str(size),
            str(bg_color[0]), str(bg_color[1]), str(bg_color[2]),
            str(bg_strength), str(sun_energy)]
@@ -125,6 +129,42 @@ def _motivo(proc) -> str:
     if excecoes:
         return excecoes[-1]
     return linhas[-1] if linhas else f"código {proc.returncode}"
+
+
+def export_to_obj(blend_path: Path, dest: Path,
+                  comando: list[str] | None = None) -> RenderResult:
+    """Exporta a geometria de um .blend pra .obj, chamando o Blender
+    headless — é assim que o visualizador 3D (Fase 6) "lê" um .blend, já
+    que o formato binário dele não tem parser de terceiros confiável (só
+    o próprio Blender sabe ler de verdade). Nunca levanta: devolve o
+    resultado, mesmo padrão de `render_thumbnail`.
+
+    Quem chama é responsável por cachear (`model3d/blend_loader.py`) —
+    esta função sempre roda o Blender de novo, não confere se já existe.
+    """
+    cmd_base = comando or blender_command()
+    if cmd_base is None:
+        return RenderResult(False, erro="Blender não encontrado nesta máquina.")
+    if not blend_path.is_file():
+        return RenderResult(False, erro=f"Arquivo não existe: {blend_path}")
+
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    cmd = [*cmd_base, "-b", "--factory-startup", "-P", str(export_obj_script_path()), "--",
+           str(blend_path), str(dest)]
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True,
+                              timeout=TIMEOUT_S, check=False)
+    except subprocess.TimeoutExpired:
+        return RenderResult(False, erro=f"Exportação passou de {TIMEOUT_S}s (modelo pesado).")
+    except OSError as exc:
+        return RenderResult(False, erro=f"Falha ao executar o Blender: {exc}")
+
+    if dest.is_file() and dest.stat().st_size > 0:
+        return RenderResult(True, dest=dest)
+
+    log.error("Exportação pra .obj falhou para %s: %s", blend_path.name,
+              (proc.stderr or proc.stdout or "").strip()[-1500:])
+    return RenderResult(False, erro=_motivo(proc))
 
 
 def models_without_cover(conn, library_id: int, library_root: Path) -> list[tuple]:

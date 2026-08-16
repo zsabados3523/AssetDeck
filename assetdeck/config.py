@@ -104,6 +104,13 @@ def thumbs_dir() -> Path:
     return cache_dir() / "thumbs"
 
 
+def models3d_cache_dir() -> Path:
+    """.obj exportados de .blend pelo visualizador 3D (Fase 6) — cache por
+    content_hash, mesma ideia de `thumbs_dir()` (recriável, nunca é a
+    fonte da verdade)."""
+    return cache_dir() / "models3d"
+
+
 def previews_dir() -> Path:
     """Cópias das imagens de preview escolhidas pelo usuário (Fatia 10)."""
     return data_dir() / "previews"
@@ -112,7 +119,7 @@ def previews_dir() -> Path:
 def ensure_dirs() -> None:
     """Cria todas as pastas do app se não existirem."""
     for d in (config_dir(), data_dir(), cache_dir(), backups_dir(), logs_dir(),
-              thumbs_dir(), previews_dir()):
+              thumbs_dir(), models3d_cache_dir(), previews_dir()):
         d.mkdir(parents=True, exist_ok=True)
 
 
