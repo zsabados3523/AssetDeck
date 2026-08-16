@@ -13,7 +13,7 @@ apontar para a testlib para a próxima fase de desenvolvimento.
 Próxima fase: **F5 — v2.0**, roadmap fechado com o Rafael em 2026-08-02
 (14 fatias, 31 a 44 — ver seção própria abaixo). Começando pela Fatia 31.
 
-## Estado atual (2026-08-15)
+## Estado atual (2026-08-16)
 
 **F0 a F5 completos.** Em andamento: **F6 — Polydex + ajustes de UX/visual**
 (roadmap na seção própria, mais abaixo), fatiado a partir da comparação com
@@ -22,21 +22,21 @@ usando o app de verdade.
 
 | | |
 |---|---|
-| Testes | 765 verdes (`pytest -q`) — 4 falhas conhecidas e sem relação (`test_render.py`/`test_missing_textures.py`, dependem do Blender de verdade rodando no ambiente) |
-| Última fatia mergeada | **Fatia 67** — janela única de configurações (era 5 menus de topo), engrenagem no canto inferior-esquerdo |
+| Testes | 787 verdes (`pytest -q`) — 4 falhas conhecidas e sem relação (`test_render.py`/`test_missing_textures.py`, dependem do Blender de verdade rodando no ambiente) |
+| Última fatia mergeada | **Fatia 68** — import simplificado pro Blender: `.blend` importa direto (sem menu), auto-detecta modelo × material, Link & Place por padrão, confirmado pelo Rafael na tela |
 | Onde trabalhar | `/home/rafael/00 - PROJETOS/assetdeck-correcoes` (worktree isolado — **NÃO** a pasta `assetdeck` original, HEAD solta de propósito lá). Ver memória `assetdeck-worktree-isolado`. |
 | Biblioteca de dev | `/home/rafael/00 - PROJETOS/assetdeck-testlib` — NUNCA apontar pra outra (regra do CLAUDE.md) |
 | Schema | migrations 001–006 aplicadas (ver SCHEMA.md) |
-| Add-on do Blender | Blender 5.2 Flatpak |
+| Add-on do Blender | Blender 5.2, instalação nativa/portátil (**não é mais Flatpak** — trocado em 2026-08-10) |
 | Tema visual | claro estilo Craft, monocromático — ver F4 abaixo |
 
 **Próximos itens do roadmap F6** (ordem sugerida, ver seção "F6" mais
 abaixo pra checklist completo e plano de cada fase):
-- Fase 5 — Simplificar import pro Blender (pular o menu Object/Material/
-  Collection do `.blend`, já mapeado com arquivo:linha); Múltiplas
-  bibliotecas (schema já pronto, `libraries` table — risco real já
-  identificado: `folder_tree`/`assets_repo` não filtram por
-  `library_id` hoje).
+- Fase 5 — Múltiplas bibliotecas (schema já pronto, `libraries` table —
+  risco real, agora CONFIRMADO na prática pela Fatia 68: `folder_tree`/
+  `assets_repo` não filtram por `library_id`, e o banco de dev tem 72 mil
+  assets órfãos da biblioteca real do SSD, de um teste de 2026-08-04
+  nunca limpo — ver pendência abaixo).
 - Fase 6 — Visualizador 3D: Rafael pediu PROVA DE CONCEITO primeiro (só
   `.obj`, câmera orbitando) antes de comprometer fatia grande.
 - Fase 7 — Sessão de revisão visual AO VIVO com o Rafael (hover que muda
@@ -44,8 +44,17 @@ abaixo pra checklist completo e plano de cada fase):
   visual" geral, visual da `SettingsWindow` nova) — precisa dele na tela,
   não dá pra fatiar sozinho sem ele apontando o que incomoda.
 
-Pendência menor registrada: janelinha do HDRI ainda pisca na primeira
-abertura por sessão (ver checklist do F6).
+**Pendências registradas, não resolvidas:**
+- Janelinha do HDRI ainda pisca na primeira abertura por sessão (ver
+  checklist do F6).
+- Banco de dev (`~/.local/share/assetdeck/assetdeck.db`) tem 72.244
+  assets da biblioteca real (`library_id=2`) que nunca foram limpos —
+  Rafael pediu pra NÃO mexer nisso por ora (achado testando a Fatia 68).
+  Efeito prático: arrastar pro Blender um asset que apareceu na grade
+  mas na verdade veio da biblioteca real dá "arquivo não encontrado",
+  porque o caminho é montado contra a raiz da testlib (a ativa). Só
+  testar com assets que são mesmo da testlib até ele decidir limpar —
+  ver Fatia 68 mais abaixo pro diagnóstico completo.
 
 ## Como ler este arquivo
 Uma fatia por vez, em branch própria. Cada fatia termina com: pytest verde,
@@ -1917,7 +1926,7 @@ arrastar com o mouse de verdade** — só o Rafael consegue confirmar isso.
 `blender_addon/` — só os testes Python normais, sem relação com este
 fix).
 
-**Pendente de confirmação do Rafael na tela real:** reteste completo —
-modelo da testlib (Link & Place, agora deve dar pra mover o Empty pai),
-material `.blend` só-material, textura solta em cima de um objeto
-específico.
+**Confirmado pelo Rafael na tela real (2026-08-16):** reteste completo
+funcionando — modelo da testlib (Link & Place, dá pra mover o Empty
+pai), material `.blend` só-material, textura solta em cima de um objeto
+específico. Fatia mergeada na `main`.
