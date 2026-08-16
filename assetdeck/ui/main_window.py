@@ -1116,8 +1116,9 @@ class MainWindow(QMainWindow):
         if blender_command() is None:
             QMessageBox.warning(
                 self, "Blender não encontrado",
-                "Não achei o Blender nesta máquina. Instale com:\n\n"
-                "flatpak install flathub org.blender.Blender",
+                "Não achei o Blender nesta máquina. Instale-o (blender.org "
+                "ou 'flatpak install flathub org.blender.Blender') e garanta "
+                "que o comando 'blender' esteja no PATH.",
             )
             return
 
@@ -1448,8 +1449,9 @@ class MainWindow(QMainWindow):
         if blender_command() is None:
             QMessageBox.warning(
                 self, "Blender não encontrado",
-                "Não achei o Blender nesta máquina. Instale com:\n\n"
-                "flatpak install flathub org.blender.Blender",
+                "Não achei o Blender nesta máquina. Instale-o (blender.org "
+                "ou 'flatpak install flathub org.blender.Blender') e garanta "
+                "que o comando 'blender' esteja no PATH.",
             )
             return
 

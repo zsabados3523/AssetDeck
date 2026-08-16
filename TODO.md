@@ -1780,3 +1780,57 @@ clique no rail abre a janela). 765 testes verdes.
 **Registrado, não resolvido agora (pedido do Rafael):** o visual da
 `SettingsWindow` ao abrir pode mudar mais pra frente — cuidar disso junto
 da revisão visual geral (Fase 7 do roadmap), não uma fatia isolada.
+
+### ☑ Fatia 68 — Import simplificado pro Blender (era só .blend que perguntava)
+Início da **Fase 5** do roadmap F6. Pedido do Rafael: arrastar um asset
+pro Blender deve importar automático — se é modelo 3D, importa modelo;
+se é material, importa material — com feedback VISUAL de onde vai
+parar, sem menu no meio do caminho.
+
+**Achado revisando antes de programar:** HDRI e textura/PBR já eram 100%
+automáticos desde a Fatia 11-13 (`drops.py`), sem menu nenhum — só
+`.blend` (modelos) parava tudo com um menu Object/Material/Collection ×
+Append/Link × "& Place" (`ASSETDECK_MT_drop_blend`,
+`blender_addon/assetdeck_bridge/importer.py`), construído pelo próprio
+add-on, não exigência do Blender.
+
+- **`.blend` (modelos):** `ASSETDECK_OT_drop_blend.invoke` agora importa
+  DIRETO como Objects, modo "Append & Place" (o objeto vem grudado no
+  mouse, você clica pra soltar — é o próprio feedback visual de "onde
+  vai colocar", já existia desde a Fatia 14, só não era o padrão). Segurar
+  **Shift** ao soltar mantém o menu antigo pra quem quiser Link, só
+  Materials/Collections, ou escolher na mão.
+- **Textura solta (material):** `ASSETDECK_OT_drop_texture` ganhou
+  raycast sob o mouse no momento do drop (`viewport.objeto_sob_o_mouse`,
+  a mesma técnica que o "Append & Place" de material já usava dentro do
+  .blend) — se soltou em cima de um objeto, o material vai NELE (e ele é
+  selecionado, feedback visual de "aplicou aqui"), em vez de depender de
+  algo já estar selecionado antes sem nenhum aviso. Soltar fora de
+  qualquer objeto cai no comportamento antigo (aplica nos selecionados).
+- **`viewport.py` (novo):** `objeto_sob_o_mouse`/`ponto_do_mouse` saíram
+  de `importer.py` pra cá — mesma lógica de raycast, reusada agora por
+  `drops.py` também, em vez de duplicar.
+
+**Achado no caminho, corrigido junto (não é só UI — é o Blender de
+verdade não sendo reconhecido):** o Rafael trocou o Blender de Flatpak
+para instalação nativa/portátil em 2026-08-10, numa sessão anterior que
+corrigiu o instalador (`assetdeck/bridge/installer.py` passou a procurar
+em `~/.config/blender` além de `~/.var/app/org.blender.Blender`) mas
+nunca chegou a ser mergeada — trazida agora (`git cherry-pick`) porque
+esta fatia mexe exatamente nessa área. Também corrigidas 2 mensagens de
+erro em `main_window.py` e um comentário em `render.py` que ainda só
+mencionavam Flatpak como opção de instalação — `render.py` já tinha
+fallback pro binário do PATH, só o texto estava desatualizado.
+`CLAUDE.md` atualizado (comando do Blender não é mais
+`flatpak run org.blender.Blender`).
+
+**Verificado com Blender de verdade, headless** (`blender --background
+--python`, mesmo padrão das Fatias 38/40 — não simula mouse de
+verdade, então não prova a experiência visual, só que o código não
+quebra): registro/desregistro do add-on sem erro; `import_blend` e
+`drop_blend` sem Shift trazem o objeto pra cena SEM abrir menu (antes
+disso não dava pra nem testar sem travar esperando UI); `drop_texture`
+sem a ponte configurada cancela graciosamente (sem exceção Python).
+**Pendente de confirmação do Rafael na tela real:** arrastar um modelo e
+uma textura de verdade no Blender — a sensação do "gruda no mouse" e do
+"seleciona o objeto que recebeu o material" só dá pra julgar vendo.

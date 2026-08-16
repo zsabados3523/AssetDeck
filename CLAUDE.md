@@ -25,7 +25,7 @@ Rafael usa o app desktop, não o terminal — execute os comandos você mesmo.
 - Rodar app: source .venv/bin/activate && python -m assetdeck
 - Testes: pytest -q
 - Screenshot da UI: python -m assetdeck --screenshot /tmp/ui.png
-- Blender (5.2, alvo do projeto): flatpak run org.blender.Blender
+- Blender (5.2, alvo do projeto): instalação nativa/portátil, comando `blender` no PATH (não é mais Flatpak — trocado em 2026-08-10)
 
 ## Documentos de contexto
 - PROJECT.md — visão, decisões e arquitetura de módulos.
