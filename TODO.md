@@ -1989,8 +1989,68 @@ propósito, confirma `list_for_grid`/`count_by_category` isolados por
 `library_id` e o comportamento antigo preservado sem o argumento) e
 `tests/test_folder_tree.py` (1 teste novo, mesma ideia pra `list_dirs`).
 
-**Não verificado com a testlib real ainda** (o banco sujo de verdade só
-existe fora do ambiente de teste) — pendente de confirmação do Rafael:
-reabrir o app e ver se as pastas/contagens da testlib batem com o de
-sempre (não pode ter mudado nada visível pra quem só tem uma
-biblioteca).
+**Confirmado pelo Rafael na tela real (2026-08-16):** pastas/contagens da
+testlib continuam batendo com o de sempre. Fatia mergeada na `main`.
+
+### ☑ Fatia 70 — Seletor de biblioteca (trocar/anexar pela UI)
+Início de verdade da feature "Múltiplas bibliotecas" (a Fatia 69 só tinha
+fechado o risco de consulta). Mockup comparando "hoje" (texto fixo
+"assetdeck-testlib · Claro" no canto da faixa de menus) com a "proposta"
+(o mesmo canto virando um botão com lista de bibliotecas) — aprovado pelo
+Rafael antes de programar (regra do projeto).
+
+- **`LibrarySwitcher` (novo, `assetdeck/ui/library_switcher.py`):**
+  `QToolButton` + `QMenu`, mesmo padrão de `FilterButton` (Fatia 63) —
+  uma `QAction` checável por biblioteca registrada (`libraries_repo.
+  list_all`, nova), texto "nome · N assets" (`assets_repo.
+  count_for_library`, nova), tooltip com o caminho completo, `QActionGroup`
+  exclusivo marca a ativa. Separador + "Adicionar biblioteca…" abre
+  `QFileDialog.getExistingDirectory` e registra a pasta escolhida
+  (`libraries_repo.get_or_create`) — só CADASTRA, não indexa nem troca
+  pra ela: indexar já acontece sozinho na primeira vez que o Rafael
+  trocar pra essa biblioteca (reaproveita o `start_scan()` que já roda
+  toda abertura), não precisava de um caminho novo de scan.
+- **Troca de biblioteca fecha o app, de propósito.** `library_root`/
+  `library_id` são resolvidos uma vez em `app.py`, ANTES da `MainWindow`
+  existir — `ScanController`/`ThumbnailPipeline`/modelo da grade são
+  todos construídos em cima disso. Reconstruir tudo ao vivo é risco
+  desproporcional ao ganho (perguntei ao Rafael no mockup: reindexar de
+  novo ao trocar é aceitável — reabrir é o preço). `MainWindow.
+  _on_switch_library`: confirma com `QMessageBox`, grava `library_root`
+  novo no `config.json`, `self.close()` — reabrir passa pelo fluxo NORMAL
+  de inicialização (nenhum código novo lá: `_confirmar_biblioteca` +
+  `start_scan()` já fazem o resto sozinhos).
+- **Canto da faixa de menus** (`_setup_brand_bar`): o `QLabel` fixo virou
+  um `QWidget` com `LibrarySwitcher` + `QLabel` do modo (claro/escuro),
+  lado a lado — `brand_context` (nome mantido, testes antigos dependiam
+  dele) agora só guarda o modo; o nome da biblioteca vive no próprio
+  botão.
+- **Achado com SCREENSHOT real, não só teste** (`--screenshot` contra a
+  testlib, com o banco de dev ainda tendo os 72 mil assets órfãos): o
+  rodapé mostrava "77 de 50436 assets" e "423.6 GB" — `assets_repo.
+  count_active`/`total_bytes` (usados no rodapé) e o `progress` do
+  `ScanWorker` (usado durante a indexação) TAMBÉM não filtravam por
+  `library_id`, mesma classe de bug da Fatia 69, só que em consultas
+  diferentes que aquela fatia não tinha tocado. Corrigido junto: os dois
+  ganharam `library_id` opcional, `MainWindow.refresh_count()` e
+  `ScanWorker.on_progress` passam a biblioteca ativa. Reconfirmado com
+  screenshot novo: "77 de 391 assets", "3.9 GB" — números batendo com o
+  tamanho real da testlib.
+
+**13 testes novos:** `tests/test_library_switcher.py` (novo — mostra a
+ativa, marca certo, clicar na já-ativa não emite nada, clicar em outra
+emite `switch_requested`, adicionar biblioteca registra e repopula o
+menu, cancelar o seletor não muda nada), `tests/test_multi_library_
+filter.py` (+3 — `count_for_library`, `list_all`, e o
+`count_active`/`total_bytes` que o screenshot pegou) e `tests/
+test_scan_worker.py` (+1 — progresso da varredura só conta a biblioteca
+sendo escaneada, não todas). 2 testes de `test_main_window.py` ajustados
+(o corner widget virou um container com dois filhos, não só o `QLabel`).
+
+**Deu certo quando:** testado com screenshot contra a testlib real —
+botão aparece no canto ("assetdeck-testlib ▾ · Claro"), rodapé com
+números corretos da testlib.
+**Pendente de confirmação do Rafael na tela real:** abrir o menu, ver a
+lista de bibliotecas (inclusive a real do SSD, ainda no banco), tentar
+"Adicionar biblioteca…" e trocar de biblioteca de verdade (confirma que
+o app fecha e a reabertura traz a biblioteca nova).

@@ -5,7 +5,9 @@ desligado (o padrão) não mexe em nada."""
 from assetdeck import config
 from assetdeck.db.connection import connect
 from assetdeck.db.migrate import apply_migrations
+from assetdeck.db.repos import libraries as libraries_repo
 from assetdeck.db.repos import previews as previews_repo
+from assetdeck.indexer.scanner import scan_library
 from assetdeck.ui.scan_worker import ScanWorker
 
 
@@ -86,3 +88,35 @@ def test_toggle_de_ocultar_origem_tambem_e_respeitado(tmp_path, monkeypatch, qap
     hidden = conn.execute("SELECT hidden FROM assets WHERE id = ?", (imagem_id,)).fetchone()
     assert hidden["hidden"] == 1
     conn.close()
+
+
+def test_progress_conta_so_a_biblioteca_sendo_escaneada(tmp_path, monkeypatch, qapp):
+    """Fatia 70: achado com screenshot real — o "N assets" do progresso
+    (e do rodapé depois) somava TODAS as bibliotecas do banco, não só a
+    que estava sendo indexada agora."""
+    monkeypatch.setenv("ASSETDECK_CONFIG_DIR", str(tmp_path / "cfg"))
+    monkeypatch.setenv("ASSETDECK_DATA_DIR", str(tmp_path / "data"))
+    config.ensure_dirs()
+    _preparar_banco()
+
+    outra_root = tmp_path / "outra_lib"
+    outra_root.mkdir()
+    for i in range(5):
+        (outra_root / f"asset_{i}.blend").write_bytes(b"b" * 10)
+    conn = connect(config.db_path())
+    outra_id = libraries_repo.get_or_create(conn, outra_root)
+    scan_library(conn, outra_id, outra_root)
+    conn.close()
+
+    root = _biblioteca_com_par_de_mesmo_nome(tmp_path)  # 2 assets só
+
+    contagens_recebidas = []
+    worker = ScanWorker(config.db_path(), root)
+    worker.progress.connect(
+        lambda _done, _total, ativos: contagens_recebidas.append(ativos))
+    worker.run()
+
+    assert contagens_recebidas, "nenhum sinal de progresso emitido"
+    assert all(n == 2 for n in contagens_recebidas), (
+        f"esperava sempre 2 (só a lib sendo escaneada), veio {contagens_recebidas}"
+    )

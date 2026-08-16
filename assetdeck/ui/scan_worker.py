@@ -46,7 +46,9 @@ class ScanWorker(QObject):
                 def on_progress(done: int, total: int, _stats: ScanStats) -> None:
                     # A cada 10 arquivos (e no último) atualiza a UI
                     if done % 10 == 0 or done == total:
-                        self.progress.emit(done, total, assets_repo.count_active(conn))
+                        self.progress.emit(
+                            done, total,
+                            assets_repo.count_active(conn, library_id=library_id))
 
                 stats = scan_library(
                     conn, library_id, self._library_root,

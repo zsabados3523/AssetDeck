@@ -279,9 +279,10 @@ def test_settings_window_tem_as_seis_categorias(janela):
                      "Painéis e filtros", "Geral"):
         assert esperado in nomes, f"categoria {esperado!r} não encontrada em {nomes}"
     # E a barra de menus propriamente dita fica vazia — nenhum QMenu de topo.
-    from PySide6.QtWidgets import QMenu
-
-    assert janela.menuBar().findChildren(QMenu) == []
+    # `findChildren(QMenu)` pegaria também o popup do `LibrarySwitcher`
+    # (Fatia 70, mora num corner widget da própria barra) — o que prova
+    # "sem menu de topo" de verdade é a barra não ter NENHUMA QAction.
+    assert janela.menuBar().actions() == []
 
 
 def test_engrenagem_abre_a_settings_window(janela, qapp):
@@ -468,18 +469,21 @@ def test_a_marca_e_o_contexto_ficam_na_faixa_dos_menus(janela, qapp):
     direita = barra.cornerWidget(_Qt.Corner.TopRightCorner)
 
     assert esquerda is not None, "a marca não está na faixa dos menus"
-    assert direita is janela.brand_context
+    assert direita is janela._contexto_widget
+    assert janela.library_switcher.parent() is direita
+    assert janela.brand_context.parent() is direita
     # A faixa de menus em si fica vazia — tudo virou a SettingsWindow.
     assert barra.actions() == []
 
 
 def test_o_contexto_mostra_a_biblioteca_e_o_modo(janela, qapp):
     """A contagem de assets, que o mockup punha aqui, já aparece no cabeçalho
-    da lista E no rodapé — um terceiro lugar seria ruído. O que não aparece
-    em lugar nenhum é qual biblioteca está aberta (são várias desde a F41)."""
-    texto = janela.brand_context.text()
-    assert janela._library_root.name in texto
-    assert ("Escuro" in texto) or ("Claro" in texto)
+    da lista E no rodapé — um terceiro lugar seria ruído. Qual biblioteca
+    está aberta virou o `LibrarySwitcher` (Fatia 70, várias podem estar
+    registradas); `brand_context` sobrou só com o modo claro/escuro."""
+    assert janela._library_root.name in janela.library_switcher.text()
+    modo = janela.brand_context.text()
+    assert ("Escuro" in modo) or ("Claro" in modo)
 
 
 def test_filtros_nao_quebram_a_grid(janela, qapp):
