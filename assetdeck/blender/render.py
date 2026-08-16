@@ -47,7 +47,8 @@ def script_path() -> Path:
 def blender_command() -> list[str] | None:
     """Como invocar o Blender nesta máquina, ou None se não houver.
 
-    Preferência: Flatpak (é o que o Rafael usa) → binário no PATH.
+    Preferência: Flatpak (se instalado) → binário no PATH (instalação
+    padrão/portátil, o que o Rafael usa hoje).
     """
     if shutil.which("flatpak"):
         try:
