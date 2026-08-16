@@ -75,13 +75,25 @@ def _build_where(
     collection_id: int | None = None,
     category_filters: list[dict] | None = None,
     dominant_color: str | None = None,
+    library_id: int | None = None,
 ) -> tuple[str, list]:
     """Trecho de WHERE + params compartilhado por `list_for_grid` e
     `count_by_category` — os dois precisam responder aos MESMOS filtros,
-    e duplicar essa lógica é como o contador sai de sincronia com a grade."""
+    e duplicar essa lógica é como o contador sai de sincronia com a grade.
+
+    `library_id`: restringe à biblioteca ATIVA — não é bem um "filtro" que
+    o Rafael escolhe (por isso fica de fora de `_current_filters_dict()` e
+    nunca é salvo em Smart Collection), é o CONTEXTO da sessão. Sem isso,
+    um banco com mais de uma biblioteca indexada mistura os assets das
+    duas na mesma grade/pasta — risco real, achado testando a Fatia 68
+    (banco de dev com 72 mil assets órfãos de uma biblioteca antiga).
+    """
     sql = ""
     params: list = []
 
+    if library_id is not None:
+        sql += " AND a.library_id = ?"
+        params.append(library_id)
     if not include_hidden:
         sql += " AND a.hidden = 0"
     if not include_dependencies:
@@ -178,6 +190,7 @@ def list_for_grid(
     dominant_color: str | None = None,
     sort_by: str = "name",
     sort_dir: str = "asc",
+    library_id: int | None = None,
 ) -> list[dict]:
     """Assets para a grid (asset + arquivo principal), com filtros combináveis.
 
@@ -200,6 +213,8 @@ def list_for_grid(
       de distância; arquivo sem cor calculada (não-raster) fica de fora
     - sort_by/sort_dir: critério de ordenação da grid (Fatia 63) — ver
       `_ORDER_BY_SQL`; par desconhecido cai no padrão (nome, A→Z)
+    - library_id: restringe à biblioteca ativa (Fatia 69) — None = todas
+      as bibliotecas indexadas no banco (comportamento de antes)
     """
     join_files = ("JOIN files f ON f.asset_id = a.id" if expand_sets
                   else "JOIN files f ON f.asset_id = a.id AND f.is_primary = 1")
@@ -227,7 +242,7 @@ def list_for_grid(
         starred_only=starred_only, min_resolution=min_resolution,
         include_hidden=include_hidden, include_dependencies=include_dependencies,
         collection_id=collection_id, category_filters=category_filters,
-        dominant_color=dominant_color,
+        dominant_color=dominant_color, library_id=library_id,
     )
     sql += where
 
