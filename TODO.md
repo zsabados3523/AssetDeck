@@ -2614,3 +2614,80 @@ opinou dos dois lados):**
 
 Os ~2s restantes ("assentar UI/scan") ainda não foram investigados a
 fundo — são varredura + miniaturas, e podem ter espaço próprio.
+
+### ☐ Fatia 76 — Fase 7, Etapa 1: ajustes pontuais pedidos pelo Rafael
+
+Lista que ele passou olhando a 75 na tela. Cinco itens, todos atacados:
+
+**1. Sombra "vazando" no painel de detalhes.** Ele pediu "deixar que nem
+no grid de assets" — e estava certo: o painel era o ÚNICO dos três com
+`apply_card_shadow`; lateral e grade já usavam `make_card(sombra=False)`.
+Um `QGraphicsDropShadowEffect` desenha a sombra DENTRO do retângulo que o
+layout deu ao widget, e o splitter entrega o espaço exato — ela não tem
+pra onde ir e espalha por cima do próprio conteúdo, ainda interagindo com
+o `QScrollArea` de dentro. Removida; o contorno do `#card` já separa.
+
+**2. "Pastas, tags, barra lateral parecem não ter mudado nada... nem
+borda possui."** Medido com mouse real: o preenchimento do hover JÁ
+funcionava (`#FFFFFF`→`#EFEFF4`). O que faltava era CONTORNO — sozinho, o
+preenchimento é discreto demais numa lista de muitas linhas. Agora item de
+árvore, cabeçalho de seção e botão do rail acendem borda junto com o
+fundo. A borda entra no estado normal como `transparent` e o padding já
+nasce 1px menor, senão a linha inteira pularia 1px ao passar o mouse.
+
+**3. Seleção da lateral virou pastilha de DESTAQUE** (era cinza). É o que
+`theme.py` já dizia ser o papel do `accent_soft` ("estado ativo... onde
+não há imagem embaixo — lateral, filtros") e o que a direção visual
+aprovada da Fase 7 pedia ("sidebar com item ativo em pastilha
+preenchida"). Não é a barra sólida de petróleo reprovada lá atrás — é
+laranja lavado com o texto no destaque, contraste travado em teste.
+
+**4. Botões de tipo e de filtro viraram PASTILHA.** Pedido literal ("os
+botões de filtragem por tipo deveriam ser totalmente arredondados"),
+estendido aos de filtro pra barra não ficar com duas famílias de forma.
+**Armadilha do Qt descoberta na marra:** quando `border-radius` passa de
+METADE da altura, o Qt **descarta a regra inteira** em silêncio e o botão
+volta a ser retângulo — nada de cortar o raio. A 1ª tentativa usou
+`999px` justamente contando com o corte, e o resultado na tela foi botão
+quadrado; `50%` também é ignorado. Medidos os botões reais (categoria
+39px, filtro 37px), o token ficou em 18px, e `test_theme.py` falha se
+algum encolher a ponto de o raio parar de valer. A setinha do popup ainda
+precisou ser puxada pra dentro: ela é desenhada no canto inferior-direito,
+que na pastilha é justamente onde a curva cortou o fundo — ficava
+pendurada pra fora.
+
+**5. Filtro de cor "estranho e meio inútil".** Era BUG de verdade, não
+impressão: `color_distance` usava distância euclidiana em RGB. Folha
+fotográfica é verde-oliva DESSATURADO (`#4f6338`, `#7e8d70` — hex reais
+da testlib) e o verde da paleta era vivo (`#27ae60`); em RGB isso dá ~94
+contra tolerância 90. **"Verde" e "Amarelo" devolviam ZERO** numa
+biblioteca cheia de folhagem. O problema é a métrica, não a tolerância:
+em RGB, escurecer uma cor afasta tanto quanto trocar de matiz, então
+nenhuma tolerância separa "verde escuro" de "vermelho claro" sem também
+deixar tudo entrar. Agora a comparação é em HSV com o MATIZ pesando muito
+mais que brilho/saturação, e acromático (cinza/branco/preto) é família
+separada — filtrar "Cinza" não traz folhagem nem "Verde" traz concreto. A
+paleta também foi recentrada no meio de cada família (o verde estava em
+145°, esmeralda; foi pra 122°). Medido na biblioteca real:
+
+| cor | antes | depois |
+|---|---|---|
+| Verde | 0 | 10 |
+| Amarelo | 0 | 103 |
+| Vermelho | — | 28 |
+| Marrom | — | 108 |
+
+**Testes novos (5):** folhagem dessaturada bate com o verde da paleta;
+cor não vaza entre famílias distantes; cinza e cor nunca se misturam; e o
+raio da pastilha cabe na altura do botão (parametrizado por fonte, por
+causa da falha silenciosa do Qt).
+
+**Pendente:** confirmação do Rafael. Falta ainda da Etapa 1 o painel de
+detalhes (densidade, 6+ seções sem colapsar), o `PreviewPopup` e o
+rodapé.
+
+**Aviso, não é código:** durante esta sessão o `theme_mode` do config
+REAL dele foi de `escuro` pra `claro` por causa dos meus testes de tela
+(não consegui reproduzir qual script; o app em si foi verificado duas
+vezes e NÃO troca sozinho, e a suíte isola config com `monkeypatch`).
+Restaurado pra `escuro`.

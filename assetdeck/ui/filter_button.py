@@ -38,6 +38,10 @@ class FilterButton(QToolButton):
         "#rrggbb") em vez de só o texto — usado pela paleta de busca por
         cor (Fatia 39)."""
         super().__init__(parent)
+        # Mesma pastilha dos botões de categoria (Fatia 76) — ordenar,
+        # resolução e cor moram na mesma barra e precisam ler como a mesma
+        # família de controle.
+        self.setObjectName("pill")
         self._options = options
         self._default = options[0][1]
         self._value = self._default

@@ -134,8 +134,12 @@ QToolButton#railButton {
     padding: 6px;
 }
 
+/* Borda junto do preenchimento (Fatia 76) — o rail é a "barra vertical
+ * lateral" que o Rafael citou como não tendo mudado nada. Sem contorno, uma
+ * pastilha clara atrás de um ícone quase não se lê. */
 QToolButton#railButton:hover {
     background-color: $surface_raised;
+    border: 1px solid $border;
 }
 
 /* O rail tem padding próprio (6px), então o "afundar" também é próprio: 7/5
@@ -164,6 +168,7 @@ QWidget#sidebarHeader {
 
 QWidget#sidebarHeader:hover {
     background-color: $surface_raised;
+    border: 1px solid $border;
 }
 
 QLabel#sidebarSectionTitle {
@@ -337,6 +342,71 @@ QPushButton#primary:disabled {
     background-color: $surface;
     border: 1px solid $border;
     color: $text_disabled;
+}
+
+/* Pastilha totalmente arredondada (Fatia 76): botões de categoria (objetos,
+ * materiais, imagens…) e de filtro (ordenar, resolução, cor). Pedido do
+ * Rafael — "os botões de filtragem por tipo deveriam ser totalmente
+ * arredondados" —, estendido aos de filtro pra barra de cima não ficar com
+ * duas famílias de forma concorrendo.
+ *
+ * O raio é grande de propósito em vez de "metade da altura": a altura muda com
+ * a fonte e com o tema, e o Qt corta o raio no máximo que couber. Precisa
+ * repetir hover/clique/marcado aqui porque `#pill` é seletor de ID e ganha das
+ * regras genéricas — sem isso o botão voltaria a ser quadrado justamente ao
+ * passar o mouse (a mesma armadilha do `#primary:disabled`, Fatia 74, agora
+ * coberta por teste). */
+QToolButton#pill {
+    border-radius: $radius_pill;
+    padding: $pad_m $pad_l;
+}
+
+QToolButton#pill:hover {
+    background-color: $surface_raised;
+    border: 1px solid $border;
+    border-radius: $radius_pill;
+}
+
+QToolButton#pill:pressed {
+    background-color: $surface_sunken;
+    border: 1px solid $border;
+    border-radius: $radius_pill;
+    padding-top: 9px;
+    padding-bottom: 7px;
+}
+
+QToolButton#pill:checked {
+    background-color: $accent_soft;
+    border: 1px solid transparent;
+    border-radius: $radius_pill;
+    color: $accent;
+    font-weight: 600;
+}
+
+/* A setinha do menu (categoria) fica no MESMO retângulo arredondado; sem isto
+ * o Qt desenha o pedaço dela com canto reto e a pastilha aparece "mordida" do
+ * lado direito. Só geometria — nenhum `image:` é trocado, então a seta que o
+ * Fusion desenha continua lá (ver a regra 2 do cabeçalho deste arquivo). */
+QToolButton#pill::menu-button {
+    border: none;
+    border-top-right-radius: $radius_pill;
+    border-bottom-right-radius: $radius_pill;
+    width: 16px;
+}
+
+/* A setinha do popup instantâneo (ordenar/resolução/cor) é desenhada no canto
+ * inferior-direito do retângulo — que numa pastilha é justamente onde a curva
+ * já cortou o fundo, então ela ficava PENDURADA PRA FORA do botão. Puxada pra
+ * dentro, encostada na direita e centrada na vertical.
+ *
+ * `subcontrol-position` é geometria: não troca `image:`, então a seta que o
+ * Fusion desenha continua existindo (é a ressalva do cabeçalho deste arquivo,
+ * conferida na tela — ver `zoom` da Fatia 76). */
+QToolButton#pill::menu-indicator {
+    subcontrol-origin: padding;
+    subcontrol-position: center right;
+    right: 4px;
+    width: 10px;
 }
 
 /* Botão sem moldura, para ações discretas (estrelas, ícones do painel). */
@@ -517,20 +587,41 @@ QTreeView, QTreeWidget, QListView, QListWidget, QTableView, QTableWidget {
     selection-color: $text;
 }
 
+/* A borda entra JÁ AQUI, transparente, e o padding é 1px menor dos dois lados
+ * (Fatia 76). Assim o estado de hover pode acender a borda sem que a caixa de
+ * conteúdo encolha — texto e ícone ficam exatamente no mesmo lugar nos dois
+ * estados. Somar borda só no `:hover` empurraria a linha inteira 1px. */
 QTreeView::item, QListWidget::item, QTableView::item {
-    padding: 4px 6px;
+    padding: 3px 5px;
+    border: 1px solid transparent;
 }
 
+/* O Rafael, olhando a lateral: "os botões da janela de pastas, tags, barra
+ * vertical lateral parecem ter mudado nada... nem borda possui". O
+ * preenchimento do hover JÁ funcionava (medido com mouse real: #FFFFFF →
+ * #EFEFF4), mas sozinho ele é discreto demais numa lista de muitas linhas —
+ * o que dá contorno de "isto aqui é clicável" é a borda. */
 QTreeView::item:hover, QListWidget::item:hover, QTableView::item:hover {
     background-color: $surface_raised;
+    border: 1px solid $border;
 }
 
 /* Seleção em pastilha CLARA com o texto na cor, como os botões ativos do
  * painel direito do Craft. A barra sólida de petróleo que estava aqui antes
- * dominava a tela inteira — foi o que o Rafael reprovou. */
+ * dominava a tela inteira — foi o que o Rafael reprovou.
+ *
+ * Fatia 76: a pastilha cinza virou a de DESTAQUE. É o que `theme.py` já dizia
+ * ser o papel do `accent_soft` ("estado ativo... usado onde não há imagem
+ * embaixo — lateral, filtros") e o que a direção visual aprovada da Fase 7
+ * pedia ("sidebar com item ativo em pastilha preenchida"). Não é a barra
+ * sólida reprovada lá atrás: aquela era petróleo cheio ocupando a lista
+ * inteira; esta é laranja lavado com o texto no destaque, mesmo par de cores
+ * dos filtros ativos — e o contraste dele está travado em `test_theme.py`. */
 QTreeView::item:selected, QListWidget::item:selected, QTableView::item:selected {
-    background-color: $selection;
-    color: $text;
+    background-color: $accent_soft;
+    color: $accent;
+    border: 1px solid transparent;
+    font-weight: 600;
 }
 
 /* Seleção arredondada só onde NÃO há coluna de indicador (as listas).
