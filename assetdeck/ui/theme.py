@@ -55,19 +55,26 @@ QSS_FILE = Path(__file__).parent / "theme.qss"
 # para segurar texto branco por cima e ainda passar em 4.5:1 sobre a pastilha
 # suave. Os dois foram calibrados por `contrast_ratio()`, não por olhômetro —
 # `tests/test_theme.py` falha se algum par cair abaixo do mínimo.
+#
+# Fatia 73 (Fase 7, revisão visual): o AZUL virou LARANJA — pedido do Rafael
+# depois de mandar referências (dashboards SaaS, cards com sombra suave) e
+# perguntar se dava pra deixar o app "mais estiloso". Mesma calibração por
+# `contrast_ratio()`, não só trocado o hex — ver `tests/test_theme.py` pros
+# mínimos que continuam valendo (4.5:1 sobre `surface`, sobre `on_accent`, e
+# entre `accent`/`accent_soft`).
 
 BG = "#F6F6F9"          # fundo da janela: cinza muito claro
 SURFACE = "#FFFFFF"     # painel/card/lateral: branco flutuando sobre o fundo
 BG_TINT = "#EDEDF1"     # variação do fundo (trilho de barra de rolagem, cabeçalho)
 FIELD = "#F2F2F6"       # campo de entrada: afunda em vez de sumir no branco
 
-ACCENT = "#2A63CF"
-ACCENT_HOVER = "#3672E0"
-ACCENT_PRESS = "#1F4FAB"
+ACCENT = "#B8460D"
+ACCENT_HOVER = "#C9520F"
+ACCENT_PRESS = "#9A3A0A"
 ON_ACCENT = "#FFFFFF"
 # Pastilha suave do estado ativo (categoria marcada, item da lateral
-# selecionado): fundo azul lavado com o próprio ACCENT escrito por cima.
-ACCENT_SOFT = "#EDF3FF"
+# selecionado): fundo laranja lavado com o próprio ACCENT escrito por cima.
+ACCENT_SOFT = "#FDECDD"
 
 TITLE = "#101116"       # títulos: mais escuros que o corpo, é o que dá hierarquia
 TEXT = "#1F2024"
@@ -89,6 +96,37 @@ FOCUS = ACCENT                   # foco agora é o destaque, não um cinza
 # `ACCENT_SOFT`, usado onde não há imagem embaixo (lateral, filtros).
 SELECTION = (0, 0, 0, 0.065)
 HOVER = (0, 0, 0, 0.035)
+
+# Fundo do card da grade em hover/clique (Fatia 74).
+#
+# ISTO ERA UMA SOMBRA e não é mais. A Fatia 74 tentou primeiro sombra
+# pintada à mão (elevação estilo dashboard, como nas referências que o
+# Rafael mandou), e ela falhou por DOIS motivos concretos, os dois vistos
+# por ele na tela real ("quando passo o mouse por cima ela escurece tudo...
+# parece cortar abruptamente por conta do limite de seu grid"):
+#
+#  1. O `QListView` RECORTA a pintura do delegate no retângulo da célula.
+#     Uma sombra suave precisa vazar ~10-20px pra fora do card; aqui só há
+#     `CARD_MARGIN` (3px) de folga antes da borda da célula. O resto era
+#     cortado em linha reta — daí o "corte abrupto".
+#  2. As camadas da sombra eram retângulos PREENCHIDOS crescendo pra fora;
+#     como o card não pinta fundo opaco por cima, elas escureciam também o
+#     MIOLO do card (a área de respiro em volta da miniatura). Daí o
+#     "escurece tudo".
+#
+# Aumentar `CARD_MARGIN` até caber uma sombra de verdade engordaria TODA
+# célula da grade — menos assets por tela, num app cuja biblioteca real tem
+# 72 mil. Não compensa. Então a elevação passou a ser dada por um FUNDO
+# sólido que aparece só sob o cursor (mais um degrau de 2px pra cima),
+# inteiramente DENTRO do card: nada pra recortar, nada pra escurecer.
+#
+# Os tons são um degrau a partir de `surface` (o painel onde a grade mora):
+# no claro escurecem de leve, no escuro clareiam — em ambos o card lê como
+# "levantado" em relação ao painel. Neutros de propósito, nunca a cor de
+# destaque: o mesmo motivo já registrado em SELECTION logo acima — cor
+# atrás de uma miniatura suja a leitura da imagem.
+CARD_HOVER = "#EFEFF4"
+CARD_PRESS = "#E4E4EB"
 
 # Fundo do card quando o asset não tem miniatura. Segue NEUTRO de propósito,
 # mesmo agora que existe cor de destaque: é uma pastilha que aparece dezenas de
@@ -124,11 +162,11 @@ BG_TINT_DARK = "#232429"
 # é o branco — por isso `field` é token próprio e não um apelido de `bg`.
 FIELD_DARK = "#131417"
 
-ACCENT_DARK = "#4D8DFF"
-ACCENT_HOVER_DARK = "#6BA0FF"
-ACCENT_PRESS_DARK = "#3B7AE8"
-ON_ACCENT_DARK = "#07111F"
-ACCENT_SOFT_DARK = "#13233F"
+ACCENT_DARK = "#FF8A4C"
+ACCENT_HOVER_DARK = "#FF9C68"
+ACCENT_PRESS_DARK = "#E67638"
+ON_ACCENT_DARK = "#241000"
+ACCENT_SOFT_DARK = "#3A2417"
 
 TITLE_DARK = "#FFFFFF"
 TEXT_DARK = "#DEDEE3"
@@ -147,6 +185,14 @@ FOCUS_DARK = ACCENT_DARK
 SELECTION_DARK = (255, 255, 255, 0.09)
 HOVER_DARK = (255, 255, 255, 0.06)
 
+# Fundo do card em hover/clique no escuro (Fatia 74) — ver `CARD_HOVER`
+# acima pro porquê de isto não ser uma sombra. Aqui os tons CLAREIAM a
+# partir de `SURFACE_DARK` (#1A1B1F): no escuro, "levantado" é mais claro,
+# não mais escuro — sombra preta sobre fundo quase preto não rende nada
+# (mesmo problema já registrado em `apply_card_shadow()`).
+CARD_HOVER_DARK = "#24252B"
+CARD_PRESS_DARK = "#2C2D34"
+
 # Mesma decisão do modo claro: pastilha neutra, não azul (ver TYPE_TINT). Aqui
 # ela é ESCURA com texto claro por cima — no escuro, a pastilha cinza-clara que
 # havia antes acendia a grade inteira onde faltava miniatura.
@@ -164,6 +210,7 @@ _PALETA_CLARA = {
     "warning": WARNING, "danger": DANGER, "ok": OK,
     "popover": POPOVER, "border": BORDER, "border_strong": BORDER_STRONG, "focus": FOCUS,
     "selection": SELECTION, "hover": HOVER,
+    "card_hover": CARD_HOVER, "card_press": CARD_PRESS,
     "type_tint": TYPE_TINT, "on_type_tint": ON_TYPE_TINT,
 }
 _PALETA_ESCURA = {
@@ -176,6 +223,7 @@ _PALETA_ESCURA = {
     "popover": POPOVER_DARK, "border": BORDER_DARK, "border_strong": BORDER_STRONG_DARK,
     "focus": FOCUS_DARK,
     "selection": SELECTION_DARK, "hover": HOVER_DARK,
+    "card_hover": CARD_HOVER_DARK, "card_press": CARD_PRESS_DARK,
     "type_tint": TYPE_TINT_DARK, "on_type_tint": ON_TYPE_TINT_DARK,
 }
 
@@ -191,7 +239,10 @@ def _paleta(mode: str) -> dict:
 SEPARATION = {"sutil": 0.05, "media": 0.075, "forte": 0.11}
 RADII = {  # (painel, card, controle)
     "discreto": (10, 8, 6),
-    "marcante": (16, 12, 9),
+    # "marcante" cresceu na Fatia 73 (16,12,9 → 20,16,10) — parte do mesmo
+    # pedido do laranja: cantos maiores é um dos ingredientes do visual
+    # "mais estiloso" que as referências do Rafael mostravam.
+    "marcante": (20, 16, 10),
 }
 FONTS = {
     "inter": "Inter",
