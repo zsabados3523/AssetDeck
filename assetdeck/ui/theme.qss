@@ -296,6 +296,20 @@ QPushButton#primary:pressed {
     border: 1px solid $accent_press;
 }
 
+/* Desabilitado PRECISA estar aqui, repetindo o que `QPushButton:disabled` já
+ * diz (Fatia 74). Não é redundância: `QPushButton#primary` é seletor de ID e
+ * ganha de `QPushButton:disabled` (pseudo-classe) na especificidade, então o
+ * botão principal continuava pintado de destaque mesmo desligado. Dava pra
+ * ver no painel de detalhes sem asset nenhum selecionado: "Abrir pasta"
+ * aparecia corretamente apagado ao lado de um "Abrir com app padrão" que
+ * parecia clicável. Achado na revisão visual da Fase 7 — o bug é antigo, só
+ * ficou gritante quando o destaque virou laranja. */
+QPushButton#primary:disabled {
+    background-color: $surface;
+    border: 1px solid $border;
+    color: $text_disabled;
+}
+
 /* Botão sem moldura, para ações discretas (estrelas, ícones do painel). */
 QPushButton#ghost, QToolButton#ghost {
     background: transparent;

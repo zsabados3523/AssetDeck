@@ -39,37 +39,55 @@ _BADGE_BG = QColor(0, 0, 0, 140)   # fundo dos selos sobre a miniatura
 
 # Espessura do contorno de SELEÇÃO (Fatia 47) — o único estado que ainda usa
 # contorno. Repouso e hover pararam de ter contorno na Fatia 74: quem separa
-# o card do fundo é a SOMBRA (`_paint_shadow`), que cresce no hover em vez de
-# uma borda mudar de cor — pedido do Rafael numa revisão visual, olhando
-# referências de dashboards com elevação de verdade.
+# o card do fundo em hover é o FUNDO próprio do card (`theme.CARD_HOVER`),
+# que aparece só sob o cursor, crescendo de leve.
 _BORDA_SELECAO = 2.0
 
-# Camadas da sombra pintada à mão (Fatia 74) — o Qt não tem blur barato o
-# bastante pra desenhar em cada card, centenas de vezes por frame
-# (`QGraphicsDropShadowEffect` mede ~2,3x mais caro por repaint, por isso só
-# entra em painel estático — ver `theme.apply_card_shadow`). Em vez disso:
-# N retângulos arredondados cada vez maiores e mais fracos, deslocados pra
-# baixo — aproxima um blur sem ser um.
-_CAMADAS_SOMBRA = 4
+# O quanto a pastilha de fundo CRESCE em hover, em px por lado (Fatia 74).
+#
+# Isto era uma ELEVAÇÃO (o card inteiro subia 2px) e virou crescimento por um
+# motivo concreto, relatado pelo Rafael: "a animação parece meio travada".
+# Subir o card exigia deslocar `card_rect`, que é um `QRect` INTEIRO — 2px de
+# curso davam só 3 posições possíveis (0, -1, -2), ou seja, a animação toda
+# acontecia em 3 saltos visíveis, e a miniatura era redesenhada em Y diferente
+# a cada salto. Crescer a pastilha usa `QRectF` (float) com antialiasing: o
+# movimento é subpixel e contínuo, e a miniatura fica parada — nada "pula".
+_CRESCIMENTO_HOVER = 2.0
 
 # Duração da transição de hover, em ms (ajuste da Fatia 74: "a animação
 # poderia ser um pouco mais suave" — antes o card saltava direto de repouso
 # pra hover num frame só). ~60fps por `_hover_timer.setInterval`.
-_HOVER_ANIM_MS = 150
+_HOVER_ANIM_MS = 180
 
 
-def _lerp_shadow(
-    repouso: tuple[int, int, int, float], hover: tuple[int, int, int, float], t: float,
-) -> tuple[int, int, int, float]:
-    """Interpola dois tokens de sombra (RGBA) por `t` (0..1) — usado pra
-    animar a sombra de repouso até hover em vez de trocar de uma pra outra
-    de uma vez (Fatia 74). R/G/B ficam inteiros (`QColor` do PySide6 não
-    aceita float aí) — só o alfa (opacidade) precisa ser contínuo."""
-    r0, g0, b0, a0 = repouso
-    r1, g1, b1, a1 = hover
-    return (
-        round(r0 + (r1 - r0) * t), round(g0 + (g1 - g0) * t), round(b0 + (b1 - b0) * t),
-        a0 + (a1 - a0) * t,
+def _suavizar(t: float) -> float:
+    """Curva de aceleração "ease-out" cúbica (Fatia 74, 2º ajuste).
+
+    A 1ª versão da animação era LINEAR: começava e parava de repente, na
+    mesma velocidade do início ao fim — é isso que o olho lê como
+    "travado"/mecânico, mesmo quando nenhum quadro foi perdido. Ease-out
+    arranca rápido e desacelera no fim, que é como as coisas se movem no
+    mundo real (e o padrão de qualquer UI moderna).
+
+    O progresso GUARDADO continua linear; a curva é aplicada só na hora de
+    pintar — aplicá-la a cada passo comporia a curva sobre ela mesma.
+    """
+    t = max(0.0, min(1.0, t))
+    return 1.0 - (1.0 - t) ** 3
+
+
+def _lerp_color(c0: QColor, c1: QColor, t: float) -> QColor:
+    """Interpola duas cores por `t` (0..1) — é o que faz o fundo do card
+    NASCER aos poucos a partir da cor do painel, em vez de aparecer pronto
+    num frame só (Fatia 74)."""
+    if t <= 0.0:
+        return c0
+    if t >= 1.0:
+        return c1
+    return QColor(
+        round(c0.red() + (c1.red() - c0.red()) * t),
+        round(c0.green() + (c1.green() - c0.green()) * t),
+        round(c0.blue() + (c1.blue() - c0.blue()) * t),
     )
 
 
@@ -135,11 +153,20 @@ class AssetCardDelegate(QStyledItemDelegate):
         self._pen_selected_border = QColor(pal["accent"])
         self._type_tint_color = QColor(pal["type_tint"])
 
-        # Sombra do card (Fatia 74) — três níveis, ver `theme.SHADOW_REST` e
-        # vizinhos pro porquê de nunca usar a cor de destaque aqui.
-        self._shadow_rest = pal["shadow_rest"]
-        self._shadow_hover = pal["shadow_hover"]
-        self._shadow_press = pal["shadow_press"]
+        # Fundo do card por estado (Fatia 74) — ver `theme.CARD_HOVER` pro
+        # porquê disto ter substituído a sombra pintada à mão. `_brush_base`
+        # é a cor do PAINEL: pintar ela é o mesmo que não pintar nada, e é o
+        # ponto de partida da animação (o fundo de hover nasce dela).
+        self._brush_base = QColor(base)
+        self._brush_card_hover = QColor(pal["card_hover"])
+        self._brush_card_press = QColor(pal["card_press"])
+        # Mesmos três, já com o véu de seleção composto por cima — assim um
+        # card selecionado também responde ao mouse, sem precisar compor cor
+        # (operação de string) dentro do `paint()`.
+        self._brush_selected_hover = QColor(
+            theme.blend(pal["selection"], pal["card_hover"]))
+        self._brush_selected_press = QColor(
+            theme.blend(pal["selection"], pal["card_press"]))
 
         # O raio acompanha a variante ATIVA. Era constante de módulo, avaliada
         # no import a partir de `theme.DEFAULT` — trocar de variante ao vivo
@@ -183,6 +210,16 @@ class AssetCardDelegate(QStyledItemDelegate):
             self._hover_clock.start()
             self._hover_timer.start()
 
+    def clear_hover(self) -> None:
+        """Zera a animação de hover (Fatia 74). O progresso é indexado por
+        LINHA, e linha não é identidade estável: depois de trocar um filtro
+        ou recarregar a grade, a linha 7 é outro asset. Sem zerar, um card
+        que nunca viu o mouse aparecia aceso. `AssetGridView` chama isto
+        quando o modelo é resetado."""
+        self._hover_progress.clear()
+        self._hover_target.clear()
+        self._hover_timer.stop()
+
     def _tick_hover(self) -> None:
         """Um passo da animação de hover — avança cada linha em direção ao
         seu alvo proporcionalmente ao tempo real decorrido (não a um número
@@ -190,7 +227,8 @@ class AssetCardDelegate(QStyledItemDelegate):
         decorrido_ms = self._hover_clock.restart()
         passo = decorrido_ms / _HOVER_ANIM_MS if _HOVER_ANIM_MS else 1.0
         ainda_anima = False
-        for row in list(self._hover_target):
+        tocadas = list(self._hover_target)
+        for row in tocadas:
             alvo = self._hover_target[row]
             atual = self._hover_progress.get(row, 0.0)
             if atual < alvo:
@@ -210,9 +248,23 @@ class AssetCardDelegate(QStyledItemDelegate):
         if not ainda_anima:
             self._hover_timer.stop()
 
+        # Repinta SÓ as células que estão animando, não o viewport inteiro
+        # (Fatia 74, 2º ajuste). `viewport().update()` a cada 16ms mandava o
+        # Qt redesenhar todos os cards visíveis — cada um com sua miniatura —
+        # 60 vezes por segundo, por causa de uma pastilha que mudou de tom em
+        # UMA célula. Era a outra metade do "travado": não é que a curva
+        # estivesse errada, é que alguns quadros não davam conta.
         view = self.parent()
-        if view is not None:
-            view.viewport().update()
+        model = view.model() if view is not None else None
+        if view is None or model is None:
+            return
+        for row in tocadas:
+            if 0 <= row < model.rowCount():
+                # A pastilha cresce pra fora do retângulo do item; a margem
+                # extra garante que a borda antiga também seja apagada.
+                view.viewport().update(
+                    view.visualRect(model.index(row)).adjusted(-4, -4, 4, 4)
+                )
 
     # ---- Qt ----
 
@@ -230,13 +282,12 @@ class AssetCardDelegate(QStyledItemDelegate):
         hover = bool(option.state & QStyle.StateFlag.State_MouseOver)
         pressed = self._pressed_index is not None and self._pressed_index == index
 
-        # Elevação (Fatia 74, revisão visual pedida pelo Rafael): repouso
-        # PLANO de verdade (sem sombra nenhuma — ajuste depois do feedback
-        # "os cards parecem estar com uma sombra permanente"), hover
-        # "levanta" (sombra nasce e cresce, o card sobe um pouco), clique
-        # "afunda" (sombra menor, sem subir). Nunca borda dura — antes disso
-        # era o contrário (borda em repouso, véu em hover, ver histórico da
-        # Fatia 47/50 abaixo neste arquivo).
+        # Estado do card (Fatia 74, revisão visual pedida pelo Rafael):
+        # repouso PLANO de verdade (não pinta fundo nenhum), hover mostra a
+        # pastilha de fundo crescendo de leve, clique "afunda" (tom mais
+        # fundo, pastilha no tamanho normal). Tudo DENTRO do retângulo do
+        # card — ver `theme.CARD_HOVER` pro porquê da sombra pintada à mão
+        # ter sido removida (era recortada pela célula e escurecia o card).
         #
         # O quanto hover está "ligado" vem do progresso ANIMADO
         # (`_hover_progress`, 0..1), não de um salto binário — é isto que dá
@@ -248,25 +299,28 @@ class AssetCardDelegate(QStyledItemDelegate):
         progresso_hover = self._hover_progress.get(index.row())
         if progresso_hover is None:
             progresso_hover = 1.0 if hover else 0.0
+        # O valor guardado é linear; a curva entra só aqui (ver `_suavizar`).
+        suave = _suavizar(progresso_hover)
 
         if pressed:
-            sombra, elevacao = self._shadow_press, 0
+            fundo = self._brush_selected_press if selected else self._brush_card_press
+        elif selected:
+            fundo = _lerp_color(self._brush_selected, self._brush_selected_hover, suave)
         else:
-            sombra = _lerp_shadow(self._shadow_rest, self._shadow_hover, progresso_hover)
-            # `QRect.translated` só aceita int — a sombra em si (abaixo) já
-            # interpola de forma contínua, e 2px de curso arredondados em
-            # ~60fps continuam lendo como movimento suave, não um salto.
-            elevacao = round(-2 * progresso_hover)
-        card_rect = card_rect.translated(0, elevacao)
+            fundo = _lerp_color(self._brush_base, self._brush_card_hover, suave)
 
-        self._paint_shadow(painter, card_rect, sombra)
-
-        # Véu de seleção — continua marcando "isto está selecionado" por
-        # cima da sombra (que sozinha não distingue seleção de hover).
-        if selected:
+        # Em repouso e sem seleção o fundo é IGUAL ao do painel — pintar
+        # seria desenhar o invisível em cada célula, a cada frame.
+        if selected or pressed or progresso_hover > 0.0:
+            # `QRectF` (float) de propósito: o crescimento é subpixel e sai
+            # antialiasado, então a pastilha "respira" de forma contínua. Com
+            # `QRect` inteiro seriam 3 saltos visíveis — era exatamente o que
+            # deixava a animação "travada".
+            cresce = 0.0 if pressed else _CRESCIMENTO_HOVER * suave
+            alvo = QRectF(card_rect).adjusted(-cresce, -cresce, cresce, cresce)
             painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(self._brush_selected)
-            painter.drawRoundedRect(QRectF(card_rect), self._radius, self._radius)
+            painter.setBrush(fundo)
+            painter.drawRoundedRect(alvo, self._radius + cresce, self._radius + cresce)
 
         # Miniatura sempre QUADRADA (pedido do Rafael: "sem achatar nada") —
         # o lado vem da LARGURA do card, que é o que cell_for_icon() garante
@@ -284,25 +338,6 @@ class AssetCardDelegate(QStyledItemDelegate):
         painter.restore()
 
     # ---- miolo ----
-
-    def _paint_shadow(self, painter: QPainter, rect, rgba: tuple[int, int, int, float]) -> None:
-        """Sombra suave atrás do card (Fatia 74) — `_CAMADAS_SOMBRA`
-        retângulos arredondados, cada um maior e mais fraco que o de
-        dentro, deslocados pra baixo. Aproxima um blur sem ter blur de
-        verdade (ver comentário de `_CAMADAS_SOMBRA` no topo do arquivo
-        pro porquê de não usar `QGraphicsDropShadowEffect` aqui)."""
-        painter.save()
-        painter.setPen(Qt.PenStyle.NoPen)
-        for i in range(_CAMADAS_SOMBRA, 0, -1):
-            r, g, b, a = rgba
-            cor = QColor(r, g, b)
-            cor.setAlphaF(max(0.0, min(1.0, a * (i / _CAMADAS_SOMBRA) * 0.6)))
-            cresce = i * 1.6
-            desce = 1.5 + i * 1.3
-            alvo = QRectF(rect).adjusted(-cresce, desce - cresce, cresce, desce + cresce)
-            painter.setBrush(cor)
-            painter.drawRoundedRect(alvo, self._radius + cresce, self._radius + cresce)
-        painter.restore()
 
     def _paint_thumb(self, painter: QPainter, index, rect: QRect, *,
                      selected: bool = False) -> None:

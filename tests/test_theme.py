@@ -560,3 +560,41 @@ def test_vitrine_abre_com_as_amostras(tema_isolado):
     tema_isolado.processEvents()
     assert janela.variant.separation == "forte"
     janela.close()
+
+
+# ------------------------------------------------- botão principal apagado --
+
+@pytest.mark.parametrize("modo", ["claro", "escuro"])
+def test_botao_principal_desabilitado_nao_fica_com_a_cor_de_destaque(qapp, modo):
+    """Regressão da Fatia 74 (achada na revisão visual da Fase 7).
+
+    `QPushButton#primary` é seletor de ID e ganha de `QPushButton:disabled`
+    (pseudo-classe) na especificidade do QSS. Sem uma regra `#primary:disabled`
+    própria, o botão principal continuava pintado com a cor de destaque mesmo
+    desligado — no painel de detalhes, sem asset selecionado, "Abrir com app
+    padrão" parecia clicável ao lado de um "Abrir pasta" corretamente apagado.
+
+    O teste PINTA o botão de verdade e lê o pixel do miolo, em vez de procurar
+    o seletor no texto do QSS: o que importa é a cor que chega na tela, não a
+    regra existir.
+    """
+    from PySide6.QtWidgets import QPushButton
+
+    variante = theme.Variant(mode=modo)
+    destaque = theme._paleta(modo)["accent"].upper()
+
+    botao = QPushButton("Abrir com app padrão")
+    botao.setObjectName("primary")
+    botao.setStyleSheet(theme.build_qss(variante))
+    botao.resize(220, 40)
+    botao.setEnabled(False)
+    botao.show()
+    qapp.processEvents()
+
+    meio = _pixel(botao.grab().toImage(), 110, 20)
+    botao.close()
+
+    assert meio != destaque, (
+        f"o botão principal DESABILITADO ainda está pintado com o destaque "
+        f"({destaque}) no modo {modo}"
+    )

@@ -528,6 +528,21 @@ class AssetGridView(QListView):
                 delegate.set_hover(self._hover_index, QModelIndex())
             self._hover_index = QModelIndex()
 
+    def setModel(self, model) -> None:  # noqa: N802
+        """Zera o hover a cada reset do modelo (Fatia 74). O progresso da
+        animação é indexado por LINHA, e trocar de filtro/pasta faz a linha 7
+        virar outro asset — sem isto, um card que nunca viu o mouse podia
+        aparecer aceso depois de uma recarga."""
+        super().setModel(model)
+        if model is not None:
+            model.modelReset.connect(self._reset_hover)
+
+    def _reset_hover(self) -> None:
+        self._hover_index = QModelIndex()
+        delegate = self.itemDelegate()
+        if hasattr(delegate, "clear_hover"):
+            delegate.clear_hover()
+
     # ---- arrasto para fora (Tag, Collection, Blender, gerenciador de arquivos) ----
 
     def startDrag(self, supportedActions) -> None:  # noqa: N802

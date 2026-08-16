@@ -315,3 +315,49 @@ def test_pixmap_nunca_ultrapassa_o_tamanho_pedido(grid, px):
         if pix is not None and not pix.isNull():
             assert pix.width() <= px
             assert pix.height() <= px
+
+
+# ------------------------------------------- animação de hover (Fatia 74) --
+
+def test_a_curva_de_animacao_desacelera_no_fim():
+    """A 1ª animação era LINEAR e o Rafael leu como "meio travada".
+
+    Linear percorre a mesma distância a cada quadro: arranca e para de
+    repente. `_suavizar` é ease-out — anda mais na primeira metade e vai
+    freando —, que é o que o olho aceita como movimento natural.
+    """
+    from assetdeck.ui.asset_card_delegate import _suavizar
+
+    assert _suavizar(0.0) == 0.0
+    assert _suavizar(1.0) == 1.0
+    # Ease-out está SEMPRE à frente da linear no meio do caminho.
+    for t in (0.1, 0.25, 0.5, 0.75, 0.9):
+        assert _suavizar(t) > t, f"em t={t} a curva não está adiantada (ease-out)"
+
+    # E o avanço por fatia de tempo tem de DIMINUIR do começo para o fim.
+    primeiro = _suavizar(0.25) - _suavizar(0.0)
+    ultimo = _suavizar(1.0) - _suavizar(0.75)
+    assert primeiro > ultimo, "a curva não está freando no fim"
+
+    # Fora da faixa não pode extrapolar (o relógio pode passar do alvo).
+    assert _suavizar(-0.5) == 0.0
+    assert _suavizar(1.7) == 1.0
+
+
+def test_o_hover_zera_quando_a_grade_recarrega(grid, qapp):
+    """O progresso do hover é indexado por LINHA, e linha não é identidade
+    estável: depois de trocar de pasta/filtro, a linha 3 é outro asset. Sem
+    zerar no reset do modelo, um card que nunca viu o mouse aparecia aceso.
+    """
+    view, modelo, _conn = grid
+    delegate = view.itemDelegate()
+
+    delegate.set_hover(None, modelo.index(0))
+    assert delegate._hover_target, "o hover deveria ter começado a animar"
+
+    modelo.reload()  # emite modelReset
+    qapp.processEvents()
+
+    assert not delegate._hover_progress, "sobrou progresso de hover após a recarga"
+    assert not delegate._hover_target, "sobrou alvo de hover após a recarga"
+    assert not delegate._hover_timer.isActive(), "o timer continuou rodando à toa"
