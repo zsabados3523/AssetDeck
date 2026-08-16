@@ -478,6 +478,29 @@ class AssetGridView(QListView):
         # relayouta no próximo scroll/resize.
         self.doItemsLayout()
 
+    # ---- feedback de clique no card (Fatia 74) ----
+
+    def mousePressEvent(self, event) -> None:  # noqa: N802
+        """Guarda qual card está com o botão pressionado, pro delegate
+        pintar o "afundar" (sombra menor, ver `asset_card_delegate.py`).
+        Não dá pra confiar em `QStyle.State_Sunken` vir preenchido sozinho
+        num `QListView` customizado — daí rastrear à mão, mesmo raciocínio
+        do hover (`setMouseTracking`, já ligado no `__init__`)."""
+        super().mousePressEvent(event)
+        if event.button() == Qt.MouseButton.LeftButton:
+            idx = self.indexAt(event.position().toPoint())
+            delegate = self.itemDelegate()
+            if hasattr(delegate, "set_pressed"):
+                delegate.set_pressed(idx)
+            self.viewport().update()
+
+    def mouseReleaseEvent(self, event) -> None:  # noqa: N802
+        super().mouseReleaseEvent(event)
+        delegate = self.itemDelegate()
+        if hasattr(delegate, "set_pressed"):
+            delegate.set_pressed(None)
+        self.viewport().update()
+
     # ---- arrasto para fora (Tag, Collection, Blender, gerenciador de arquivos) ----
 
     def startDrag(self, supportedActions) -> None:  # noqa: N802
@@ -497,6 +520,14 @@ class AssetGridView(QListView):
         soltar um asset no Blender aberto por cima da grade, ou apertar Esc
         no meio do arrasto, aplicava um preview que ninguém pediu.
         """
+        # O drag pega o lugar do mouseReleaseEvent normal (o Qt consome o
+        # solto do botão como parte do gesto) — sem isto, o card ficava
+        # "afundado" (Fatia 74) depois de um arrasto completo, porque
+        # ninguém nunca chamou set_pressed(None).
+        delegate = self.itemDelegate()
+        if hasattr(delegate, "set_pressed"):
+            delegate.set_pressed(None)
+
         indexes = self.selectedIndexes()
         log.info("startDrag: %d item(ns) selecionado(s)", len(indexes))
         if not indexes:

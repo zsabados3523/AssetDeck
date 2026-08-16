@@ -37,13 +37,20 @@ from assetdeck.ui.asset_grid import (
 _BADGE = 20              # lado do selo (estrela / oculto)
 _BADGE_BG = QColor(0, 0, 0, 140)   # fundo dos selos sobre a miniatura
 
-# Espessura do contorno em cada estado (Fatia 47). O card em repouso quase não
-# tem contorno — quem separa um card do outro é o espaçamento. O contorno é
-# reservado para RESPONDER ao mouse: é ele que engorda no hover e vira destaque
-# na seleção.
-_BORDA_REPOUSO = 1.0
-_BORDA_HOVER = 1.0
+# Espessura do contorno de SELEÇÃO (Fatia 47) — o único estado que ainda usa
+# contorno. Repouso e hover pararam de ter contorno na Fatia 74: quem separa
+# o card do fundo é a SOMBRA (`_paint_shadow`), que cresce no hover em vez de
+# uma borda mudar de cor — pedido do Rafael numa revisão visual, olhando
+# referências de dashboards com elevação de verdade.
 _BORDA_SELECAO = 2.0
+
+# Camadas da sombra pintada à mão (Fatia 74) — o Qt não tem blur barato o
+# bastante pra desenhar em cada card, centenas de vezes por frame
+# (`QGraphicsDropShadowEffect` mede ~2,3x mais caro por repaint, por isso só
+# entra em painel estático — ver `theme.apply_card_shadow`). Em vez disso:
+# N retângulos arredondados cada vez maiores e mais fracos, deslocados pra
+# baixo — aproxima um blur sem ser um.
+_CAMADAS_SOMBRA = 4
 
 
 class AssetCardDelegate(QStyledItemDelegate):
@@ -65,14 +72,11 @@ class AssetCardDelegate(QStyledItemDelegate):
         self._icon_tags = icons.pixmap("nav-tags", "#FFFFFF", 12)
 
         self._cell = CELL  # tamanho devolvido por sizeHint(); ver set_icon_size
+        # Índice sob o botão do mouse pressionado (Fatia 74) — estado de
+        # INTERAÇÃO, não de tema, por isso mora aqui e não em `refresh_theme`.
+        # `AssetGridView` chama `set_pressed()` no mousePress/Release.
+        self._pressed_index = None
         self.refresh_theme()
-
-    @staticmethod
-    def _qcolor(rgba: tuple[int, int, int, float]) -> QColor:
-        r, g, b, a = rgba
-        c = QColor(r, g, b)
-        c.setAlphaF(a)
-        return c
 
     def refresh_theme(self) -> None:
         """Recalcula as cores em cache a partir de `theme.current_colors()`
@@ -93,16 +97,15 @@ class AssetCardDelegate(QStyledItemDelegate):
         # compostos, e compor sobre `bg` daria uma pastilha de tom errado.
         base = pal["surface"]
         self._pen_name = QPen(QColor(pal["text"]))
-        self._brush_hover = QColor(theme.blend(pal["hover"], base))
         self._brush_selected = QColor(theme.blend(pal["selection"], base))
-        self._pen_border = self._qcolor(pal["border"])
-        # No hover o contorno passa a ser visível de verdade (era o mesmo
-        # `border` quase transparente): num tema escuro, um véu de 6% de
-        # branco no fundo praticamente não se vê, e o card não respondia ao
-        # mouse. O contorno é o sinal barato e legível nos dois modos.
-        self._pen_hover_border = QColor(pal["text_disabled"])
         self._pen_selected_border = QColor(pal["accent"])
         self._type_tint_color = QColor(pal["type_tint"])
+
+        # Sombra do card (Fatia 74) — três níveis, ver `theme.SHADOW_REST` e
+        # vizinhos pro porquê de nunca usar a cor de destaque aqui.
+        self._shadow_rest = pal["shadow_rest"]
+        self._shadow_hover = pal["shadow_hover"]
+        self._shadow_press = pal["shadow_press"]
 
         # O raio acompanha a variante ATIVA. Era constante de módulo, avaliada
         # no import a partir de `theme.DEFAULT` — trocar de variante ao vivo
@@ -113,6 +116,13 @@ class AssetCardDelegate(QStyledItemDelegate):
         """Chamado pela AssetGridView quando o slider de tamanho muda."""
         px = max(MIN_ICON, min(MAX_ICON, px))
         self._cell = cell_for_icon(px)
+
+    def set_pressed(self, index) -> None:
+        """`AssetGridView` chama no mousePress/Release (Fatia 74) — não dá
+        pra confiar em `QStyle.State_Sunken` vir preenchido sozinho pra um
+        `QListView` customizado, então o estado de "botão pressionado" é
+        rastreado à mão, igual ao hover já era antes (`setMouseTracking`)."""
+        self._pressed_index = index if (index is not None and index.isValid()) else None
 
     # ---- Qt ----
 
@@ -128,18 +138,29 @@ class AssetCardDelegate(QStyledItemDelegate):
         )
         selected = bool(option.state & QStyle.StateFlag.State_Selected)
         hover = bool(option.state & QStyle.StateFlag.State_MouseOver)
+        pressed = self._pressed_index is not None and self._pressed_index == index
 
-        # Card SEM moldura (Fatia 50). Em repouso não há fundo nem contorno:
-        # quem separa um card do outro é o espaçamento, e a imagem manda —
-        # era o que o mockup escolhido pelo Rafael fazia, e o retângulo com
-        # fundo e borda em volta de cada miniatura competia com ela.
-        #
-        # Os estados migraram para a BORDA DA MINIATURA (ver `_paint_thumb`).
-        # Aqui sobra só um véu de fundo em hover/seleção, que sozinho não
-        # bastaria mas ajuda a mancha do card a acompanhar o cursor.
-        if selected or hover:
+        # Elevação (Fatia 74, revisão visual pedida pelo Rafael): repouso
+        # quase plano, hover "levanta" (sombra maior + o card sobe um
+        # pouco), clique "afunda" (sombra menor, sem subir). Sombra sempre
+        # presente — nunca borda dura — é o que separa um card do outro
+        # agora; antes disso era o contrário (borda em repouso, véu em
+        # hover, ver histórico da Fatia 47/50 abaixo neste arquivo).
+        if pressed:
+            sombra, elevacao = self._shadow_press, 0
+        elif hover:
+            sombra, elevacao = self._shadow_hover, -2
+        else:
+            sombra, elevacao = self._shadow_rest, 0
+        card_rect = card_rect.translated(0, elevacao)
+
+        self._paint_shadow(painter, card_rect, sombra)
+
+        # Véu de seleção — continua marcando "isto está selecionado" por
+        # cima da sombra (que sozinha não distingue seleção de hover).
+        if selected:
             painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(self._brush_selected if selected else self._brush_hover)
+            painter.setBrush(self._brush_selected)
             painter.drawRoundedRect(QRectF(card_rect), self._radius, self._radius)
 
         # Miniatura sempre QUADRADA (pedido do Rafael: "sem achatar nada") —
@@ -147,7 +168,7 @@ class AssetCardDelegate(QStyledItemDelegate):
         # bater exatamente com o tamanho que o modelo escalou a imagem para.
         lado = card_rect.width() - 2 * CARD_PAD
         thumb_rect = QRect(card_rect.x() + CARD_PAD, card_rect.y() + CARD_PAD, lado, lado)
-        self._paint_thumb(painter, index, thumb_rect, selected=selected, hover=hover)
+        self._paint_thumb(painter, index, thumb_rect, selected=selected)
 
         name_rect = QRect(
             card_rect.x() + CARD_PAD, thumb_rect.bottom() + CARD_GAP,
@@ -159,8 +180,27 @@ class AssetCardDelegate(QStyledItemDelegate):
 
     # ---- miolo ----
 
+    def _paint_shadow(self, painter: QPainter, rect, rgba: tuple[int, int, int, float]) -> None:
+        """Sombra suave atrás do card (Fatia 74) — `_CAMADAS_SOMBRA`
+        retângulos arredondados, cada um maior e mais fraco que o de
+        dentro, deslocados pra baixo. Aproxima um blur sem ter blur de
+        verdade (ver comentário de `_CAMADAS_SOMBRA` no topo do arquivo
+        pro porquê de não usar `QGraphicsDropShadowEffect` aqui)."""
+        painter.save()
+        painter.setPen(Qt.PenStyle.NoPen)
+        for i in range(_CAMADAS_SOMBRA, 0, -1):
+            r, g, b, a = rgba
+            cor = QColor(r, g, b)
+            cor.setAlphaF(max(0.0, min(1.0, a * (i / _CAMADAS_SOMBRA) * 0.6)))
+            cresce = i * 1.6
+            desce = 1.5 + i * 1.3
+            alvo = QRectF(rect).adjusted(-cresce, desce - cresce, cresce, desce + cresce)
+            painter.setBrush(cor)
+            painter.drawRoundedRect(alvo, self._radius + cresce, self._radius + cresce)
+        painter.restore()
+
     def _paint_thumb(self, painter: QPainter, index, rect: QRect, *,
-                     selected: bool = False, hover: bool = False) -> None:
+                     selected: bool = False) -> None:
         # ORDEM IMPORTA: HAS_THUMB_ROLE só fica correto DEPOIS que
         # DecorationRole rodou nesta mesma pintura (é _pixmap_for, chamado
         # por DecorationRole, quem marca "isto é placeholder ou não" no
@@ -197,22 +237,19 @@ class AssetCardDelegate(QStyledItemDelegate):
             painter.setBrush(self._type_tint_color)
             painter.drawRoundedRect(QRectF(rect), self._radius - 2, self._radius - 2)
 
-        # A borda da MINIATURA é o que carrega os três estados desde a Fatia
-        # 50, quando o card perdeu a moldura. Ela é desenhada por cima da
-        # imagem, então precisa vir DEPOIS do drawPixmap.
+        # A borda da MINIATURA agora só aparece pra SELEÇÃO (Fatia 74) — o
+        # contorno de repouso/hover morreu junto com a borda dura do card
+        # inteiro; hover é a sombra crescendo (`paint()`), não um contorno
+        # mudando de cor. Continua desenhada DEPOIS do drawPixmap, por cima
+        # da imagem.
         if selected:
-            caneta = QPen(self._pen_selected_border, _BORDA_SELECAO)
-        elif hover:
-            caneta = QPen(self._pen_hover_border, _BORDA_HOVER)
-        else:
-            caneta = QPen(self._pen_border, _BORDA_REPOUSO)
-        meia = _BORDA_SELECAO / 2
-        painter.setPen(caneta)
-        painter.setBrush(Qt.BrushStyle.NoBrush)
-        painter.drawRoundedRect(
-            QRectF(rect).adjusted(meia, meia, -meia, -meia),
-            self._radius - 2, self._radius - 2,
-        )
+            meia = _BORDA_SELECAO / 2
+            painter.setPen(QPen(self._pen_selected_border, _BORDA_SELECAO))
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawRoundedRect(
+                QRectF(rect).adjusted(meia, meia, -meia, -meia),
+                self._radius - 2, self._radius - 2,
+            )
 
         if bool(index.data(HIDDEN_ROLE)):
             self._badge(painter, rect.x() + 4, rect.y() + 4, self._icon_hidden)
