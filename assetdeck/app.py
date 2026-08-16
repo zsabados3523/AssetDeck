@@ -222,6 +222,10 @@ def run(argv: list[str]) -> int:
     win = MainWindow(conn=conn, library_root=raiz,
                      db_path=config.db_path(), thumbs_dir=config.thumbs_dir())
     win.show()
+    if not args.screenshot:
+        # Fora do modo --screenshot: evita a janelinha de pré-aquecimento
+        # (mesmo que fora da tela) interferir na captura determinística.
+        win.prewarm_gl_viewers()
     win.start_scan()  # indexação em background a cada abertura (idempotente)
 
     _schedule_screenshot(app, win, args)

@@ -823,3 +823,14 @@ def test_open_preview_nao_roteia_textura_pro_visualizador_de_modelo(janela, monk
     janela._open_preview(janela.model.index(0))
 
     assert chamadas == [1]
+
+
+def test_prewarm_gl_viewers_existe(janela):
+    """Fatia 72 (fix do "piscar"): só confirma que o método existe e é
+    chamável pelo nome certo (`app.py` depende dele) — chamar de verdade
+    trava o interpretador no modo offscreen do pytest (QOpenGLWidget
+    real não roda sem tela; `resizeGL` desreferencia `self._gl`, que só
+    existe depois de um `initializeGL` que nunca chega a rodar aqui —
+    mesma fronteira de `test_hdri_viewer.py`/`test_model_viewer.py`, que
+    também não instanciam os widgets de OpenGL de verdade)."""
+    assert callable(janela.prewarm_gl_viewers)
