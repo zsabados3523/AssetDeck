@@ -197,11 +197,17 @@ class SidebarRail(QWidget):
     """Coluna estreita de ícones à esquerda, um por seção.
 
     Cada botão é marcável e reflete a visibilidade da seção — marcado = seção
-    na tela. Mesma semântica dos toggles do menu Janela, que continuam
-    existindo e ficam sincronizados com estes.
+    na tela. Mesma semântica dos toggles da janela de configurações (Fatia
+    67, era o menu Janela), que continuam existindo e ficam sincronizados
+    com estes.
     """
 
     section_toggled = Signal(str, bool)
+    # Engrenagem no PÉ do rail (Fatia 67, ajuste pós-tela: o Rafael pediu
+    # canto inferior-esquerdo em vez do canto da barra de menus) — abre a
+    # SettingsWindow. Sinal em vez de MainWindow ler o botão direto: o rail
+    # não deveria saber que a MainWindow existe.
+    settings_clicked = Signal()
 
     def __init__(self, secoes: list[tuple[str, str, str]], parent=None) -> None:
         super().__init__(parent)
@@ -227,6 +233,16 @@ class SidebarRail(QWidget):
             self.buttons[chave] = b
             self._icones[chave] = nome_icone
         layout.addStretch(1)
+
+        # O stretch acima empurra este botão pro FIM da coluna — é o que
+        # deixa a engrenagem no canto inferior-esquerdo da janela (o rail
+        # já mora na borda esquerda).
+        self.settings_btn = QToolButton()
+        self.settings_btn.setObjectName("railButton")
+        self.settings_btn.setIconSize(QSize(TAM_ICONE_RAIL, TAM_ICONE_RAIL))
+        self.settings_btn.setToolTip("Configurações")
+        self.settings_btn.clicked.connect(self.settings_clicked.emit)
+        layout.addWidget(self.settings_btn, alignment=Qt.AlignmentFlag.AlignHCenter)
 
         self.refresh_theme()
 
@@ -255,6 +271,10 @@ class SidebarRail(QWidget):
         for chave, b in self.buttons.items():
             cor = pal["text"] if b.isChecked() else pal["text_disabled"]
             b.setIcon(icons.icon(self._icones[chave], cor, TAM_ICONE_RAIL))
+        # A engrenagem não é toggle de visibilidade — fica sempre na cor
+        # apagada (mesma dos ícones "escondidos" acima), nunca destacada.
+        self.settings_btn.setIcon(
+            icons.icon("settings", pal["text_disabled"], TAM_ICONE_RAIL))
 
 
 class Sidebar(QWidget):
