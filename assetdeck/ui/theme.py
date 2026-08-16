@@ -97,17 +97,23 @@ FOCUS = ACCENT                   # foco agora é o destaque, não um cinza
 SELECTION = (0, 0, 0, 0.065)
 HOVER = (0, 0, 0, 0.035)
 
-# Sombra do card da grade (Fatia 73) — substitui a borda reta do repouso por
-# elevação de verdade, pedido do Rafael olhando referências de dashboards
-# modernos. SEMPRE neutra (preto translúcido), nunca a cor de destaque —
-# mesma decisão já tomada em `apply_card_shadow()`: sombra colorida "suja" a
-# leitura da miniatura por baixo. Três níveis (a delegate escolhe qual
-# pintar conforme o estado do card): repouso quase imperceptível, hover
-# cresce (é o "levantar" do card), clique encolhe (o "afundar"). Pintada à
-# mão em `QPainter` (a grade não pode ter `QListView::item` no QSS — mata a
+# Sombra do card da grade (Fatia 73/74) — substitui a borda reta do repouso
+# por elevação de verdade, pedido do Rafael olhando referências de
+# dashboards modernos. SEMPRE neutra (preto translúcido), nunca a cor de
+# destaque — mesma decisão já tomada em `apply_card_shadow()`: sombra
+# colorida "suja" a leitura da miniatura por baixo. Pintada à mão em
+# `QPainter` (a grade não pode ter `QListView::item` no QSS — mata a
 # rolagem, ver `tests/test_theme.py::test_qss_nao_estiliza_item_da_grade`),
 # então não passa pelo `theme.qss` — só por `current_colors()`.
-SHADOW_REST = (0, 0, 0, 0.07)
+#
+# REPOUSO É ZERO DE PROPÓSITO (ajuste da Fatia 74, feedback do Rafael: "os
+# cards parecem estar com uma sombra permanente"). A primeira versão tinha
+# repouso levemente visível o tempo todo — olhando na tela real, isso lia
+# como uma borda cinza fixa em CADA card, não como elevação. Card plano até
+# o mouse chegar, sombra nasce animada no hover (progresso 0→1 em
+# `AssetCardDelegate`, não mais um salto binário) — é a ANIMAÇÃO quem
+# carrega a sensação de profundidade agora, não uma sombra parada.
+SHADOW_REST = (0, 0, 0, 0.0)
 SHADOW_HOVER = (0, 0, 0, 0.16)
 SHADOW_PRESS = (0, 0, 0, 0.10)
 
@@ -168,11 +174,13 @@ FOCUS_DARK = ACCENT_DARK
 SELECTION_DARK = (255, 255, 255, 0.09)
 HOVER_DARK = (255, 255, 255, 0.06)
 
-# Sombra do card no escuro (Fatia 73) — preto sobre fundo já quase preto
+# Sombra do card no escuro (Fatia 73/74) — preto sobre fundo já quase preto
 # rende muito menos que no claro (mesmo problema já registrado em
 # `apply_card_shadow()`), por isso o alfa é bem mais alto aqui: não é
 # "a mesma sombra, cor invertida", é calibrada pra ainda dar pra ver.
-SHADOW_REST_DARK = (0, 0, 0, 0.35)
+# Repouso zerado pelo mesmo motivo do modo claro — ver comentário de
+# `SHADOW_REST` acima.
+SHADOW_REST_DARK = (0, 0, 0, 0.0)
 SHADOW_HOVER_DARK = (0, 0, 0, 0.5)
 SHADOW_PRESS_DARK = (0, 0, 0, 0.4)
 

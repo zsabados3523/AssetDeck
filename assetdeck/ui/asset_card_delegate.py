@@ -13,7 +13,7 @@ canto com a extensão real (`.FBX`, `.EXR`...), estilo Connecter.
 
 from __future__ import annotations
 
-from PySide6.QtCore import QRect, QRectF, QSize, Qt
+from PySide6.QtCore import QElapsedTimer, QRect, QRectF, QSize, Qt, QTimer
 from PySide6.QtGui import QColor, QFont, QFontMetrics, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import QStyle, QStyledItemDelegate
 
@@ -52,6 +52,26 @@ _BORDA_SELECAO = 2.0
 # baixo — aproxima um blur sem ser um.
 _CAMADAS_SOMBRA = 4
 
+# Duração da transição de hover, em ms (ajuste da Fatia 74: "a animação
+# poderia ser um pouco mais suave" — antes o card saltava direto de repouso
+# pra hover num frame só). ~60fps por `_hover_timer.setInterval`.
+_HOVER_ANIM_MS = 150
+
+
+def _lerp_shadow(
+    repouso: tuple[int, int, int, float], hover: tuple[int, int, int, float], t: float,
+) -> tuple[int, int, int, float]:
+    """Interpola dois tokens de sombra (RGBA) por `t` (0..1) — usado pra
+    animar a sombra de repouso até hover em vez de trocar de uma pra outra
+    de uma vez (Fatia 74). R/G/B ficam inteiros (`QColor` do PySide6 não
+    aceita float aí) — só o alfa (opacidade) precisa ser contínuo."""
+    r0, g0, b0, a0 = repouso
+    r1, g1, b1, a1 = hover
+    return (
+        round(r0 + (r1 - r0) * t), round(g0 + (g1 - g0) * t), round(b0 + (b1 - b0) * t),
+        a0 + (a1 - a0) * t,
+    )
+
 
 class AssetCardDelegate(QStyledItemDelegate):
     def __init__(self, parent=None) -> None:
@@ -76,6 +96,20 @@ class AssetCardDelegate(QStyledItemDelegate):
         # INTERAÇÃO, não de tema, por isso mora aqui e não em `refresh_theme`.
         # `AssetGridView` chama `set_pressed()` no mousePress/Release.
         self._pressed_index = None
+
+        # Progresso animado do hover, por LINHA (Fatia 74, ajuste: "a
+        # animação poderia ser um pouco mais suave"). 0 = repouso, 1 = mouse
+        # em cima; `AssetGridView.mouseMoveEvent` chama `set_hover()` quando
+        # o card sob o cursor muda, e um QTimer compartilhado interpola o
+        # valor até o alvo em vez de saltar direto — é isto que `paint()` lê
+        # pra desenhar a sombra crescendo/o card subindo aos poucos.
+        self._hover_progress: dict[int, float] = {}
+        self._hover_target: dict[int, float] = {}
+        self._hover_timer = QTimer(self)
+        self._hover_timer.setInterval(16)  # ~60fps
+        self._hover_timer.timeout.connect(self._tick_hover)
+        self._hover_clock = QElapsedTimer()
+
         self.refresh_theme()
 
     def refresh_theme(self) -> None:
@@ -112,6 +146,16 @@ class AssetCardDelegate(QStyledItemDelegate):
         # (a vitrine faz isso) deixava o card com o raio da variante antiga.
         self._radius = theme.RADII[theme.current_variant().radius][1]
 
+        # Selos (estrela/oculto/tags) e o chip de extensão acompanham o raio
+        # do card (Fatia 74, ajuste pedido pelo Rafael: "as bordas das tags
+        # deveriam acompanhar de acordo com a borda atual do grid do
+        # asset") — antes eram valores fixos (6 e 4) escolhidos quando o
+        # raio "marcante" era 12; ficaram pequenos demais depois dele virar
+        # 16 na Fatia 73 e iam continuar errados em qualquer raio futuro.
+        radius_thumb = self._radius - 2  # mesmo raio que _paint_thumb usa
+        self._radius_badge = max(4.0, radius_thumb * 0.5)
+        self._radius_chip = max(3.0, radius_thumb * 0.35)
+
     def set_icon_size(self, px: int) -> None:
         """Chamado pela AssetGridView quando o slider de tamanho muda."""
         px = max(MIN_ICON, min(MAX_ICON, px))
@@ -123,6 +167,52 @@ class AssetCardDelegate(QStyledItemDelegate):
         `QListView` customizado, então o estado de "botão pressionado" é
         rastreado à mão, igual ao hover já era antes (`setMouseTracking`)."""
         self._pressed_index = index if (index is not None and index.isValid()) else None
+
+    def set_hover(self, old_index, new_index) -> None:
+        """`AssetGridView.mouseMoveEvent`/`leaveEvent` chamam quando o card
+        sob o cursor muda (Fatia 74) — dispara a animação de entrada do novo
+        índice e de saída do antigo, em vez de o `paint()` ler um booleano e
+        saltar direto pro estado final."""
+        if old_index is not None and old_index.isValid():
+            self._hover_target[old_index.row()] = 0.0
+            self._hover_progress.setdefault(old_index.row(), 1.0)
+        if new_index is not None and new_index.isValid():
+            self._hover_target[new_index.row()] = 1.0
+            self._hover_progress.setdefault(new_index.row(), 0.0)
+        if self._hover_target and not self._hover_timer.isActive():
+            self._hover_clock.start()
+            self._hover_timer.start()
+
+    def _tick_hover(self) -> None:
+        """Um passo da animação de hover — avança cada linha em direção ao
+        seu alvo proporcionalmente ao tempo real decorrido (não a um número
+        fixo de frames, pra não variar de velocidade com a carga da tela)."""
+        decorrido_ms = self._hover_clock.restart()
+        passo = decorrido_ms / _HOVER_ANIM_MS if _HOVER_ANIM_MS else 1.0
+        ainda_anima = False
+        for row in list(self._hover_target):
+            alvo = self._hover_target[row]
+            atual = self._hover_progress.get(row, 0.0)
+            if atual < alvo:
+                atual = min(alvo, atual + passo)
+            elif atual > alvo:
+                atual = max(alvo, atual - passo)
+            if atual == alvo:
+                del self._hover_target[row]
+                if alvo <= 0.0:
+                    self._hover_progress.pop(row, None)
+                else:
+                    self._hover_progress[row] = atual
+            else:
+                self._hover_progress[row] = atual
+                ainda_anima = True
+
+        if not ainda_anima:
+            self._hover_timer.stop()
+
+        view = self.parent()
+        if view is not None:
+            view.viewport().update()
 
     # ---- Qt ----
 
@@ -141,17 +231,32 @@ class AssetCardDelegate(QStyledItemDelegate):
         pressed = self._pressed_index is not None and self._pressed_index == index
 
         # Elevação (Fatia 74, revisão visual pedida pelo Rafael): repouso
-        # quase plano, hover "levanta" (sombra maior + o card sobe um
-        # pouco), clique "afunda" (sombra menor, sem subir). Sombra sempre
-        # presente — nunca borda dura — é o que separa um card do outro
-        # agora; antes disso era o contrário (borda em repouso, véu em
-        # hover, ver histórico da Fatia 47/50 abaixo neste arquivo).
+        # PLANO de verdade (sem sombra nenhuma — ajuste depois do feedback
+        # "os cards parecem estar com uma sombra permanente"), hover
+        # "levanta" (sombra nasce e cresce, o card sobe um pouco), clique
+        # "afunda" (sombra menor, sem subir). Nunca borda dura — antes disso
+        # era o contrário (borda em repouso, véu em hover, ver histórico da
+        # Fatia 47/50 abaixo neste arquivo).
+        #
+        # O quanto hover está "ligado" vem do progresso ANIMADO
+        # (`_hover_progress`, 0..1), não de um salto binário — é isto que dá
+        # a sensação de transição suave em vez de aparecer pronto num frame
+        # só. Quando não há animação em andamento pra esta linha (ex.: os
+        # testes de paint(), que nunca chamam `set_hover`), cai de volta pro
+        # estado nativo do Qt (`hover`), 0 ou 1 direto — sem isso o card só
+        # reagiria depois do primeiro `mouseMoveEvent` de verdade.
+        progresso_hover = self._hover_progress.get(index.row())
+        if progresso_hover is None:
+            progresso_hover = 1.0 if hover else 0.0
+
         if pressed:
             sombra, elevacao = self._shadow_press, 0
-        elif hover:
-            sombra, elevacao = self._shadow_hover, -2
         else:
-            sombra, elevacao = self._shadow_rest, 0
+            sombra = _lerp_shadow(self._shadow_rest, self._shadow_hover, progresso_hover)
+            # `QRect.translated` só aceita int — a sombra em si (abaixo) já
+            # interpola de forma contínua, e 2px de curso arredondados em
+            # ~60fps continuam lendo como movimento suave, não um salto.
+            elevacao = round(-2 * progresso_hover)
         card_rect = card_rect.translated(0, elevacao)
 
         self._paint_shadow(painter, card_rect, sombra)
@@ -271,7 +376,7 @@ class AssetCardDelegate(QStyledItemDelegate):
     def _badge(self, painter: QPainter, x: int, y: int, glyph) -> None:
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(_BADGE_BG)
-        painter.drawRoundedRect(QRectF(x, y, _BADGE, _BADGE), 6, 6)
+        painter.drawRoundedRect(QRectF(x, y, _BADGE, _BADGE), self._radius_badge, self._radius_badge)
         gx = x + (_BADGE - glyph.width()) // 2
         gy = y + (_BADGE - glyph.height()) // 2
         painter.drawPixmap(gx, gy, glyph)
@@ -285,7 +390,7 @@ class AssetCardDelegate(QStyledItemDelegate):
 
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(_BADGE_BG)
-        painter.drawRoundedRect(rect, 4, 4)
+        painter.drawRoundedRect(rect, self._radius_chip, self._radius_chip)
 
         painter.setFont(self._font_chip)
         painter.setPen(self._pen_chip)

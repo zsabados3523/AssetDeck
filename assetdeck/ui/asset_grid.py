@@ -430,6 +430,9 @@ class AssetGridView(QListView):
         from assetdeck.ui.asset_card_delegate import AssetCardDelegate
 
         self.setItemDelegate(AssetCardDelegate(self))
+        # Card sob o cursor (Fatia 74) — pra avisar o delegate quando muda,
+        # ele anima a transição em vez de saltar direto (ver `set_hover`).
+        self._hover_index = QModelIndex()
         # Multi-seleção (Ctrl/Shift) para agrupar assets à mão — Fatia 6
         self.setSelectionMode(QListView.SelectionMode.ExtendedSelection)
         # Rolagem suave: por pixel (o padrão pula uma CÉLULA inteira de
@@ -500,6 +503,30 @@ class AssetGridView(QListView):
         if hasattr(delegate, "set_pressed"):
             delegate.set_pressed(None)
         self.viewport().update()
+
+    def mouseMoveEvent(self, event) -> None:  # noqa: N802
+        """Avisa o delegate quando o card sob o cursor MUDA (Fatia 74) —
+        `setMouseTracking(True)` já liga este evento sem botão pressionado.
+        O Qt tem seu próprio rastreio nativo de `State_MouseOver`, mas ele
+        não avisa NINGUÉM da troca — só aparece pronto no próximo paint().
+        Aqui é o gatilho da animação suave de entrada/saída."""
+        super().mouseMoveEvent(event)
+        idx = self.indexAt(event.position().toPoint())
+        if idx != self._hover_index:
+            delegate = self.itemDelegate()
+            if hasattr(delegate, "set_hover"):
+                delegate.set_hover(self._hover_index, idx)
+            self._hover_index = idx
+
+    def leaveEvent(self, event) -> None:  # noqa: N802
+        """O cursor pode sair da grade sem passar por cima de outro card —
+        sem isto, o último card sob o mouse ficava "hover" pra sempre."""
+        super().leaveEvent(event)
+        if self._hover_index.isValid():
+            delegate = self.itemDelegate()
+            if hasattr(delegate, "set_hover"):
+                delegate.set_hover(self._hover_index, QModelIndex())
+            self._hover_index = QModelIndex()
 
     # ---- arrasto para fora (Tag, Collection, Blender, gerenciador de arquivos) ----
 
