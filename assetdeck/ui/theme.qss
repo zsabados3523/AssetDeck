@@ -135,7 +135,15 @@ QToolButton#railButton {
 }
 
 QToolButton#railButton:hover {
-    background-color: $surface_hover;
+    background-color: $surface_raised;
+}
+
+/* O rail tem padding próprio (6px), então o "afundar" também é próprio: 7/5
+ * mantém a soma em 12px e o ícone não muda de tamanho ao clicar. */
+QToolButton#railButton:pressed {
+    background-color: $surface_sunken;
+    padding-top: 7px;
+    padding-bottom: 5px;
 }
 
 /* Sem pastilha no estado marcado, ao contrário dos outros QToolButton do app:
@@ -155,7 +163,7 @@ QWidget#sidebarHeader {
 }
 
 QWidget#sidebarHeader:hover {
-    background-color: $surface_hover;
+    background-color: $surface_raised;
 }
 
 QLabel#sidebarSectionTitle {
@@ -248,17 +256,36 @@ QPushButton, QToolButton {
     color: $text;
 }
 
+/* Hover e clique usam os DEGRAUS DE ELEVAÇÃO (Fatia 75), os mesmos do card da
+ * grade — "levantado" e "afundado" querem dizer a mesma coisa em qualquer
+ * lugar da tela. Antes eram `$surface_hover`/`$selection`, véus de 3,5% e 6,5%
+ * de preto: quase invisíveis, e a razão de o app parecer não responder ao
+ * mouse. O Qt não anima QSS (não existe `transition` aqui, ao contrário do CSS
+ * da web), então o estado precisa ser LEGÍVEL de imediato — quem tem animação
+ * de verdade é o card, que é pintado à mão por um delegate.
+ *
+ * A borda destes estados é `$border`, a MESMA do repouso — e não `$hairline`,
+ * como era até a Fatia 75. `$hairline` (7,5% de preto) é mais fraco que
+ * `$border` (9%), ou seja: o contorno do botão ENFRAQUECIA justamente quando o
+ * mouse chegava, empurrando na direção contrária do preenchimento. Visto num
+ * mostruário dos estados lado a lado, que é a única forma de comparar isso —
+ * num screenshot normal nenhum botão está em hover. */
 QPushButton:hover, QToolButton:hover {
-    background-color: $surface_hover;
-    border: 1px solid $hairline;
+    background-color: $surface_raised;
+    border: 1px solid $border;
 }
 
 /* Pressionado (transitório) segue monocromático: é um flash de meio segundo,
- * não vale acender o azul. */
+ * não vale acender o destaque. O padding assimétrico empurra o conteúdo 1px
+ * pra baixo — o botão "afunda" sob o dedo. A SOMA continua igual à do estado
+ * normal ($pad_m em cima e embaixo), então o tamanho do botão não muda e nada
+ * na tela se reposiciona ao clicar. */
 QPushButton:pressed, QToolButton:pressed {
-    background-color: $selection;
-    border: 1px solid transparent;
+    background-color: $surface_sunken;
+    border: 1px solid $border;
     color: $text;
+    padding-top: 9px;
+    padding-bottom: 7px;
 }
 
 /* Marcado (persistente) é pastilha azul com o texto no destaque — Fatia 44.
@@ -294,6 +321,8 @@ QPushButton#primary:hover {
 QPushButton#primary:pressed {
     background-color: $accent_press;
     border: 1px solid $accent_press;
+    padding-top: 9px;
+    padding-bottom: 7px;
 }
 
 /* Desabilitado PRECISA estar aqui, repetindo o que `QPushButton:disabled` já
@@ -317,8 +346,19 @@ QPushButton#ghost, QToolButton#ghost {
 }
 
 QPushButton#ghost:hover, QToolButton#ghost:hover {
-    background-color: $surface_hover;
-    border: 1px solid $hairline;
+    background-color: $surface_raised;
+    border: 1px solid $border;
+}
+
+/* Precisa existir mesmo repetindo o `QPushButton:pressed` genérico: `#ghost` é
+ * seletor de ID e ganha dele na especificidade (mesma armadilha do
+ * `#primary:disabled`, Fatia 74). Sem isto o botão sem moldura ficava com o
+ * hover parado durante o clique — nenhum sinal de que apertou. */
+QPushButton#ghost:pressed, QToolButton#ghost:pressed {
+    background-color: $surface_sunken;
+    border: 1px solid $border;
+    padding-top: 9px;
+    padding-bottom: 7px;
 }
 
 QCheckBox, QRadioButton {
@@ -333,6 +373,15 @@ QCheckBox, QRadioButton {
  * do app. */
 #searchBar QLineEdit, #searchBar QPushButton {
     padding: 4px 10px;
+}
+
+/* A barra de busca é mais baixa que o resto (4px de padding), então o
+ * "afundar" precisa da conta dela: 5/3 soma os mesmos 8px. Sem esta regra o
+ * `QPushButton:pressed` genérico não chegaria aqui — `#searchBar QPushButton`
+ * tem seletor de ID e ganha dele. */
+#searchBar QPushButton:pressed {
+    padding-top: 5px;
+    padding-bottom: 3px;
 }
 
 #searchBar QCheckBox {
@@ -424,7 +473,7 @@ QComboBox {
 }
 
 QComboBox:hover {
-    background-color: $surface_hover;
+    background-color: $surface_raised;
 }
 
 QComboBox:focus {
@@ -473,7 +522,7 @@ QTreeView::item, QListWidget::item, QTableView::item {
 }
 
 QTreeView::item:hover, QListWidget::item:hover, QTableView::item:hover {
-    background-color: $surface_hover;
+    background-color: $surface_raised;
 }
 
 /* Seleção em pastilha CLARA com o texto na cor, como os botões ativos do
@@ -537,7 +586,7 @@ QMenuBar::item {
 }
 
 QMenuBar::item:selected {
-    background-color: $surface_hover;
+    background-color: $surface_raised;
 }
 
 QMenu {
