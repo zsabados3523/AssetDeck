@@ -7,3 +7,7 @@ pytest==9.1.1
 opencv-python-headless==5.0.0.93
 numpy==2.5.1
 OpenEXR==3.4.13
+# Leitura de .fbx no visualizador 3D (Fase 6) — wheel autocontido, sem
+# pacote de sistema (o binding "oficial" pyassimp quebrou no Python 3.12,
+# ver TODO.md).
+assimp-py==1.1.0

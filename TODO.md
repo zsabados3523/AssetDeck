@@ -1332,18 +1332,31 @@ visualizador 3D, redesenho de menu/barra superior).
 
 **Checklist de pendências soltas** (menores que uma fatia própria, não
 travam o roadmap — revisar quando sobrar uma folga):
-- ☐ Visualizador de HDRI ainda pisca na PRIMEIRA vez que abre um HDRI numa
-  sessão (Fatia 65 corrigiu o app inteiro piscar; a janelinha sozinha
-  piscar uma vez por sessão é o problema original, nunca resolvido de
-  verdade — Rafael confirmou em 2026-08-14, pediu pra registrar e seguir
-  em frente). Candidato: pré-aquecer o contexto GL antes do primeiro uso
-  real, num momento que ele não note.
+- ☑ ~~Visualizador de HDRI pisca na PRIMEIRA vez que abre numa sessão~~ —
+  RESOLVIDO na Fatia 72 (`MainWindow.prewarm_gl_viewers()`), confirmado
+  pelo Rafael na tela real. Registrado desde a Fatia 65 (2026-08-14),
+  nunca tinha sido investigado a fundo até agora.
 - ☐ Visual do `LibrarySwitcher` (Fatia 70) — funciona certo, mas o Rafael
   confirmou que gostaria do visual mais parecido com o mockup aprovado
   (linhas de 2 alturas com nome + caminho, bolinha cheia/vazia marcando a
   ativa, em vez do texto corrido de uma `QAction` só). Ele pediu pra
   deixar pra tratar junto da Fase 7 (revisão visual ao vivo), não como
   fatia isolada agora.
+- ☐ Visual do `ModelViewer`/`HdriViewer` (Fatia 71/72) — o Rafael pediu
+  pra virar embutido no app (centralizado, sem moldura de janela do SO
+  — nada de minimizar/maximizar —, fecha ao clicar fora), igual o
+  `PreviewPopup` (que já é um `OverlayPanel`). **Tensão técnica real,
+  registrar antes de mexer:** os dois são janela PRÓPRIA (`QDialog`) DE
+  PROPÓSITO — a Fatia 65 tentou exatamente isso pro HDRI (virar
+  `OverlayPanel` embutido) e reverteu no mesmo dia: o "piscar" piorou
+  pra afetar a `MainWindow` INTEIRA, porque um `QOpenGLWidget` embutido
+  nela muda o modo de composição da JANELA DELA na primeira aparição —
+  e o pré-aquecimento da Fatia 72 (`prewarm_gl_viewers()`) hoje só
+  pré-aquece as janelas PRÓPRIAS do HDRI/modelo, nunca a `MainWindow`.
+  Virar `OverlayPanel` provavelmente reintroduz o piscar do app inteiro,
+  a menos que o pré-aquecimento também toque a `MainWindow` (embutir um
+  `QOpenGLWidget` escondido nela cedo, na abertura) — precisa testar essa
+  hipótese ANTES de prometer o visual novo, não só trocar a classe base.
 
 ### ☑ Fatia 59 — Nome do asset cortado no card
 
@@ -2062,3 +2075,202 @@ virar fatia isolada agora: o visual do menu (linhas de 2 alturas com
 caminho + bolinha, como no mockup) fica pra Fase 7, junto da revisão
 visual geral — o `QMenu` de `QAction`s simples que existe hoje já
 resolve funcionalmente. Fatia mergeada na `main`.
+
+### ☑ Fatia 71 — Visualizador 3D: prova de conceito (só .obj)
+Início da **Fase 6**. Rafael pediu POC antes de comprometer fatia
+grande — decidiu fazer isto ANTES da Fase 7 (revisão visual), que fica
+pra depois de todas as mudanças de funcionalidade.
+
+**Achado antes de programar, relevante pro "expandir depois":** nem a
+testlib nem a biblioteca real do Rafael têm um `.obj` sequer — os
+modelos são `.blend` (a maioria), `.fbx` (1.506 na biblioteca real) e
+`.skp`/SketchUp (339). `.obj` foi escolha do PLANO pela simplicidade de
+formato (texto aberto, parser pequeno sem dependência nova), não porque
+existisse no acervo do Rafael — testado com um `.obj` exportado de
+verdade de um `.blend` da testlib (cadeira, 7.894 triângulos), não um
+cubo de mentira.
+
+**Recado importante pro "expandir pra .fbx/.blend depois":** `.fbx` é
+viável (formato com parser de terceiros disponível) — próximo candidato
+natural. **`.blend` continua fora do alcance de qualquer visualizador
+interativo de verdade** — é formato binário fechado da própria Blender,
+sem biblioteca de terceiros confiável pra ler fora dela (mesma
+conclusão do plano original). Se `.blend` algum dia tiver alguma forma
+de "visualizar", seria via o Blender headless renderizando frames (o
+que o app já faz pras capas, Fatia 16/38), não um viewer 3D orbitável
+de verdade.
+
+- **`model3d/obj_parser.py` (novo):** parser de `.obj` só-geometria
+  (v/vn/f — sem MTL, sem UV, sem grupos), sem Qt/OpenGL, testável no
+  pytest normal (mesma separação da Fatia 34). Faces com N>3 vértices
+  viram leque de triângulos; sem `vn` no arquivo, normal por FACE
+  (produto vetorial, sombreamento "faceted"); índice negativo
+  (referência relativa) suportado.
+- **`ui/orbit_camera.py` (novo):** câmera órbita ao redor de um alvo
+  (não "olha de dentro" como `HdriCamera`) — mesmo padrão de
+  yaw/pitch/clamp sem Qt, mais `zoom()` (multiplicativo, pela roda do
+  mouse) e `enquadrar()` (centraliza e ajusta distância pro modelo
+  caber na tela sozinho ao carregar, sem o Rafael precisar achar o
+  objeto na mão).
+- **`ui/model_viewer.py` (novo), `ModelGLView`/`ModelViewer`:** mesmo
+  padrão do visualizador de HDRI (Fatia 34/65) — carregamento em thread
+  (não trava a UI abrindo um modelo grande), janela PRÓPRIA (não
+  overlay embutido, mesmo motivo do HDRI: `QOpenGLWidget` numa
+  `MainWindow` muda o modo de composição da janela INTEIRA na primeira
+  aparição). Shader simples: luz "presa na câmera" (headlight, `dot`
+  entre normal em view-space e o eixo da câmera) com piso de 0.18 —
+  garante que o modelo nunca fica preto total virando de costas pra
+  luz, sem precisar simular iluminação de verdade pra uma POC. Cor
+  única cinza-claro — sem material/textura ainda.
+- **`main_window._open_preview`:** duplo clique num `.obj` abre o
+  `ModelViewer` em vez do `PreviewPopup` achatado — mesmo ponto de
+  entrada que já roteava `.hdr`/`.exr` pro `HdriViewer` (Fatia 34).
+
+**Verificado com um modelo real, não um cubo de teste:** exportei
+"Seating_Chairs_Velvet-Blue_01.blend" da testlib pra `.obj` via Blender
+headless, montei uma biblioteca temporária isolada (env vars próprias,
+não toca a testlib nem o config do Rafael) e tirei um screenshot do
+`ModelViewer` de verdade, aberto pela `MainWindow` de verdade — a
+cadeira aparece renderizada, sombreada, enquadrada sozinha (7.894
+triângulos, sem cortar nem sobrar espaço demais). Não dá pra provar por
+aqui a SENSAÇÃO de arrastar/dar zoom com o mouse de verdade — só a
+matemática (testada) e que o resultado ESTÁTICO renderiza certo.
+
+**Testes novos:** `tests/test_obj_parser.py` (triângulo simples, leque
+de quad, índice negativo, `vn` explícito, `vt` ignorado, comentário,
+arquivo sem face/vazio levanta `ValueError` legível, `bounds()`),
+`tests/test_orbit_camera.py` (mesmo espírito de `test_hdri_camera.py`
+— arrasto, clamp de pitch, zoom multiplicativo com piso, `enquadrar`
+não deixa distância negativa), `tests/test_model_viewer.py` (buffer
+intercalado posição+normal, shader em sincronia com a câmera — só a
+parte sem contexto GL, mesma ressalva do `test_hdri_viewer.py`) e 2 em
+`test_main_window.py` (`.obj` roteia pro `ModelViewer`, `.blend`
+continua no `PreviewPopup`).
+
+**Decisão pendente com o Rafael depois de ver funcionando:** vale virar
+fatia grande (mais formatos, integração com o painel de detalhes) ou
+fica só como experimento por enquanto? Ele já decidiu adiantado que quer
+expandir pra outros formatos — próximo capítulo natural é `.fbx`
+(viável) — mas ainda não decidiu ONDE isso entra no viewer atual
+(substituir o `.obj`-only por um roteador de formato, ou ir fatia por
+fatia).
+
+### ☑ Fatia 72 — Visualizador 3D: .fbx e .blend de verdade
+O Rafael perguntou, direto: "não existe nenhuma forma de criar um
+visualizador de .fbx e .blend de forma integrada ao programa?" — a
+resposta da Fatia 71 (".blend está fora do alcance de qualquer
+visualizador interativo") estava certa só pela metade: verdade que não
+existe parser de terceiros confiável pro formato binário fechado do
+Blender, mas o app JÁ depende do Blender instalado (gera capas desde a
+Fatia 16) — usar o próprio Blender como "leitor" é caminho real, só não
+tinha sido considerado.
+
+- **`.fbx` → `model3d/assimp_loader.py` (novo), biblioteca `assimp-py`.**
+  `pyassimp` (o binding "oficial") foi descartado — quebrado no Python
+  3.12 (usa `distutils`, removido da stdlib). `assimp-py` é um binding
+  mais novo com a biblioteca nativa DENTRO do wheel (`pip install
+  assimp-py`, sem pacote de sistema, sem `sudo`). Achado testando com um
+  `.fbx` real (exportado do Blender): sem `Process_PreTransformVertices`
+  a malha saía deitada de lado — o Blender embute no NÓ da cena (não nos
+  vértices) a rotação Z-up→Y-up (convenção do formato) e a escala 100×
+  (metro→centímetro); essa flag do assimp achata a hierarquia de nós
+  aplicando a transformação de cada um direto nos vértices antes de
+  devolver a malha.
+- **`.blend` → `model3d/blend_loader.py` (novo), Blender headless como
+  conversor.** Exporta a geometria pra `.obj` num script novo
+  (`blender/scripts/export_obj.py`, mesmo padrão do `render_thumb.py` da
+  Fatia 16/38) e lê com o parser caseiro que já existia — cacheado por
+  `content_hash` em `config.models3d_cache_dir()` (mesma ideia da
+  `thumbs_dir()`: só reexporta se o conteúdo mudou). Medido contra a
+  testlib real: ~0,4s do zero a zero pra abrir e exportar um modelo de
+  móvel — rápido o bastante pra um preview sob demanda.
+- **`model3d/loader.py` (novo):** escolhe o loader certo pela extensão
+  (`.obj`/`.fbx`/`.blend`) — o `ModelViewer` só chama `load_mesh()`, não
+  sabe de loader nenhum. `main_window._open_preview` roteia as 3
+  extensões (`EXTENSOES_SUPORTADAS`) pro `ModelViewer`, passando
+  `content_hash` (só usado pelo `.blend`).
+
+**Achado no caminho — bug real, PRÉ-EXISTENTE, não da Fase 6:** testando
+a exportação de `.blend` com um modelo real da testlib, o Blender
+travava ~30s e falhava com erros do add-on **V-Ray** ("ZmqServer
+Community Edition cannot be run in headless mode"). Confirmado que
+`render_thumbnail()` — a geração de CAPAS, que já existia desde a Fatia
+16 — tem o MESMO problema pro mesmo arquivo: sem `--factory-startup` no
+comando do Blender, ele carrega os add-ons do PERFIL do Rafael (V-Ray
+entre eles), que tentam iniciar um servidor de render e travam em modo
+headless. **Corrigido nas duas funções** (`render_thumbnail` e
+`export_to_obj`, `assetdeck/blender/render.py`) — `--factory-startup`
+pula o perfil pessoal, carrega só os padrões de fábrica. Verificado:
+render e export do mesmo arquivo que travava antes agora levam ~3,6s
+juntos, sem erro. **Bug que provavelmente já afeta silenciosamente
+capas de outros assets com V-Ray/Cosmos** desde que o add-on foi
+instalado (fora do escopo desta fatia investigar quantos — thumbnails
+já cacheadas mascaram o problema até uma reindexação forçar regerar).
+
+**Achado com o Rafael perguntando sobre o "piscar" do visualizador:**
+registrado desde a Fatia 65 e nunca investigado a fundo
+("Candidato: pré-aquecer o contexto GL..."). Causa mais provável, nunca
+tentada: sem `Qt.AA_ShareOpenGLContexts`, cada janela de topo nova
+(HdriViewer, ModelViewer) negocia sua PRÓPRIA superfície OpenGL do
+zero na primeira vez que aparece — é essa negociação que pisca. Setado
+em `app.py`, ANTES do `QApplication` (só funciona se vier antes).
+**Não dá pra provar por captura de tela que resolveu** (é um evento de
+recomposição de um frame só) — mesma ressalva já registrada na Fatia
+65, pendente de confirmação do Rafael na tela real.
+
+**Verificado com os 3 formatos de verdade, mesmo modelo** (cadeira da
+testlib, exportada pros 3 formatos): screenshot do `ModelViewer` aberto
+pela `MainWindow` real pra cada um — os três renderizam idênticos
+(mesma orientação, mesmo enquadramento, 7.894 triângulos).
+
+**Testes novos:** `tests/test_assimp_loader.py` (mensagem de erro sem
+a lib instalada — forçada via `sys.modules`, não depende de
+desinstalar nada —, triângulo simples, leque de quad, arquivo sem
+malha), `tests/test_blend_loader.py` (sem Blender instalado, exporta e
+lê quando não tem cache, usa cache na 2ª chamada, hash diferente
+reexporta, erro de export vira `RuntimeError` legível — tudo com
+`export_to_obj`/`blender_command` mockados, não precisa de Blender de
+verdade pra rodar `pytest`), `tests/test_model3d_loader.py` (roteamento
+por extensão, `.blend` sem `content_hash` levanta erro,
+extensão desconhecida levanta erro), `tests/test_config.py` (+1,
+`models3d_cache_dir()`), 2 em `test_main_window.py` reescritos como
+`@pytest.mark.parametrize` cobrindo os 3 formatos.
+
+**Confirmado pelo Rafael na tela real:** os 3 formatos funcionando. O
+`AA_ShareOpenGLContexts` sozinho **não resolveu o "piscar"** — ele
+confirmou que continua acontecendo só na primeira vez que uma janela de
+OpenGL abre NA SESSÃO (fecha e abre de novo a mesma janela depois,
+sem piscar) — exatamente o sintoma já registrado na Fatia 65
+("isso só acontece na primeira vez que aparece na tela"), e a prova de
+que a causa é por JANELA DE TOPO negociando sua própria superfície, não
+falta de contexto compartilhado entre elas.
+
+**Fix de verdade — `MainWindow.prewarm_gl_viewers()` (novo), chamado em
+`app.py` logo após `win.show()`:** mostra e esconde o `HdriViewer` e o
+`ModelViewer` uma vez, MOVIDOS PRA FORA DA TELA antes de aparecer —
+`processEvents()` no meio garante que o Qt chega a pintar um frame de
+verdade (só `hide()` sem nunca ter pintado não dispara a negociação da
+superfície, que é o evento caro). Assim a troca de modo de composição
+acontece escondida, na abertura do app, antes do Rafael ver qualquer
+coisa — não mais na hora que ele abre o primeiro HDRI/modelo
+de verdade. Pulado no modo `--screenshot` (evita interferir numa
+captura determinística).
+
+**Achado programando o teste — CRASH real, não só falha:** chamar
+`prewarm_gl_viewers()` de verdade no modo offscreen do pytest
+(`QT_QPA_PLATFORM=offscreen`) **derruba o interpretador com
+Segmentation fault** — `resizeGL` do `HdriGLView` desreferencia
+`self._gl`, que só existe depois de um `initializeGL` que nunca roda
+sem contexto GL de verdade (mesma fronteira já documentada em
+`test_hdri_viewer.py`: "QOpenGLWidget não roda no modo offscreen do
+pytest" — só que aqui, em vez de simplesmente não funcionar, derruba o
+processo). Teste reescrito pra só confirmar que o método existe
+(`callable`), sem chamar de verdade — mesma fronteira dos outros
+visualizadores de OpenGL do projeto. **Verificado à mão, tela real**
+(script fora do pytest): `prewarm_gl_viewers()` roda sem crash, as duas
+janelas ficam escondidas depois, e um screenshot da `MainWindow` logo
+depois não mostra nenhuma sobra visual.
+
+**Pendente de confirmação do Rafael na tela real:** se isto de fato
+elimina o "piscar" (não dá pra provar por screenshot — é um evento de
+recomposição de 1 frame só).

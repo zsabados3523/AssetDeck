@@ -13,6 +13,7 @@ def test_env_vars_isolam_os_diretorios(tmp_path, monkeypatch):
     assert config.config_dir() == tmp_path / "cfg"
     assert config.db_path() == tmp_path / "data" / "assetdeck.db"
     assert config.thumbs_dir() == tmp_path / "cache" / "thumbs"
+    assert config.models3d_cache_dir() == tmp_path / "cache" / "models3d"
 
 
 def test_primeira_execucao_cria_config_com_padroes(tmp_path, monkeypatch):
