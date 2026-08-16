@@ -22,8 +22,8 @@ usando o app de verdade.
 
 | | |
 |---|---|
-| Testes | 787 verdes (`pytest -q`) — 4 falhas conhecidas e sem relação (`test_render.py`/`test_missing_textures.py`, dependem do Blender de verdade rodando no ambiente) |
-| Última fatia mergeada | **Fatia 68** — import simplificado pro Blender: `.blend` importa direto (sem menu), auto-detecta modelo × material, Link & Place por padrão, confirmado pelo Rafael na tela |
+| Testes | 791 verdes (`pytest -q`) — 4 falhas conhecidas e sem relação (`test_render.py`/`test_missing_textures.py`, dependem do Blender de verdade rodando no ambiente) |
+| Última fatia mergeada | **Fatia 69** — grade e árvore de pastas filtram pela biblioteca ativa (`library_id`), confirmado pelo Rafael na tela |
 | Onde trabalhar | `/home/rafael/00 - PROJETOS/assetdeck-correcoes` (worktree isolado — **NÃO** a pasta `assetdeck` original, HEAD solta de propósito lá). Ver memória `assetdeck-worktree-isolado`. |
 | Biblioteca de dev | `/home/rafael/00 - PROJETOS/assetdeck-testlib` — NUNCA apontar pra outra (regra do CLAUDE.md) |
 | Schema | migrations 001–006 aplicadas (ver SCHEMA.md) |
@@ -32,11 +32,12 @@ usando o app de verdade.
 
 **Próximos itens do roadmap F6** (ordem sugerida, ver seção "F6" mais
 abaixo pra checklist completo e plano de cada fase):
-- Fase 5 — Múltiplas bibliotecas (schema já pronto, `libraries` table —
-  risco real, agora CONFIRMADO na prática pela Fatia 68: `folder_tree`/
-  `assets_repo` não filtram por `library_id`, e o banco de dev tem 72 mil
-  assets órfãos da biblioteca real do SSD, de um teste de 2026-08-04
-  nunca limpo — ver pendência abaixo).
+- Fase 5 — Múltiplas bibliotecas: a Fatia 69 já fechou o risco real de
+  consulta (`folder_tree`/`assets_repo` agora filtram por `library_id`).
+  O que falta pra virar feature de verdade: `config.py` aceitar lista de
+  raízes, e uma UI pra anexar/trocar biblioteca — **precisa de mockup**
+  antes de programar (ver memória `mockup-antes-de-mudanca-de-layout-ou-
+  menu`), candidato óbvio é perto da marca "AssetDeck" no canto do menu.
 - Fase 6 — Visualizador 3D: Rafael pediu PROVA DE CONCEITO primeiro (só
   `.obj`, câmera orbitando) antes de comprometer fatia grande.
 - Fase 7 — Sessão de revisão visual AO VIVO com o Rafael (hover que muda
@@ -50,11 +51,11 @@ abaixo pra checklist completo e plano de cada fase):
 - Banco de dev (`~/.local/share/assetdeck/assetdeck.db`) tem 72.244
   assets da biblioteca real (`library_id=2`) que nunca foram limpos —
   Rafael pediu pra NÃO mexer nisso por ora (achado testando a Fatia 68).
-  Efeito prático: arrastar pro Blender um asset que apareceu na grade
-  mas na verdade veio da biblioteca real dá "arquivo não encontrado",
-  porque o caminho é montado contra a raiz da testlib (a ativa). Só
-  testar com assets que são mesmo da testlib até ele decidir limpar —
-  ver Fatia 68 mais abaixo pro diagnóstico completo.
+  A Fatia 69 já isolou a GRADE/pastas da biblioteca ativa, então isso
+  não mistura mais na tela — mas continua valendo só arrastar pro
+  Blender assets que são mesmo da testlib (a barra de categorias ainda
+  vaza extensão da biblioteca órfã no checklist de filtro, gap
+  cosmético registrado na Fatia 69).
 
 ## Como ler este arquivo
 Uma fatia por vez, em branch própria. Cada fatia termina com: pytest verde,
