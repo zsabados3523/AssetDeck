@@ -22,8 +22,8 @@ usando o app de verdade.
 
 | | |
 |---|---|
-| Testes | 791 verdes (`pytest -q`) — 4 falhas conhecidas e sem relação (`test_render.py`/`test_missing_textures.py`, dependem do Blender de verdade rodando no ambiente) |
-| Última fatia mergeada | **Fatia 69** — grade e árvore de pastas filtram pela biblioteca ativa (`library_id`), confirmado pelo Rafael na tela |
+| Testes | 802 verdes (`pytest -q`) — 4 falhas conhecidas e sem relação (`test_render.py`/`test_missing_textures.py`, dependem do Blender de verdade rodando no ambiente) |
+| Última fatia mergeada | **Fatia 70** — seletor de biblioteca (trocar/anexar pela UI), confirmado pelo Rafael na tela; ajuste visual (deixar igual ao mockup) adiado pra Fase 7 |
 | Onde trabalhar | `/home/rafael/00 - PROJETOS/assetdeck-correcoes` (worktree isolado — **NÃO** a pasta `assetdeck` original, HEAD solta de propósito lá). Ver memória `assetdeck-worktree-isolado`. |
 | Biblioteca de dev | `/home/rafael/00 - PROJETOS/assetdeck-testlib` — NUNCA apontar pra outra (regra do CLAUDE.md) |
 | Schema | migrations 001–006 aplicadas (ver SCHEMA.md) |
@@ -32,12 +32,11 @@ usando o app de verdade.
 
 **Próximos itens do roadmap F6** (ordem sugerida, ver seção "F6" mais
 abaixo pra checklist completo e plano de cada fase):
-- Fase 5 — Múltiplas bibliotecas: a Fatia 69 já fechou o risco real de
-  consulta (`folder_tree`/`assets_repo` agora filtram por `library_id`).
-  O que falta pra virar feature de verdade: `config.py` aceitar lista de
-  raízes, e uma UI pra anexar/trocar biblioteca — **precisa de mockup**
-  antes de programar (ver memória `mockup-antes-de-mudanca-de-layout-ou-
-  menu`), candidato óbvio é perto da marca "AssetDeck" no canto do menu.
+- Fase 5 — Múltiplas bibliotecas: **fechada** com a Fatia 70 (Fatia 69
+  filtrou as consultas; Fatia 70 deu a UI de trocar/anexar). Sobra só o
+  ajuste visual do `LibrarySwitcher` (checklist do F6) e `config.py`
+  continuar aceitando só uma raiz por vez — não travou nada até agora,
+  registrar se virar necessidade real.
 - Fase 6 — Visualizador 3D: Rafael pediu PROVA DE CONCEITO primeiro (só
   `.obj`, câmera orbitando) antes de comprometer fatia grande.
 - Fase 7 — Sessão de revisão visual AO VIVO com o Rafael (hover que muda
