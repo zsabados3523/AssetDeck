@@ -128,15 +128,33 @@ class ASSETDECK_OT_import_blend(Operator):
             self.report({"WARNING"}, "Nada novo para trazer (já estava na cena?).")
             return {"CANCELLED"}
 
+        quantidade = len(novos)
+        alvos = novos
+        if self.datablock == "objects" and self.link:
+            # Objeto LINKADO não deixa mover/girar pela interface (G/R/S)
+            # sem virar "Library Override" — o Blender bloqueia isso no
+            # próprio operador de transformar, mesmo já tendo dado pra
+            # setar a posição inicial por código aqui embaixo. Embrulha
+            # num Empty local (sempre 100% editável) e é ELE quem recebe
+            # posição/seleção/"& Place"; o(s) linkado(s) seguem grudados
+            # nele por parentesco — mover o Empty move tudo.
+            nome_empty = os.path.splitext(os.path.basename(self.filepath))[0]
+            empty = bpy.data.objects.new(nome_empty, None)
+            colecao.objects.link(empty)
+            for obj in novos:
+                obj.parent = empty
+                obj.matrix_parent_inverse = empty.matrix_world.inverted()
+            alvos = [empty]
+
         ponto = getattr(self, "_ponto", None)
         bpy.ops.object.select_all(action="DESELECT")
-        for obj in novos:
+        for obj in alvos:
             if ponto is not None and obj.parent is None:
                 obj.location = ponto
             obj.select_set(True)
-        context.view_layer.objects.active = novos[0]
+        context.view_layer.objects.active = alvos[0]
 
-        self.report({"INFO"}, f"{verbo}: {len(novos)} {self.datablock}")
+        self.report({"INFO"}, f"{verbo}: {quantidade} {self.datablock}")
 
         if self.place and context.area and context.area.type == "VIEW_3D":
             # Deixa o que veio grudado no mouse, como o "& Place" do Connecter
