@@ -81,3 +81,26 @@ def test_clicar_na_arvore_emite_dir_selected(arvore):
     arvore.setCurrentItem(alvo)
 
     assert recebidos == ["Texturas"]
+
+
+def test_list_dirs_filtra_por_biblioteca_ativa(conn, tmp_path):
+    """Fatia 69: banco com DUAS bibliotecas indexadas (achado testando a
+    Fatia 68 — sobra de um teste anterior nunca limpa) não pode misturar
+    as pastas de uma na árvore da outra."""
+    outra_root = tmp_path / "outra_lib"
+    (outra_root / "Metais").mkdir(parents=True)
+    (outra_root / "Metais" / "cobre.png").write_bytes(b"p" * 40)
+    outra_id = libraries_repo.get_or_create(conn, outra_root)
+    scan_library(conn, outra_id, outra_root)
+
+    # sem library_id: comportamento antigo, mistura as duas (não quebra
+    # quem já chamava sem esse argumento)
+    assert list_dirs(conn) == [
+        "Metais", "Modelos", "Modelos/Cadeiras", "Texturas",
+    ]
+
+    lib_id = libraries_repo.get_or_create(conn, tmp_path / "lib")
+    assert list_dirs(conn, library_id=lib_id) == [
+        "Modelos", "Modelos/Cadeiras", "Texturas",
+    ]
+    assert list_dirs(conn, library_id=outra_id) == ["Metais"]

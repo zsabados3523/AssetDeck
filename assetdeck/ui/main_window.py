@@ -27,6 +27,7 @@ from assetdeck import __version__
 from assetdeck import batch_rename
 from assetdeck.db.repos import assets as assets_repo
 from assetdeck.db.repos import collections as collections_repo
+from assetdeck.db.repos import libraries as libraries_repo
 from assetdeck.db.repos import previews as previews_repo
 from assetdeck.db.repos import properties as properties_repo
 from assetdeck.db.repos import smart_collections as smart_collections_repo
@@ -87,6 +88,11 @@ class MainWindow(QMainWindow):
         super().__init__()
         self._conn = conn  # conexão da thread da UI: SÓ leitura
         self._library_root = Path(library_root)
+        # Biblioteca ATIVA (Fatia 69) — resolvida uma vez, usada pra
+        # restringir grade/árvore de pastas/contagens a ela. Sem isso, um
+        # banco com mais de uma biblioteca indexada (ex.: sobra de um
+        # teste anterior nunca limpa) mistura os assets das duas.
+        self._library_id = libraries_repo.get_or_create(conn, self._library_root)
         self._thumbs_dir = thumbs_dir
         self._db_path = db_path
         self._scan = ScanController(db_path, self._library_root, parent=self)
@@ -172,7 +178,8 @@ class MainWindow(QMainWindow):
         self.rescan_btn.clicked.connect(self.start_scan)
 
         # --- pastas + grid + detalhes ---
-        self.model = AssetGridModel(conn, self._library_root, self._pipeline, parent=self)
+        self.model = AssetGridModel(conn, self._library_root, self._pipeline,
+                                    library_id=self._library_id, parent=self)
         self.grid = AssetGridView()
         self.grid.setModel(self.model)
         self.grid.selectionModel().currentChanged.connect(self._on_selection)
@@ -457,7 +464,7 @@ class MainWindow(QMainWindow):
         ainda deixava o breadcrumb mostrando a pasta antiga. Agora a pasta é
         restaurada (ou cai na raiz, se sumiu do disco)."""
         anterior = self.history.current()
-        self.folders.reload(self._conn)
+        self.folders.reload(self._conn, library_id=self._library_id)
         self.tags.reload(self._conn)
         self.collections.reload(self._conn)
         self.smart_collections.reload(self._conn)
@@ -472,7 +479,8 @@ class MainWindow(QMainWindow):
         """Contagem por categoria respeitando os filtros ativos (menos o de
         categoria) — é o número que cada botão da barra exibe."""
         return assets_repo.count_by_category(
-            self._conn, CATEGORIES, **self._current_filters_dict())
+            self._conn, CATEGORIES, library_id=self._library_id,
+            **self._current_filters_dict())
 
     def _current_filters_dict(self) -> dict:
         """O dicionário de filtros ativos — o mesmo que `list_for_grid`

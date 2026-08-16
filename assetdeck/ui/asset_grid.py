@@ -68,10 +68,15 @@ HAS_TAGS_ROLE = Qt.ItemDataRole.UserRole + 6  # True = asset tem 1+ tag (Fatia 6
 
 class AssetGridModel(QAbstractListModel):
     def __init__(self, conn: sqlite3.Connection, library_root: Path,
-                 pipeline: ThumbnailPipeline, parent=None) -> None:
+                 pipeline: ThumbnailPipeline, library_id: int | None = None,
+                 parent=None) -> None:
         super().__init__(parent)
         self._conn = conn
         self._root = library_root
+        # Biblioteca ATIVA (Fatia 69) — não é um filtro que o Rafael
+        # escolhe, é o contexto da sessão inteira; restringe a grade sem
+        # precisar tocar em set_filters/_current_filters_dict.
+        self._library_id = library_id
         self._pipeline = pipeline
         self._pipeline.ready.connect(self._on_thumb_ready)
         self._rows: list[sqlite3.Row] = []
@@ -186,6 +191,7 @@ class AssetGridModel(QAbstractListModel):
             category_filters=self._category_filters,
             dominant_color=self._dominant_color,
             sort_by=self._sort_by, sort_dir=self._sort_dir,
+            library_id=self._library_id,
         )
         self._row_by_asset = {r["id"]: i for i, r in enumerate(self._rows)}
         self.endResetModel()
@@ -198,7 +204,8 @@ class AssetGridModel(QAbstractListModel):
         mapas não-capa dos sets (o modo expandido precisa deles prontos)."""
         items = [
             (r["id"], self._root / r["rel_path"], r["content_hash"])
-            for r in assets_repo.list_for_grid(self._conn, expand_sets=True)
+            for r in assets_repo.list_for_grid(
+                self._conn, expand_sets=True, library_id=self._library_id)
             if r["missing_since"] is None and can_preview(self._root / r["rel_path"])
         ]
         self._pipeline.warmup(items)

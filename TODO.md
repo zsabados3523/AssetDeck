@@ -1930,3 +1930,66 @@ fix).
 funcionando — modelo da testlib (Link & Place, dá pra mover o Empty
 pai), material `.blend` só-material, textura solta em cima de um objeto
 específico. Fatia mergeada na `main`.
+
+### ☑ Fatia 69 — Grade/pastas filtram pela biblioteca ativa
+A Fatia 68 confirmou na prática um risco que já estava registrado no
+roadmap ("Múltiplas bibliotecas", Fase 5): o banco de dev tem 72.244
+assets órfãos da biblioteca real do SSD (`library_id=2`), sobra de um
+teste de 2026-08-04 nunca limpo, e `assets_repo._build_where`/
+`list_for_grid`/`count_by_category` e `folder_tree.list_dirs` não
+filtravam por `library_id` — a grade e a árvore de pastas mostravam os
+assets das DUAS bibliotecas misturados, mesmo com o app configurado só
+pra testlib. Arrastar um item que na verdade veio da biblioteca real
+pro Blender montava o caminho contra a raiz ATIVA (testlib) e dava
+"arquivo não encontrado", porque esse arquivo nunca esteve lá.
+
+**Decisão de escopo:** o Rafael pediu pra NÃO apagar os dados órfãos do
+banco por ora — então esta fatia ataca a causa pela via CORRETA mesmo
+sem a limpeza: fazer as consultas respeitarem a biblioteca ativa, que é
+exatamente o requisito já previsto pra "Múltiplas bibliotecas" (não é
+gambiarra pra contornar o banco sujo, é o fix que teria que existir de
+qualquer jeito antes de oferecer trocar de biblioteca na UI). Fica de
+fora, de propósito: qualquer UI nova pra anexar/trocar biblioteca (isso
+precisa de mockup — ver memória `mockup-antes-de-mudanca-de-layout-ou-
+menu`) e a limpeza dos dados órfãos em si.
+
+- `assets_repo._build_where`/`list_for_grid` ganharam `library_id: int
+  | None = None` — `None` preserva o comportamento de antes (todas as
+  bibliotecas, é o que os testes existentes e Smart Collections antigas
+  esperam). `count_by_category` já repassava `**filtros` pra
+  `_build_where`, então passou a respeitar sozinho, sem mudança própria.
+- `folder_tree.list_dirs`/`FolderTree.reload` ganharam o mesmo parâmetro.
+- `AssetGridModel.__init__` ganhou `library_id` — **não** entra em
+  `set_filters`/`_current_filters_dict()` de propósito: não é uma
+  escolha do Rafael como busca/tag/nota, é o CONTEXTO da sessão inteira;
+  se entrasse ali, ia parar salvo dentro de Smart Collections e do
+  `ui_state` persistido (Fatia 54), travando a busca num id que pode não
+  fazer sentido mais tarde.
+- `MainWindow.__init__` resolve `self._library_id` uma vez
+  (`libraries_repo.get_or_create`) e passa pros três pontos acima
+  (model, `folders.reload`, `_category_counts`). As chamadas ad-hoc já
+  existentes de `libraries_repo.get_or_create` espalhadas pelo arquivo
+  (render, exportar seleção, etc.) não foram tocadas — continuam
+  redundantes mas corretas, fora do escopo do bug relatado.
+- `AssetGridModel._warmup()` também ganhou o filtro — sem ele, abrir o
+  app com o banco sujo pré-aquecia thumbnail de 72 mil arquivos que nem
+  existem sob a raiz atual, trabalho puro perdido.
+
+**Gap conhecido, não fechado nesta fatia:** `category_bar.py` monta o
+checklist de EXTENSÕES por categoria via `assets_repo.extension_counts`,
+que também não filtra por `library_id` — com o banco sujo, o Rafael
+pode ver uma extensão no filtro que não existe em nenhum arquivo da
+testlib. Cosmético (não trava nada, só um item de checklist a mais),
+registrado aqui em vez de inflar o escopo desta fatia.
+
+**14 testes novos/ajustados:** `tests/test_multi_library_filter.py`
+(novo — duas bibliotecas sintéticas com tipos e contagens diferentes de
+propósito, confirma `list_for_grid`/`count_by_category` isolados por
+`library_id` e o comportamento antigo preservado sem o argumento) e
+`tests/test_folder_tree.py` (1 teste novo, mesma ideia pra `list_dirs`).
+
+**Não verificado com a testlib real ainda** (o banco sujo de verdade só
+existe fora do ambiente de teste) — pendente de confirmação do Rafael:
+reabrir o app e ver se as pastas/contagens da testlib batem com o de
+sempre (não pode ter mudado nada visível pra quem só tem uma
+biblioteca).
