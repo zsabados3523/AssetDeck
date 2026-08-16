@@ -46,6 +46,7 @@ from assetdeck.sidecar import writer as sidecar_writer
 from assetdeck.ui.duplicates_dialog import DuplicatesDialog
 from assetdeck.ui.filter_button import FilterButton
 from assetdeck.ui.folder_tree import FolderTree
+from assetdeck.ui.library_switcher import LibrarySwitcher
 from assetdeck.ui.preview_popup import PreviewPopup
 from assetdeck.ui.property_defs_dialog import PropertyDefsDialog
 from assetdeck.ui.relocate_dialog import RelocateDialog
@@ -772,21 +773,66 @@ class MainWindow(QMainWindow):
         self._brand_widget = marca
         barra.setCornerWidget(marca, Qt.Corner.TopLeftCorner)
 
-        # À direita vai o que NÃO aparece em nenhum outro lugar da tela: qual
-        # biblioteca está aberta (são várias desde a Fatia 41) e em que modo.
-        # A contagem de assets, que o mockup punha aqui, já está no cabeçalho
-        # da lista E no rodapé — um terceiro lugar seria ruído.
+        # À direita vai o que NÃO aparece em nenhum outro lugar da tela:
+        # biblioteca ativa (Fatia 70: virou seletor de verdade — o banco
+        # pode ter mais de uma registrada) e o modo (claro/escuro). A
+        # contagem de assets, que o mockup punha aqui, já está no
+        # cabeçalho da lista E no rodapé — um terceiro lugar seria ruído.
+        contexto = QWidget()
+        contexto_layout = QHBoxLayout(contexto)
+        contexto_layout.setContentsMargins(0, 0, 12, 0)
+        contexto_layout.setSpacing(2)
+        self.library_switcher = LibrarySwitcher(self._conn, self._library_id)
+        self.library_switcher.switch_requested.connect(self._on_switch_library)
         self.brand_context = QLabel()
         self.brand_context.setObjectName("brandContext")
+        contexto_layout.addWidget(self.library_switcher)
+        contexto_layout.addWidget(self.brand_context)
+
+        # Mesmo motivo do `_brand_widget` acima: sem a referência em `self`,
+        # o Python coleta `contexto` assim que a função retorna.
+        self._contexto_widget = contexto
         self.statusBar()  # garante a barra criada antes do primeiro update
-        barra.setCornerWidget(self.brand_context, Qt.Corner.TopRightCorner)
+        barra.setCornerWidget(contexto, Qt.Corner.TopRightCorner)
         self._update_brand_context()
 
     def _update_brand_context(self) -> None:
         from assetdeck import config  # import local, como o resto do arquivo
 
         modo = "Escuro" if config.load_config().get("theme_mode") == "escuro" else "Claro"
-        self.brand_context.setText(f"{self._library_root.name}  ·  {modo}   ")
+        self.brand_context.setText(f"{modo}   ")
+
+    def _on_switch_library(self, root_path: str) -> None:
+        """Biblioteca escolhida no `LibrarySwitcher` (Fatia 70) — trocar de
+        verdade exige reabrir o app: `library_root`/`library_id` são
+        resolvidos uma vez em `app.py`, ANTES da `MainWindow` existir, e o
+        `ScanController`/`ThumbnailPipeline`/modelo da grade são todos
+        construídos em cima disso. Reconstruir tudo ao vivo é risco
+        desproporcional ao ganho — fechar e abrir de novo já passa pelo
+        fluxo normal de inicialização, sem precisar de nenhum código novo
+        lá."""
+        from PySide6.QtWidgets import QMessageBox
+
+        from assetdeck import config
+
+        nome = Path(root_path).name
+        escolha = QMessageBox.question(
+            self, "Trocar de biblioteca",
+            f'Trocar a biblioteca ativa para "{nome}"?\n\n{root_path}\n\n'
+            "O AssetDeck precisa fechar e abrir de novo pra aplicar — a "
+            "próxima abertura reindexa essa pasta (pode demorar se ela "
+            "for grande).",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if escolha != QMessageBox.StandardButton.Yes:
+            return
+
+        cfg = config.load_config()
+        cfg["library_root"] = root_path
+        config.save_config(cfg)
+        log.info("Biblioteca ativa trocada para %s — fechando pra aplicar.", root_path)
+        self.close()
 
     def _setup_atalhos_globais(self) -> None:
         """Fatia 67: os 5 menus de topo viraram a janela de configurações
@@ -1188,7 +1234,7 @@ class MainWindow(QMainWindow):
         barra.setValue(min(posicao, barra.maximum()))
 
     def refresh_count(self) -> int:
-        total = assets_repo.count_active(self._conn)
+        total = assets_repo.count_active(self._conn, library_id=self._library_id)
         shown = self.model.rowCount()
         texto = f"{total} assets" if shown == total else f"{shown} de {total} assets"
         selecionados = len(self._selected_asset_ids())
@@ -1208,7 +1254,8 @@ class MainWindow(QMainWindow):
         # acompanhe uma reindexação sem precisar de um gancho próprio.
         from assetdeck.ui.details_panel import human_size
 
-        self.footer_size.setText(human_size(assets_repo.total_bytes(self._conn)))
+        self.footer_size.setText(
+            human_size(assets_repo.total_bytes(self._conn, library_id=self._library_id)))
         return total
 
     # ---- seleção / detalhes ----
