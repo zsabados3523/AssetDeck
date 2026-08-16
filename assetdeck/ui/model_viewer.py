@@ -1,8 +1,11 @@
-"""Visualizador de modelo 3D com OpenGL — POC da Fase 6.
+"""Visualizador de modelo 3D com OpenGL — Fase 6.
 
-Escopo fechado com o Rafael: só `.obj`, câmera orbitando, sem MTL/textura
-ainda. Prova que dá pra ler e desenhar um modelo de verdade antes de
-comprometer uma fatia grande (múltiplos formatos, painel de detalhes).
+Começou como POC só de `.obj`; a Fatia 72 trouxe `.fbx` (via `assimp-py`,
+lê a geometria direto) e `.blend` (via o próprio Blender headless, ver
+`model3d/blend_loader.py` — não existe parser de terceiros confiável pro
+formato binário fechado). `model3d/loader.py` escolhe o loader certo pela
+extensão; este módulo só desenha o que qualquer um deles devolver. Ainda
+sem MTL/textura — cor única, câmera orbitando.
 
 Mesmo padrão do visualizador de HDRI (Fatia 34/65):
 - Parser/câmera (`model3d/obj_parser.py`, `ui/orbit_camera.py`) sem
@@ -34,7 +37,8 @@ from PySide6.QtOpenGL import (
 from PySide6.QtOpenGLWidgets import QOpenGLWidget
 from PySide6.QtWidgets import QDialog, QHBoxLayout, QLabel, QVBoxLayout
 
-from assetdeck.model3d.obj_parser import Mesh, parse_obj
+from assetdeck.model3d.loader import load_mesh
+from assetdeck.model3d.obj_parser import Mesh
 from assetdeck.ui.orbit_camera import OrbitCamera
 
 log = logging.getLogger(__name__)
@@ -94,14 +98,15 @@ class _Signaller(QObject):
 
 
 class _LoadJob(QRunnable):
-    def __init__(self, sig: _Signaller, path: Path) -> None:
+    def __init__(self, sig: _Signaller, path: Path, content_hash: str | None) -> None:
         super().__init__()
         self._sig = sig
         self._path = path
+        self._content_hash = content_hash
 
     def run(self) -> None:
         try:
-            self._sig.loaded.emit(parse_obj(self._path))
+            self._sig.loaded.emit(load_mesh(self._path, self._content_hash))
         except Exception as exc:
             log.exception("Não consegui ler o modelo %s", self._path)
             self._sig.failed.emit(str(exc))
@@ -246,12 +251,15 @@ class ModelViewer(QDialog):
         self._sig.loaded.connect(self._on_loaded)
         self._sig.failed.connect(self._on_failed)
 
-    def show_for(self, path: Path) -> None:
+    def show_for(self, path: Path, content_hash: str | None = None) -> None:
+        """`content_hash` só é preciso pra `.blend` (cache da exportação
+        via Blender) — as outras extensões ignoram."""
         self.setWindowTitle(f"Modelo — {path.name}")
-        self.status.setText("Carregando…")
+        self.status.setText("Carregando…" if path.suffix.lower() != ".blend"
+                            else "Lendo geometria do .blend (via Blender)…")
         self.show()
         self.raise_()
-        QThreadPool.globalInstance().start(_LoadJob(self._sig, path))
+        QThreadPool.globalInstance().start(_LoadJob(self._sig, path, content_hash))
 
     def _on_loaded(self, mesh: Mesh) -> None:
         self.view.set_mesh(mesh)
