@@ -42,8 +42,9 @@ abaixo pra checklist completo e plano de cada fase):
   `.obj`, câmera orbitando) antes de comprometer fatia grande.
 - Fase 7 — Sessão de revisão visual AO VIVO com o Rafael (hover que muda
   de cor, tema escuro "ofuscando", painel de detalhes denso, "mudar
-  visual" geral, visual da `SettingsWindow` nova) — precisa dele na tela,
-  não dá pra fatiar sozinho sem ele apontando o que incomoda.
+  visual" geral, visual da `SettingsWindow` nova, visual do
+  `LibrarySwitcher` — ver checklist abaixo) — precisa dele na tela, não
+  dá pra fatiar sozinho sem ele apontando o que incomoda.
 
 **Pendências registradas, não resolvidas:**
 - Janelinha do HDRI ainda pisca na primeira abertura por sessão (ver
@@ -1338,6 +1339,12 @@ travam o roadmap — revisar quando sobrar uma folga):
   verdade — Rafael confirmou em 2026-08-14, pediu pra registrar e seguir
   em frente). Candidato: pré-aquecer o contexto GL antes do primeiro uso
   real, num momento que ele não note.
+- ☐ Visual do `LibrarySwitcher` (Fatia 70) — funciona certo, mas o Rafael
+  confirmou que gostaria do visual mais parecido com o mockup aprovado
+  (linhas de 2 alturas com nome + caminho, bolinha cheia/vazia marcando a
+  ativa, em vez do texto corrido de uma `QAction` só). Ele pediu pra
+  deixar pra tratar junto da Fase 7 (revisão visual ao vivo), não como
+  fatia isolada agora.
 
 ### ☑ Fatia 59 — Nome do asset cortado no card
 
@@ -2050,7 +2057,9 @@ sendo escaneada, não todas). 2 testes de `test_main_window.py` ajustados
 **Deu certo quando:** testado com screenshot contra a testlib real —
 botão aparece no canto ("assetdeck-testlib ▾ · Claro"), rodapé com
 números corretos da testlib.
-**Pendente de confirmação do Rafael na tela real:** abrir o menu, ver a
-lista de bibliotecas (inclusive a real do SSD, ainda no banco), tentar
-"Adicionar biblioteca…" e trocar de biblioteca de verdade (confirma que
-o app fecha e a reabertura traz a biblioteca nova).
+**Confirmado pelo Rafael na tela real (2026-08-16): funciona.** Ajuste
+pedido, registrado no checklist de pendências soltas acima em vez de
+virar fatia isolada agora: o visual do menu (linhas de 2 alturas com
+caminho + bolinha, como no mockup) fica pra Fase 7, junto da revisão
+visual geral — o `QMenu` de `QAction`s simples que existe hoje já
+resolve funcionalmente. Fatia mergeada na `main`.
