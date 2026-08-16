@@ -1,11 +1,13 @@
 """Append/Link de .blend com presets — inspirado no fluxo do Connecter.
 
-Soltar um .blend vindo do AssetDeck importa DIRETO (Append & Place, como
-Objects) — sem menu, sem perguntar nada (Fatia 68). Segurar Shift ao
-soltar abre o menu antigo com o que importar (Objects / Materials /
-Collections) e como (Append ou Link), além das variantes "& Place", que
-deixam o que veio grudado no mouse para você posicionar com um clique —
-pra quem quiser escolher em vez do padrão.
+Soltar um .blend vindo do AssetDeck importa DIRETO, sem menu, sem
+perguntar nada (Fatia 68): olha o conteúdo do arquivo e escolhe sozinho
+Objects/Materials/Collections (o que existir), sempre em modo **Link**
+(não Append — biblioteca grande, escolha do Rafael: o .blend final não
+pode inchar copiando tudo pra dentro) e "& Place", que deixa o que veio
+grudado no mouse para você posicionar com um clique. Segurar Shift ao
+soltar abre o menu antigo (Append/Link × Objects/Materials/Collections)
+pra quem quiser escolher na mão.
 """
 
 from __future__ import annotations
@@ -234,13 +236,41 @@ class ASSETDECK_OT_drop_blend(Operator):
             bpy.ops.wm.call_menu(name=ASSETDECK_MT_drop_blend.bl_idname)
             return {"FINISHED"}
 
-        # Padrão (Fatia 68): pula o menu, importa como Objects com
-        # Append & Place — o objeto vem grudado no mouse pra você
-        # posicionar com um clique, é o próprio feedback visual de "onde
-        # vai colocar". Shift ao soltar abre o menu de novo (acima).
+        # Padrão (Fatia 68): pula o menu, escolhendo sozinho o que dá pra
+        # importar — Object/Material/Collection não é exigência do
+        # Blender, é o próprio add-on que decide. Alguns .blend do
+        # Rafael são packs de MATERIAL puro (só node group, sem malha
+        # nenhuma) — nesses, "objects" sempre dava vazio e cancelava em
+        # silêncio (o bug real por trás do "nada acontece" ao soltar um
+        # material). Olhar o conteúdo primeiro custa pouco (só lista os
+        # nomes, não carrega dado nenhum) e evita isso.
+        try:
+            conteudo = _conteudo(caminho)
+        except Exception as exc:
+            self.report({"ERROR"}, f"Falha ao ler o .blend: {exc}")
+            return {"CANCELLED"}
+
+        if conteudo["objects"]:
+            datablock = "objects"
+        elif conteudo["materials"]:
+            datablock = "materials"
+        elif conteudo["collections"]:
+            datablock = "collections"
+        else:
+            self.report({"WARNING"},
+                        "Este .blend não tem objetos, materiais nem "
+                        "coleções pra importar.")
+            return {"CANCELLED"}
+
+        # Objects/Collections vêm grudados no mouse (Link & Place); um
+        # material puro aplica direto no objeto sob o mouse (mesma mira
+        # de _aplicar_materiais/drop_texture) — os dois são o feedback
+        # visual de "onde vai parar", sem precisar escolher no menu.
+        # Link (não Append) por escolha do Rafael: biblioteca grande,
+        # arquivo .blend final não pode inchar copiando tudo pra dentro.
         return bpy.ops.assetdeck.import_blend(
-            "INVOKE_DEFAULT", filepath=caminho, datablock="objects",
-            link=False, place=True,
+            "INVOKE_DEFAULT", filepath=caminho, datablock=datablock,
+            link=True, place=True,
         )
 
     def execute(self, context):
