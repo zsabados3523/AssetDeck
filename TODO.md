@@ -1831,6 +1831,46 @@ quebra): registro/desregistro do add-on sem erro; `import_blend` e
 `drop_blend` sem Shift trazem o objeto pra cena SEM abrir menu (antes
 disso não dava pra nem testar sem travar esperando UI); `drop_texture`
 sem a ponte configurada cancela graciosamente (sem exceção Python).
-**Pendente de confirmação do Rafael na tela real:** arrastar um modelo e
-uma textura de verdade no Blender — a sensação do "gruda no mouse" e do
-"seleciona o objeto que recebeu o material" só dá pra julgar vendo.
+
+**Primeiro teste do Rafael na tela real achou 3 problemas, os 3
+investigados e 2 corrigidos na mesma fatia:**
+
+1. **".blend não encontrado" ao arrastar um asset da biblioteca REAL do
+   SSD.** Causa raiz, confirmada com uma consulta direta no banco: o
+   banco de dev ainda tem **72.244 assets** da biblioteca real
+   (`library_id=2`), de um teste de 2026-08-04 que nunca foi limpo —
+   mesmo com o app configurado pra testlib agora. As consultas que
+   montam a grade/árvore de pastas não filtram por `library_id` (o
+   risco já estava registrado no roadmap, item "Múltiplas bibliotecas",
+   Fase 5). Resultado: a grade mistura os assets das duas bibliotecas, e
+   arrastar um que veio do SSD tenta montar o caminho contra a raiz da
+   testlib (a ativa) — erra sempre, porque esse arquivo nunca esteve lá.
+   **Não corrigido ainda** — Rafael pediu pra não mexer no banco por
+   ora. Continua valendo só testar com assets que são mesmo da testlib
+   até ele decidir limpar.
+2. **Material "não fazia nada".** Causa raiz: TODO `.blend` no banco
+   (as duas bibliotecas) está classificado só como `model` — não existe
+   uma categoria separada pra ".blend que é só material". Alguns packs
+   de material do Rafael são `.blend` com um Material pronto e NENHUM
+   objeto dentro — e o código só tentava "objects" primeiro, achava
+   vazio, cancelava em silêncio. **Corrigido:** `ASSETDECK_OT_drop_blend`
+   agora espia o conteúdo do arquivo (`_conteudo()`, já existia, nunca
+   tinha sido usada) antes de decidir — sem objetos mas com materiais,
+   importa como Materials e aplica no objeto sob o mouse (mesma mira do
+   `drop_texture`). Sem objetos nem materiais, mas com coleções, importa
+   Collections. Testado no Blender de verdade headless com um `.blend`
+   só-material construído na hora — aplicou certo.
+3. **Pergunta do Rafael: Append ia deixar o arquivo pesado demais numa
+   biblioteca grande — não seria melhor Link por padrão?** Decisão dele,
+   não minha: perguntei o trade-off (Link é leve mas quebra se o SSD
+   remontar em outro ponto, problema que já aconteceu antes — Fatia 53;
+   Append é pesado mas nunca quebra por isso). **Ele escolheu Link.**
+   `link=False` virou `link=True` nos dois caminhos (objects/collections
+   E materials) — confirmado no teste headless que o datablock importado
+   tem `.library` preenchido (é link de verdade, não cópia).
+
+**Verificado de novo depois dos 3 fixes:** 787 testes verdes (mesmas 4
+falhas conhecidas, sem relação).
+**Pendente de confirmação do Rafael na tela real:** reteste completo —
+modelo da testlib (Link & Place), material `.blend` só-material, textura
+solta em cima de um objeto específico.
