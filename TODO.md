@@ -13,23 +13,39 @@ apontar para a testlib para a próxima fase de desenvolvimento.
 Próxima fase: **F5 — v2.0**, roadmap fechado com o Rafael em 2026-08-02
 (14 fatias, 31 a 44 — ver seção própria abaixo). Começando pela Fatia 31.
 
-## Estado atual (2026-08-02)
+## Estado atual (2026-08-15)
 
-**F0, F1, F2 e F3 completos.** **F4 (redesign visual) completo e mergeado
-na `main`**, confirmado pelo Rafael na tela.
+**F0 a F5 completos.** Em andamento: **F6 — Polydex + ajustes de UX/visual**
+(roadmap na seção própria, mais abaixo), fatiado a partir da comparação com
+o Polydex (Poliigon) e uma lista grande de ajustes que o Rafael levantou
+usando o app de verdade.
 
 | | |
 |---|---|
-| Testes | 308 verdes (`pytest -q`) |
-| Schema | migrations 001–005 aplicadas (ver SCHEMA.md) |
-| Biblioteca de trabalho | testlib: 750 arquivos → 391 assets → **127 visíveis** (dependências ocultas) |
-| Add-on do Blender | v0.4.0, Blender 5.2 Flatpak |
+| Testes | 765 verdes (`pytest -q`) — 4 falhas conhecidas e sem relação (`test_render.py`/`test_missing_textures.py`, dependem do Blender de verdade rodando no ambiente) |
+| Última fatia mergeada | **Fatia 67** — janela única de configurações (era 5 menus de topo), engrenagem no canto inferior-esquerdo |
+| Onde trabalhar | `/home/rafael/00 - PROJETOS/assetdeck-correcoes` (worktree isolado — **NÃO** a pasta `assetdeck` original, HEAD solta de propósito lá). Ver memória `assetdeck-worktree-isolado`. |
+| Biblioteca de dev | `/home/rafael/00 - PROJETOS/assetdeck-testlib` — NUNCA apontar pra outra (regra do CLAUDE.md) |
+| Schema | migrations 001–006 aplicadas (ver SCHEMA.md) |
+| Add-on do Blender | Blender 5.2 Flatpak |
 | Tema visual | claro estilo Craft, monocromático — ver F4 abaixo |
 
-Próximo item já com direção definida: **executável / entrada no menu de
-aplicativos do Zorin** (F4, mais abaixo, ✅ concluído). O resto da F4 ainda
-não tem direção (auto-tagging, checagem seamless, etc.) — decisão do
-Rafael, agora em levantamento para o roadmap pós-Alpha 1.0.
+**Próximos itens do roadmap F6** (ordem sugerida, ver seção "F6" mais
+abaixo pra checklist completo e plano de cada fase):
+- Fase 5 — Simplificar import pro Blender (pular o menu Object/Material/
+  Collection do `.blend`, já mapeado com arquivo:linha); Múltiplas
+  bibliotecas (schema já pronto, `libraries` table — risco real já
+  identificado: `folder_tree`/`assets_repo` não filtram por
+  `library_id` hoje).
+- Fase 6 — Visualizador 3D: Rafael pediu PROVA DE CONCEITO primeiro (só
+  `.obj`, câmera orbitando) antes de comprometer fatia grande.
+- Fase 7 — Sessão de revisão visual AO VIVO com o Rafael (hover que muda
+  de cor, tema escuro "ofuscando", painel de detalhes denso, "mudar
+  visual" geral, visual da `SettingsWindow` nova) — precisa dele na tela,
+  não dá pra fatiar sozinho sem ele apontando o que incomoda.
+
+Pendência menor registrada: janelinha do HDRI ainda pisca na primeira
+abertura por sessão (ver checklist do F6).
 
 ## Como ler este arquivo
 Uma fatia por vez, em branch própria. Cada fatia termina com: pytest verde,
