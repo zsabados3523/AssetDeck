@@ -670,3 +670,40 @@ def test_todo_botao_com_hover_por_id_tambem_define_pressed(qapp):
         "estes botões têm :hover por ID mas nenhum :pressed — o clique some "
         f"por especificidade: {sorted(faltando)}"
     )
+
+
+# --------------------------------------------------- pastilha (Fatia 76) --
+
+@pytest.mark.parametrize("fonte", list(theme.FONTS))
+def test_o_raio_da_pastilha_cabe_na_altura_do_botao(qapp, fonte):
+    """Armadilha do Qt que só aparece na tela: quando `border-radius` passa
+    de METADE da altura do widget, o Qt **descarta a regra inteira** em vez
+    de cortar o raio — o botão volta a ser um retângulo, sem erro nenhum.
+
+    A 1ª tentativa desta fatia usou `999px` de propósito ("o Qt corta"), e o
+    resultado foi botão quadrado na tela. Também não adianta `50%`: o Qt
+    ignora. Como a altura do botão depende da FONTE, o teste roda pra cada
+    uma — se alguma encolher os botões a ponto de 18px passar da metade, as
+    pastilhas de categoria/filtro silenciosamente viram retângulos.
+    """
+    from assetdeck.ui.categories import CATEGORIES
+    from assetdeck.ui.category_bar import CategoryButton
+    from assetdeck.ui.filter_button import FilterButton
+    from assetdeck.ui.main_window import PALETA_CORES
+
+    theme.apply_theme(qapp, theme.Variant(font=fonte))
+    raio = int(theme.build_tokens(theme.Variant(font=fonte))["radius_pill"].removesuffix("px"))
+
+    botoes = [
+        ("CategoryButton", CategoryButton(CATEGORIES[0])),
+        ("FilterButton", FilterButton("palette", PALETA_CORES, swatch=True)),
+    ]
+    for nome, b in botoes:
+        b.show()
+        qapp.processEvents()
+        altura = b.sizeHint().height()
+        assert raio <= altura / 2, (
+            f"{nome} (fonte {fonte}) tem {altura}px de altura; um raio de "
+            f"{raio}px passa da metade e o Qt descarta o arredondamento"
+        )
+        b.close()

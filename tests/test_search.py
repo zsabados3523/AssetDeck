@@ -248,3 +248,49 @@ def test_filtro_por_cor_dominante(conn, lib_colorida):
 
 def test_filtro_por_cor_dominante_sem_cor_traz_tudo(conn, lib_colorida):
     assert len(assets_repo.list_for_grid(conn, dominant_color=None)) == 3
+
+
+# ------------------------------------------ cor perceptual (Fatia 76) --
+
+def test_verde_da_paleta_acha_folhagem_dessaturada():
+    """Regressão do bug que o Rafael relatou: "clico para filtrar por cor
+    verde e as texturas de folha nem aparecem".
+
+    Folha fotográfica é verde-oliva DESSATURADO. Com distância euclidiana em
+    RGB ela ficava a ~94 do verde da paleta, contra uma tolerância de 90 —
+    passava raspando, e "Verde" devolvia ZERO numa biblioteca cheia de
+    folhagem. Estes hex saíram de arquivos reais da testlib.
+    """
+    from assetdeck.db.connection import _color_distance
+    from assetdeck.db.repos.assets import COLOR_TOLERANCE
+    from assetdeck.ui.main_window import PALETA_CORES
+
+    verde = dict((rot, val) for rot, val in PALETA_CORES)["Verde"]
+    for folha in ("#4f6338", "#7e8d70", "#79876a", "#4a5d37"):
+        d = _color_distance(folha, verde)
+        assert d <= COLOR_TOLERANCE, f"{folha} ficou fora do verde ({d:.1f})"
+
+
+def test_a_cor_nao_vaza_entre_familias_distantes():
+    """A tolerância não pode ser afrouxada até tudo casar com tudo — é o
+    outro jeito de o filtro virar inútil."""
+    from assetdeck.db.connection import _color_distance
+    from assetdeck.db.repos.assets import COLOR_TOLERANCE
+
+    verde = "#43a047"
+    for estranho in ("#f1c40f", "#2980b9", "#7f5539", "#8e44ad"):
+        d = _color_distance(estranho, verde)
+        assert d > COLOR_TOLERANCE, f"{estranho} não devia casar com verde ({d:.1f})"
+
+
+def test_cinza_e_cor_nunca_se_misturam():
+    """Acromático (cinza/branco/preto) e colorido são famílias diferentes:
+    filtrar "Cinza" não pode trazer folhagem, nem "Verde" trazer concreto."""
+    from assetdeck.db.connection import _color_distance
+    from assetdeck.db.repos.assets import COLOR_TOLERANCE
+
+    assert _color_distance("#a4a4a4", "#43a047") > COLOR_TOLERANCE
+    assert _color_distance("#4f6338", "#7f8c8d") > COLOR_TOLERANCE
+    # …mas os acromáticos ainda se distinguem ENTRE si por claro/escuro.
+    assert _color_distance("#f5f5f5", "#1a1a1a") > COLOR_TOLERANCE
+    assert _color_distance("#eeeeee", "#f5f5f5") <= COLOR_TOLERANCE

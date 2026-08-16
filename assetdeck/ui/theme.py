@@ -520,6 +520,16 @@ def build_tokens(variant: Variant = DEFAULT) -> dict[str, str]:
         "radius_panel": f"{raio_painel}px",
         "radius_card": f"{raio_card}px",
         "radius_control": f"{raio_controle}px",
+        # Pastilha (Fatia 76): pontas em semicírculo nos botões de categoria e
+        # de filtro. O valor tem de ser CONCRETO e no máximo METADE da altura
+        # do botão — descoberto na marra: o Qt não aceita `50%`, e quando o
+        # raio passa da metade da altura ele DESCARTA a regra inteira em
+        # silêncio, deixando o canto reto (a 1ª tentativa usou `999px`
+        # justamente pra "deixar o Qt cortar", e o resultado foi botão
+        # quadrado). Medido com os botões reais: categoria 39px de altura,
+        # filtro 37px — 18px é a metade do menor. `test_theme.py` falha se
+        # algum deles encolher a ponto de o raio parar de valer.
+        "radius_pill": "18px",
 
         "pad_s": "4px",
         "pad_m": "8px",
