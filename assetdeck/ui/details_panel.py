@@ -10,6 +10,7 @@ from PySide6.QtCore import Qt, QUrl, Signal
 from PySide6.QtGui import QDesktopServices, QIcon, QPixmap
 from PySide6.QtWidgets import (
     QFormLayout,
+    QHBoxLayout,
     QLabel,
     QPlainTextEdit,
     QPushButton,
@@ -29,6 +30,109 @@ def human_size(n: int) -> str:
             return f"{n:.1f} {unit}" if unit != "B" else f"{n} B"
         n /= 1024
     return f"{n:.1f} GB"
+
+
+class _Secao(QWidget):
+    """Bloco colapsável do painel de detalhes (Fatia 79).
+
+    O painel empilhava seis blocos SEMPRE abertos: a rolagem passava de duas
+    telas e as ações do topo saíam de vista antes do fim. Agora cada bloco
+    abre e fecha, e o estado sobrevive entre sessões (ver
+    `secoes_expandidas`/`restaurar_secoes`, gravadas junto do resto do layout
+    pela `MainWindow`).
+
+    O cabeçalho é um `QWidget` clicável, não um `QToolButton`: precisa de
+    seta à esquerda, título no meio e CONTADOR à direita — três coisas com
+    alinhamentos diferentes, que um botão comum não posiciona. O contador é o
+    que faz fechar valer a pena: dá pra saber que existem 3 tags sem abrir.
+    """
+
+    alternada = Signal()
+
+    def __init__(self, titulo: str, chave: str, *, aberta: bool = True,
+                 parent=None) -> None:
+        super().__init__(parent)
+        self.chave = chave
+        self._aberta = aberta
+
+        self._seta = QLabel()
+        self._seta.setFixedWidth(12)
+        self._titulo = QLabel(titulo.upper())
+        self._titulo.setObjectName("secTitulo")
+        self._contador = QLabel()
+        self._contador.setObjectName("secContador")
+        self._contador.setVisible(False)
+
+        self._cabecalho = QWidget()
+        self._cabecalho.setObjectName("secHeader")
+        self._cabecalho.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self._cabecalho.setCursor(Qt.CursorShape.PointingHandCursor)
+        ch = QHBoxLayout(self._cabecalho)
+        ch.setContentsMargins(6, 5, 6, 5)
+        ch.setSpacing(6)
+        ch.addWidget(self._seta)
+        ch.addWidget(self._titulo)
+        ch.addStretch(1)
+        ch.addWidget(self._contador)
+        self._cabecalho.mouseReleaseEvent = self._clique
+
+        self.corpo = QWidget()
+        self._corpo_layout = QVBoxLayout(self.corpo)
+        self._corpo_layout.setContentsMargins(6, 0, 0, 8)
+        self._corpo_layout.setSpacing(6)
+
+        raiz = QVBoxLayout(self)
+        raiz.setContentsMargins(0, 0, 0, 0)
+        raiz.setSpacing(0)
+        raiz.addWidget(self._cabecalho)
+        raiz.addWidget(self.corpo)
+
+        self.corpo.setVisible(aberta)
+        self.refresh_theme()
+
+    # ---- API ----
+
+    def add(self, item) -> None:
+        """Aceita widget ou layout — as seções têm dos dois."""
+        from PySide6.QtWidgets import QLayout
+
+        if isinstance(item, QLayout):
+            self._corpo_layout.addLayout(item)
+        else:
+            self._corpo_layout.addWidget(item)
+
+    def set_contador(self, n: int | None) -> None:
+        """`None` esconde o contador (seções que não contam nada)."""
+        if n is None:
+            self._contador.setVisible(False)
+            return
+        self._contador.setText(str(n))
+        self._contador.setVisible(True)
+
+    def esta_aberta(self) -> bool:
+        return self._aberta
+
+    def set_aberta(self, aberta: bool) -> None:
+        self._aberta = bool(aberta)
+        self.corpo.setVisible(self._aberta)
+        self.refresh_theme()
+
+    def refresh_theme(self) -> None:
+        """A seta é tingida à mão (não passa pelo QSS), então precisa ser
+        refeita quando o modo claro/escuro troca — mesmo padrão do favorito
+        aqui do lado."""
+        from assetdeck.ui import icons as _icons
+
+        nome = "chevron-down" if self._aberta else "chevron-right"
+        self._seta.setPixmap(
+            _icons.pixmap(nome, theme.current_colors()["text_muted"], 11))
+
+    # ---- interno ----
+
+    def _clique(self, event) -> None:
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.set_aberta(not self._aberta)
+            self.alternada.emit()
 
 
 class DetailsPanel(QWidget):
@@ -75,26 +179,60 @@ class DetailsPanel(QWidget):
         self.f_size = QLabel("—")
         self.f_format = QLabel("—")
         self.f_path = QLabel("—")
-        self.f_path.setWordWrap(True)
+        # NÃO quebra linha (Fatia 79): um caminho de biblioteca não tem
+        # espaços onde quebrar, então o `minimumSizeHint` de um QLabel com
+        # `wordWrap` vira a largura da MAIOR palavra — medido em 345px num
+        # painel cujo conteúdo cabe em 260px. Isso empurrava o painel inteiro
+        # pra 422px e fazia surgir rolagem lateral (ou corte, depois que ela
+        # foi desligada). Agora o texto é elidido no MEIO — começo e fim de um
+        # caminho são o que identificam o arquivo — e o caminho completo fica
+        # no tooltip.
+        self.f_path.setWordWrap(False)
+        self._caminho_completo = "—"
+        self._elidindo = False
+        self.f_path.installEventFilter(self)
 
-        # Ficha técnica: rótulo apagado à esquerda, valor à direita.
-        # O QFormLayout alinhava os dois à esquerda, com o valor começando
-        # logo depois do rótulo mais longo — cinco linhas com o valor em
-        # cinco posições diferentes, impossíveis de varrer com o olho.
+        # PASTILHAS (Fatia 79, mockup aprovado): formato, tipo e tamanho são
+        # três respostas curtas que ocupavam três das cinco linhas da ficha
+        # técnica. Viraram chips na altura do nome — leitura imediata, e a
+        # ficha fica só com o que é longo de verdade (resolução e caminho).
+        for chip in (self.f_format, self.f_type, self.f_size):
+            chip.setObjectName("chip")
+            chip.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.f_format.setObjectName("chipForte")  # o formato é o que se procura
+        chips = QHBoxLayout()
+        chips.setSpacing(5)
+        chips.setContentsMargins(0, 0, 0, 0)
+        for chip in (self.f_format, self.f_type, self.f_size):
+            chips.addWidget(chip, 0, Qt.AlignmentFlag.AlignLeft)
+        chips.addStretch(1)
+        self._chips_row = QWidget()
+        self._chips_row.setLayout(chips)
+
+        # O que sobra na ficha técnica: rótulo apagado à esquerda, valor à
+        # direita. O QFormLayout alinhava os dois à esquerda, com o valor
+        # começando logo depois do rótulo mais longo — linhas com o valor em
+        # posições diferentes, impossíveis de varrer com o olho.
         form = QVBoxLayout()
         form.setSpacing(2)
         for rotulo, campo in (
-            ("Tipo", self.f_type),
             ("Resolução", self.f_dims),
-            ("Tamanho", self.f_size),
-            ("Formato", self.f_format),
             ("Caminho", self.f_path),
         ):
             form.addWidget(self._kv_row(rotulo, campo))
 
-        self.open_folder_btn = QPushButton("Abrir pasta")
+        # Ícone-só e lado a lado do principal (Fatia 79): "Abrir pasta" e
+        # "Favorito" não precisavam de uma linha inteira cada. O texto vira
+        # tooltip — some da tela, não da interface.
+        self.open_folder_btn = QPushButton()
+        self.open_folder_btn.setObjectName("acaoIcone")
+        self.open_folder_btn.setToolTip("Abrir pasta")
+        self.open_folder_btn.setAccessibleName("Abrir pasta")
+        # Largura fixa: sem isto o QPushButton reserva a largura mínima de um
+        # botão COM TEXTO e sobra um retângulo vazio do lado do "Abrir".
+        self.open_folder_btn.setFixedWidth(38)
         self.open_folder_btn.clicked.connect(self._open_folder)
-        self.open_file_btn = QPushButton("Abrir com app padrão")
+        self.open_file_btn = QPushButton("Abrir")
         # UM botão principal por tela (regra do tema): abrir o arquivo é a
         # ação que se espera de um gerenciador de assets — as outras são
         # apoio.
@@ -131,8 +269,12 @@ class DetailsPanel(QWidget):
         self._star_filled = _icons.icon("star-filled", theme.current_colors()["accent"])
         self._star_outline = _icons.icon("star-outline", theme.current_colors()["text_muted"])
 
-        self.fav_btn = QPushButton("Favorito")
+        self.fav_btn = QPushButton()
+        self.fav_btn.setObjectName("acaoIcone")
+        self.fav_btn.setToolTip("Favorito")
+        self.fav_btn.setAccessibleName("Favorito")
         self.fav_btn.setIconSize(_QSize(16, 16))
+        self.fav_btn.setFixedWidth(38)   # mesmo motivo do "Abrir pasta"
         self.fav_btn.setCheckable(True)
         self.fav_btn.toggled.connect(self._on_fav_toggled)
 
@@ -140,13 +282,12 @@ class DetailsPanel(QWidget):
         # tag/nota de estrela/favorito valem para todos
         self.multi_label = QLabel()
         self.multi_label.setObjectName("multiWarn")
+        self.multi_label.setWordWrap(True)  # senão força a largura do painel
         self.multi_label.setVisible(False)
 
         # Tags com checkbox (forma 2 de taggear): marcar/desmarcar aplica na hora
         from PySide6.QtWidgets import QTreeWidget
 
-        tags_label = QLabel("TAGS")
-        tags_label.setObjectName("sectionTitle")
         self.tags_tree = QTreeWidget()
         self.tags_tree.setHeaderHidden(True)
         self.tags_tree.setMaximumHeight(150)
@@ -154,14 +295,10 @@ class DetailsPanel(QWidget):
         self._loading_tags = False
 
         # Custom properties (EAV tipado) — Fatia 22
-        props_label = QLabel("PROPRIEDADES")
-        props_label.setObjectName("sectionTitle")
         self.props_form = QFormLayout()
         self.manage_props_btn = QPushButton("Gerenciar propriedades…")
         self.manage_props_btn.clicked.connect(self.manage_properties_requested.emit)
 
-        notes_label = QLabel("NOTAS")
-        notes_label.setObjectName("sectionTitle")
         self.notes_edit = QPlainTextEdit()
         self.notes_edit.setPlaceholderText("Anotações suas sobre este asset…")
         self.notes_edit.setMaximumHeight(110)
@@ -183,27 +320,60 @@ class DetailsPanel(QWidget):
         layout.setSpacing(8)
         layout.addWidget(self.preview)
         layout.addWidget(self.name)
-        layout.addLayout(form)
-        # Principal primeiro: é a ação esperada, e ficar acima do apoio é o
-        # que faz a hierarquia ser lida sem precisar da cor.
-        layout.addWidget(self.open_file_btn)
-        layout.addWidget(self.open_folder_btn)
-        layout.addWidget(self.check_textures_btn)
-        layout.addWidget(self.fav_btn)
+        layout.addWidget(self._chips_row)
+
+        # Linha de ação: principal + dois ícones. Antes eram QUATRO botões de
+        # largura cheia empilhados — a hierarquia sumia porque todos tinham o
+        # mesmo peso na tela.
+        acoes = QHBoxLayout()
+        acoes.setSpacing(6)
+        acoes.setContentsMargins(0, 0, 0, 0)
+        acoes.addWidget(self.open_file_btn, 1)
+        acoes.addWidget(self.open_folder_btn)
+        acoes.addWidget(self.fav_btn)
+        self._acoes_row = QWidget()
+        self._acoes_row.setLayout(acoes)
+        layout.addWidget(self._acoes_row)
         layout.addWidget(self.multi_label)
-        gallery_label = QLabel("GALERIA DE PREVIEWS")
-        gallery_label.setObjectName("sectionTitle")
-        layout.addWidget(gallery_label)
-        layout.addWidget(self.gallery)
-        layout.addWidget(self.add_preview_btn)
-        layout.addWidget(tags_label)
-        layout.addWidget(self.tags_tree)
-        layout.addWidget(props_label)
-        layout.addLayout(self.props_form)
-        layout.addWidget(self.manage_props_btn)
-        layout.addWidget(notes_label)
-        layout.addWidget(self.notes_edit)
-        layout.addWidget(self.save_notes_btn)
+
+        # As seções, na ordem em que o Rafael aprovou no mockup. As duas
+        # primeiras nascem abertas: são as que ele consulta sempre. O estado
+        # real vem de `restaurar_secoes()` na abertura do app.
+        self.sec_ficha = _Secao("Ficha técnica", "ficha", aberta=True)
+        self.sec_ficha.add(form)
+
+        self.sec_tags = _Secao("Tags", "tags", aberta=True)
+        self.sec_tags.add(self.tags_tree)
+
+        self.sec_galeria = _Secao("Galeria de previews", "galeria", aberta=False)
+        self.sec_galeria.add(self.gallery)
+        self.sec_galeria.add(self.add_preview_btn)
+
+        self.sec_props = _Secao("Propriedades", "props", aberta=False)
+        self.sec_props.add(self.props_form)
+        self.sec_props.add(self.manage_props_btn)
+
+        self.sec_notas = _Secao("Notas", "notas", aberta=False)
+        self.sec_notas.add(self.notes_edit)
+        self.sec_notas.add(self.save_notes_btn)
+
+        # "Checar texturas" só existe pra .blend, então não merece espaço fixo
+        # na vista principal — vira manutenção, fechada por padrão.
+        self.sec_manutencao = _Secao("Manutenção", "manutencao", aberta=False)
+        self.sec_manutencao.add(self.check_textures_btn)
+
+        self._secoes = [
+            self.sec_ficha, self.sec_tags, self.sec_galeria,
+            self.sec_props, self.sec_notas, self.sec_manutencao,
+        ]
+        for secao in self._secoes:
+            layout.addWidget(secao)
+
+        # Pinta os ícones tingidos à mão (pasta, estrela, setas das seções)
+        # já na construção — `refresh_theme` existia só pra troca de modo ao
+        # vivo, e sem esta chamada o "Abrir pasta" nascia vazio na tela.
+        self.refresh_theme()
+
         layout.addStretch()
 
         from PySide6.QtWidgets import QFrame, QScrollArea
@@ -218,6 +388,13 @@ class DetailsPanel(QWidget):
         # (é um QWidget anônimo, sem objectName, criado pelo próprio Qt);
         # a saída certa é desligar o preenchimento automático direto aqui.
         scroll.viewport().setAutoFillBackground(False)
+        # NUNCA rolar de lado (Fatia 79): um painel de detalhes tem largura
+        # fixa e conteúdo que quebra linha — barra horizontal aqui só aparece
+        # quando alguma coisa não coube, e esconder metade de um caminho atrás
+        # de uma rolagem lateral é pior do que quebrá-lo em duas linhas. Sem
+        # isto, um caminho longo com a árvore de tags aberta fazia a barra
+        # surgir e comer altura do painel.
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scroll.setWidget(content)
         content.setAutoFillBackground(False)
 
@@ -247,7 +424,12 @@ class DetailsPanel(QWidget):
             Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
         )
         lay.addWidget(rot)
-        lay.addStretch(1)
+        # SEM espaçador entre os dois (Fatia 79): o `addStretch` que havia
+        # aqui dividia a sobra com o valor, e o rótulo do caminho recebia
+        # menos da metade da linha — a elisão comia quase o caminho inteiro
+        # ("01 - M...do.jpg" num painel com espaço de sobra). O
+        # `AlignRight` do campo já encosta o texto na direita; quem empurra
+        # não precisa ser um espaçador.
         lay.addWidget(campo, stretch=1)
         return linha
 
@@ -291,11 +473,49 @@ class DetailsPanel(QWidget):
         self.f_dims.setText(self._read_dims(path))
         self.f_size.setText(human_size(row["size_bytes"]))
         self.f_format.setText(path.suffix.lstrip(".").upper() or "—")
-        self.f_path.setText(row["rel_path"])
         sumido = row["missing_since"] is not None
-        if sumido:
-            self.f_path.setText(f"{row['rel_path']}  ⚠ ARQUIVO SUMIDO")
+        self._caminho_completo = (
+            f"{row['rel_path']}  ⚠ ARQUIVO SUMIDO" if sumido else row["rel_path"]
+        )
+        self._elidir_caminho()
         self._set_buttons(not sumido, path)
+
+    def _elidir_caminho(self) -> None:
+        """Encaixa o caminho na largura disponível, cortando o MEIO — começo
+        e fim são o que identificam o arquivo. O completo fica no tooltip."""
+        from PySide6.QtGui import QFontMetrics
+
+        if self._elidindo:
+            return
+        largura = max(60, self.f_path.width())
+        metrica = QFontMetrics(self.f_path.font())
+        curto = metrica.elidedText(
+            self._caminho_completo, Qt.TextElideMode.ElideMiddle, largura)
+        if curto == self.f_path.text():
+            return
+        # `setText` pode mudar o tamanho do rótulo e disparar outro Resize —
+        # sem esta trava a elisão se chama em cadeia.
+        self._elidindo = True
+        try:
+            self.f_path.setText(curto)
+            self.f_path.setToolTip(self._caminho_completo)
+        finally:
+            self._elidindo = False
+
+    def eventFilter(self, obj, event):  # noqa: N802 (nome vem do Qt)
+        """Reencaixa o caminho quando o RÓTULO muda de largura.
+
+        Não dá pra fazer isso só no `show_asset`: ali o layout ainda não
+        distribuiu a largura final, e o texto saía elidido pra bem menos do
+        que cabia (visto na tela — um caminho inteiro virava "01 - M...o.jpg"
+        num painel com espaço de sobra). O rótulo avisa quando de fato ganha
+        seu tamanho, e é aí que a conta fecha.
+        """
+        from PySide6.QtCore import QEvent
+
+        if obj is self.f_path and event.type() == QEvent.Type.Resize:
+            self._elidir_caminho()
+        return super().eventFilter(obj, event)
 
     def _read_dims(self, path: Path) -> str:
         """Resolução lida na hora (só formatos raster; os demais mostram —)."""
@@ -328,6 +548,7 @@ class DetailsPanel(QWidget):
             item.setData(32, p["id"])
             self.gallery.addItem(item)
         self.gallery.setVisible(bool(previews))
+        self.sec_galeria.set_contador(len(previews))
 
     def _gallery_menu(self, pos) -> None:
         from PySide6.QtWidgets import QMenu
@@ -354,6 +575,22 @@ class DetailsPanel(QWidget):
         self.multi_label.setText(f"⚠ Editando {n} assets selecionados de uma vez")
         self.multi_label.setVisible(n > 1)
 
+    # ---- seções colapsáveis (Fatia 79) ----
+
+    def secoes_expandidas(self) -> dict[str, bool]:
+        """Estado de abre/fecha, pra `MainWindow` gravar junto do layout."""
+        return {s.chave: s.esta_aberta() for s in self._secoes}
+
+    def restaurar_secoes(self, estado: dict) -> None:
+        """Reaplica o estado salvo. Chave desconhecida é ignorada de
+        propósito: seção renomeada ou removida numa versão futura não pode
+        derrubar a restauração do resto do layout."""
+        if not isinstance(estado, dict):
+            return
+        for secao in self._secoes:
+            if secao.chave in estado:
+                secao.set_aberta(bool(estado[secao.chave]))
+
     def refresh_theme(self) -> None:
         """Reconstrói os ícones de estrela com a cor do modo atual (Fatia
         43) e redesenha o estado atual de favorito com eles."""
@@ -362,6 +599,11 @@ class DetailsPanel(QWidget):
         self._star_filled = _icons.icon("star-filled", theme.current_colors()["accent"])
         self._star_outline = _icons.icon("star-outline", theme.current_colors()["text_muted"])
         self.fav_btn.setIcon(self._star_filled if self.fav_btn.isChecked() else self._star_outline)
+        self.open_folder_btn.setIcon(
+            _icons.icon("nav-pastas", theme.current_colors()["text_muted"], 16))
+        # As setas das seções também são tingidas à mão (Fatia 79).
+        for secao in self._secoes:
+            secao.refresh_theme()
 
     def load_starred(self, starred: bool) -> None:
         self.fav_btn.blockSignals(True)
@@ -398,6 +640,9 @@ class DetailsPanel(QWidget):
             itens[r["id"]] = item
         self.tags_tree.expandAll()
         self._loading_tags = False
+        # Conta as MARCADAS, não o vocabulário inteiro: a pergunta que o
+        # contador responde é "quantas tags ESTE asset tem".
+        self.sec_tags.set_contador(len(checked_ids))
 
     def _on_tag_item_changed(self, item, _col) -> None:
         if self._loading_tags or self._current_asset_id is None:
@@ -452,6 +697,7 @@ class DetailsPanel(QWidget):
                     lambda date, pid=pid: self._emit_property(pid, date.toString("yyyy-MM-dd"))
                 )
             self.props_form.addRow(f"{d['name']}:", w)
+        self.sec_props.set_contador(len(defs))
 
     def _emit_property(self, property_id: int, value) -> None:
         if self._current_asset_id is not None:
