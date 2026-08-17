@@ -2912,3 +2912,47 @@ ANTES do `connect`. Registrado no teste pra não parecer bug depois.
 
 **Falta da Fase 7:** Etapa 3 (`HdriViewer`/`ModelViewer` + diálogos
 secundários) e a investigação da abertura lenta.
+
+### ☐ Fatia 81 — preview por nome não alcançava a organização real da biblioteca
+
+Rafael, testando: "assinalar previews automaticamente pelo nome não
+parece estar funcionando". **Não era regressão da Fatia 80** — a função
+funcionava, mas o critério dela não alcançava a biblioteca dele.
+
+**Causa:** a Fatia 57 casava modelo e imagem só na MESMA pasta. Os packs
+comerciais separam em pastas IRMÃS:
+
+    Maxtree Vol 148/MT_PM_V148_Blender_CyclesEevee/MT_..._01_01.blend
+    Maxtree Vol 148/MT_PM_V148_Thumbnails/        MT_..._01_01.jpg
+
+Nome idêntico, pasta diferente — todos descartados. Medido antes de
+mexer em qualquer código: na biblioteca real dele, **0 de 2.530** modelos
+sem capa casavam; aceitando pasta irmã, 342. Na testlib, de 8 para 69
+(80 no teste real depois, com o banco recém-varrido).
+
+**Correção:** o escopo do casamento passou de "mesma pasta" para "mesmo
+PACOTE" (`_pacote_de` — a pasta que contém a pasta do arquivo). Continua
+só aplicando quando o par é único NOS DOIS SENTIDOS.
+
+**Dois achados que valem mais que o patch:**
+
+1. **Um teste da Fatia 57 pegou um exagero da minha primeira versão.**
+   Eu subia um nível sempre — e na RAIZ da biblioteca isso vira
+   "biblioteca inteira": `MOVEIS/Banco.blend` passava a casar com
+   `OUTRAPASTA/Banco.jpg`. O `test_pasta_diferente_nao_casa_por_engano`
+   falhou e obrigou a ressalva: raiz não é pacote. O teste continua verde,
+   agora guardando esse limite (docstring atualizada explicando).
+2. **Ambiguidade do lado do MODELO nunca era detectada.** `modelos` era um
+   dict de par único: dois modelos de mesmo nome e o segundo SOBRESCREVIA
+   o primeiro em silêncio, dando a capa a um deles ao acaso. Raro com a
+   regra de mesma pasta; comum com pasta irmã — o Maxtree entrega o mesmo
+   modelo numa pasta por renderizador (CyclesEevee e Octane). Agora vira
+   lista, é detectado, pulado e logado.
+
+**Testes novos (3):** casa com imagem em pasta irmã do mesmo pacote; dois
+modelos de mesmo nome no pacote é ambíguo (nenhum ganha capa); não
+atravessa a fronteira do pacote (Vol 148 não pega prévia do Vol 149).
+
+**Registrado à parte:** o `library_root` do app está apontando pra
+`/mnt/sdb1/.../BIBLIOTECA {CURA}`, não pra testlib — provavelmente o
+Rafael trocou pelo seletor novo enquanto testava. Avisado a ele.
