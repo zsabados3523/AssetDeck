@@ -2691,3 +2691,43 @@ REAL dele foi de `escuro` pra `claro` por causa dos meus testes de tela
 (não consegui reproduzir qual script; o app em si foi verificado duas
 vezes e NÃO troca sozinho, e a suíte isola config com `monkeypatch`).
 Restaurado pra `escuro`.
+
+### ☐ Fatia 77 — Fase 7, Etapa 1: seletor de biblioteca
+
+"O botão de trocar de biblioteca parece meio cru." Era um `#ghost` com o
+nome da biblioteca em texto pelado — sem ícone, sem contorno, nada dizendo
+que abria menu —, e cada entrada do menu era um `QAction` de UMA linha
+("nome · N assets"). O formato de duas linhas com bolinha já estava
+desenhado e aprovado no mockup da Fatia 70, e tinha ficado pendente desde
+então (registrado no checklist do F6).
+
+- **Botão:** `objectName` próprio (`libSwitch`), ícone à esquerda, seta do
+  menu puxada pro centro-direita (mesma correção das pastilhas de filtro —
+  no canto ela cai onde a curva já cortou o fundo) e os mesmos estados de
+  elevação do resto do app.
+- **Menu:** cada biblioteca virou `QWidgetAction` com duas linhas — nome em
+  cima; caminho (elidido no MEIO, que é onde dá pra perder sem confundir
+  duas pastas de mesmo nome) e contagem de assets embaixo. A ativa tem
+  bolinha e nome na cor de destaque. "Adicionar biblioteca…" continua
+  `QAction` normal de propósito: é a única entrada que a navegação por
+  teclado ainda alcança, já que `QWidgetAction` sai das setas.
+
+**Testes:** 3 dos 8 quebraram — não porque o comportamento mudou, mas
+porque liam `isCheckable()`/`isChecked()`/`trigger()`, que só existem no
+`QAction` antigo. Reescritos pra verificar o MESMO comportamento no
+formato novo (a ativa é a que tem a bolinha acesa; o clique entra pelo
+`mouseReleaseEvent` do widget, não por `trigger()`), mais um teste novo
+de que cada linha mostra caminho e contagem.
+
+**Ainda falta da Etapa 1:** a densidade do **painel de detalhes** (6+
+seções empilhadas sem colapsar). Isso é REORGANIZAÇÃO de layout, não
+estilo — pela regra do projeto ("mockup antes de mudança de layout"), não
+dá pra tocar sem mockup aprovado antes. O `PreviewPopup` e o rodapé foram
+conferidos e já herdaram a fundação nova (tokens, elevação, pastilhas) sem
+precisar de mudança própria.
+
+**Fora do código, achado nesta sessão:** o virtualenv em
+`assetdeck/.venv` SUMIU no meio da sessão (não foi comando meu — nenhum
+`rm` foi executado). O do worktree (`assetdeck-correcoes/.venv`, Python
+3.12.3 + PySide6 6.11.1) está íntegro e passou a ser o usado. Se o Rafael
+rodar o app pela pasta antiga, vai precisar recriar o venv de lá.
