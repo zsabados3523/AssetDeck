@@ -2833,3 +2833,26 @@ estado não derruba a restauração do resto do layout.
 **Com isto a Etapa 1 fecha.** Faltam as Etapas 2 (`SettingsWindow`) e 3
 (`HdriViewer`/`ModelViewer` + diálogos secundários) — e a investigação
 da abertura lenta, que o Rafael pediu pro fim.
+
+### ☐ Fatia 79b — seletor de biblioteca não arredondava (o teste passou com o bug vivo)
+
+"O botão de selecionar a biblioteca ainda não está arredondado." Mesma
+armadilha do Qt já documentada na Fatia 78: raio maior que METADE da
+altura faz o Qt **descartar o arredondamento inteiro**, sem erro. O
+seletor tinha padding próprio (5px) e media 31px — um raio de 18px não
+cabe. Padding igualado ao dos outros botões (8px): vai a 37px, mesma
+altura do botão de filtro, e o raio passa a valer.
+
+**O que falhou de verdade foi a verificação.** O teste
+`test_o_raio_da_pastilha_cabe_na_altura_do_botao`, escrito na Fatia 78
+EXATAMENTE pra isso, passou com o bug vivo — porque listava só
+`CategoryButton` e `FilterButton`. O seletor usa o mesmo `$radius_pill`
+e não estava na lista. Um teste que cobre dois dos três usuários de um
+token não protege o token. `LibrarySwitcher` incluído, e a captura foi
+confirmada revertendo o padding de propósito:
+
+    AssertionError: LibrarySwitcher (fonte sistema) tem 31px de altura;
+    um raio de 18px passa da metade e o Qt descarta o arredondamento
+
+Vale como regra pras próximas: teste de token tem de enumerar TODOS os
+widgets que consomem o token, não uma amostra.

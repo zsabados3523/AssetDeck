@@ -675,7 +675,7 @@ def test_todo_botao_com_hover_por_id_tambem_define_pressed(qapp):
 # --------------------------------------------------- pastilha (Fatia 76) --
 
 @pytest.mark.parametrize("fonte", list(theme.FONTS))
-def test_o_raio_da_pastilha_cabe_na_altura_do_botao(qapp, fonte):
+def test_o_raio_da_pastilha_cabe_na_altura_do_botao(qapp, fonte, tmp_path):
     """Armadilha do Qt que só aparece na tela: quando `border-radius` passa
     de METADE da altura do widget, o Qt **descarta a regra inteira** em vez
     de cortar o raio — o botão volta a ser um retângulo, sem erro nenhum.
@@ -686,17 +686,32 @@ def test_o_raio_da_pastilha_cabe_na_altura_do_botao(qapp, fonte):
     uma — se alguma encolher os botões a ponto de 18px passar da metade, as
     pastilhas de categoria/filtro silenciosamente viram retângulos.
     """
+    from assetdeck.db.connection import connect
+    from assetdeck.db.migrate import apply_migrations
     from assetdeck.ui.categories import CATEGORIES
     from assetdeck.ui.category_bar import CategoryButton
     from assetdeck.ui.filter_button import FilterButton
+    from assetdeck.ui.library_switcher import LibrarySwitcher
     from assetdeck.ui.main_window import PALETA_CORES
 
     theme.apply_theme(qapp, theme.Variant(font=fonte))
     raio = int(theme.build_tokens(theme.Variant(font=fonte))["radius_pill"].removesuffix("px"))
 
+    from pathlib import Path
+
+    conn = connect(Path(tmp_path) / "t.db")
+    apply_migrations(conn)
+
     botoes = [
         ("CategoryButton", CategoryButton(CATEGORIES[0])),
         ("FilterButton", FilterButton("palette", PALETA_CORES, swatch=True)),
+        # O seletor de biblioteca entrou aqui DEPOIS de escapar: ele usa o
+        # mesmo `$radius_pill`, mas tinha padding próprio e menor, então
+        # media 31px — abaixo do dobro do raio. O Qt descartou o
+        # arredondamento em silêncio e o botão ficou quadrado na tela até o
+        # Rafael reclamar. Um teste que cobre só dois dos três usuários do
+        # token não protege o token.
+        ("LibrarySwitcher", LibrarySwitcher(conn, 1)),
     ]
     for nome, b in botoes:
         b.show()
