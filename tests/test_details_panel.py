@@ -78,14 +78,63 @@ def test_a_moldura_da_miniatura_existe_mesmo_vazia(painel):
 
 def test_a_ficha_tecnica_alinha_os_valores_a_direita(painel):
     """O QFormLayout deixava o valor começar logo depois do rótulo mais longo:
-    cinco linhas com o valor em cinco posições diferentes, impossíveis de
-    varrer com o olho. Alinhados à direita, viram uma coluna só."""
+    linhas com o valor em posições diferentes, impossíveis de varrer com o
+    olho. Alinhados à direita, viram uma coluna só.
+
+    Desde a Fatia 79 (mockup aprovado pelo Rafael) sobraram só DOIS campos
+    aqui — os que são de fato longos. Tipo, formato e tamanho viraram
+    pastilhas no topo, ver o teste logo abaixo.
+    """
     from PySide6.QtCore import Qt
 
-    for campo in (painel.f_type, painel.f_dims, painel.f_size,
-                  painel.f_format, painel.f_path):
+    for campo in (painel.f_dims, painel.f_path):
         assert campo.objectName() == "kvValue"
         assert campo.alignment() & Qt.AlignmentFlag.AlignRight
+
+
+def test_formato_tipo_e_tamanho_sao_pastilhas_no_topo(painel):
+    """Fatia 79: eram três das cinco linhas da ficha técnica — respostas
+    curtas demais pra ocupar uma linha inteira cada. Viraram chips na altura
+    do nome, com o FORMATO em destaque (é o que se procura primeiro)."""
+    assert painel.f_format.objectName() == "chipForte"
+    assert painel.f_type.objectName() == "chip"
+    assert painel.f_size.objectName() == "chip"
+
+
+def test_as_secoes_do_painel_abrem_e_fecham(painel):
+    """O painel empilhava seis blocos sempre abertos — a rolagem passava de
+    duas telas. Agora cada um abre e fecha."""
+    assert painel.sec_ficha.esta_aberta() is True
+    assert painel.sec_tags.esta_aberta() is True
+    # As menos usadas nascem fechadas.
+    assert painel.sec_galeria.esta_aberta() is False
+    assert painel.sec_notas.esta_aberta() is False
+
+    painel.sec_notas.set_aberta(True)
+    assert painel.sec_notas.esta_aberta() is True
+    assert painel.sec_notas.corpo.isVisibleTo(painel) is True
+
+
+def test_o_estado_das_secoes_sobrevive_ao_ciclo_de_salvar_e_restaurar(painel):
+    """Fechar uma seção só ajuda se ela continuar fechada amanhã — por isso
+    o estado vai pro `ui_state` junto do resto do layout."""
+    painel.sec_ficha.set_aberta(False)
+    painel.sec_galeria.set_aberta(True)
+    estado = painel.secoes_expandidas()
+
+    # simula a próxima abertura do app: painel novo, estado restaurado
+    outro = type(painel)(painel._root)
+    outro.restaurar_secoes(estado)
+
+    assert outro.sec_ficha.esta_aberta() is False
+    assert outro.sec_galeria.esta_aberta() is True
+
+
+def test_chave_desconhecida_no_estado_nao_derruba_a_restauracao(painel):
+    """Seção renomeada ou removida numa versão futura não pode impedir o
+    resto do layout de voltar."""
+    painel.restaurar_secoes({"secao_que_nao_existe": True, "notas": True})
+    assert painel.sec_notas.esta_aberta() is True
 
 
 def test_so_existe_um_botao_principal_no_painel(painel):
