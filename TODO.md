@@ -2783,3 +2783,76 @@ um + dois ícones, tipo/formato/tamanho em pastilhas e contadores no
 cabeçalho de cada seção. Interativo, nos dois modos, com as cores reais
 do `theme.py`. **Nada de código até ele aprovar** — é reorganização de
 layout, e a regra do projeto pede mockup antes.
+
+### ☐ Fatia 79 — Fase 7, Etapa 1: painel de detalhes (fecha a Etapa 1)
+
+Implementação do mockup que o Rafael aprovou, mais a borda do seletor de
+biblioteca que ele cobrou ("ainda estou esperando a borda").
+
+**Seletor de biblioteca:** borda agora VISÍVEL em repouso (era só no
+hover). Ele está certo — o botão mora na faixa da marca, onde não há
+painel atrás pra apoiá-lo; sem contorno permanente lê como texto.
+
+**Painel de detalhes:**
+- **Seções colapsáveis** (`_Secao`, classe nova): ficha técnica, tags,
+  galeria, propriedades, notas e manutenção. As duas primeiras nascem
+  abertas. Estado gravado no `ui_state` junto do resto do layout —
+  fechar uma seção só ajuda se ela continuar fechada amanhã.
+- **Contador no cabeçalho** (tags marcadas, previews, propriedades). É o
+  que faz fechar valer a pena: dá pra saber que há 3 tags sem abrir.
+- **Quatro botões empilhados viraram um + dois ícones.** "Abrir" leva a
+  linha; pasta e favorito viram ícones de 38px com o texto no tooltip.
+- **Formato, tipo e tamanho viraram pastilhas** no topo. Sobraram na
+  ficha técnica só resolução e caminho — os que são longos de verdade.
+- **"Checar texturas" foi pra "Manutenção"**, fechada: só existe pra
+  `.blend`, não merecia espaço fixo na vista principal.
+
+**Três bugs de largura achados medindo, não olhando:**
+1. O painel rolava LATERALMENTE com um asset selecionado. Desligar a
+   barra horizontal só trocou rolagem por CORTE — o conteúdo continuava
+   maior que o painel.
+2. Causa real, medida (`minimumSizeHint` de cada filho): o rótulo do
+   CAMINHO exigia 345px num painel cujo conteúdo cabe em 260. Um
+   `QLabel` com `wordWrap` não encolhe abaixo da maior PALAVRA, e um
+   caminho de biblioteca não tem espaços onde quebrar. Trocado por
+   elisão no MEIO (começo e fim identificam o arquivo) + caminho
+   completo no tooltip. Conteúdo caiu de 422px pra 260px.
+3. A elisão saía curta demais ("01 - M...do.jpg" com espaço de sobra)
+   por dois motivos somados: era calculada antes do layout distribuir a
+   largura — resolvido com um `eventFilter` no próprio rótulo, que
+   reage quando ele ganha o tamanho real — e o `_kv_row` tinha um
+   `addStretch` entre rótulo e valor que dividia a sobra com o campo.
+   Removido: o `AlignRight` já encosta o texto na direita.
+
+**Testes:** 1 quebrou (`test_a_ficha_tecnica_alinha_os_valores_a_direita`
+listava os cinco campos como `kvValue`) — reescrito pros dois que
+sobraram, mais 4 testes novos: as pastilhas, as seções abrem/fecham, o
+estado sobrevive ao ciclo salvar→restaurar, e chave desconhecida no
+estado não derruba a restauração do resto do layout.
+
+**Com isto a Etapa 1 fecha.** Faltam as Etapas 2 (`SettingsWindow`) e 3
+(`HdriViewer`/`ModelViewer` + diálogos secundários) — e a investigação
+da abertura lenta, que o Rafael pediu pro fim.
+
+### ☐ Fatia 79b — seletor de biblioteca não arredondava (o teste passou com o bug vivo)
+
+"O botão de selecionar a biblioteca ainda não está arredondado." Mesma
+armadilha do Qt já documentada na Fatia 78: raio maior que METADE da
+altura faz o Qt **descartar o arredondamento inteiro**, sem erro. O
+seletor tinha padding próprio (5px) e media 31px — um raio de 18px não
+cabe. Padding igualado ao dos outros botões (8px): vai a 37px, mesma
+altura do botão de filtro, e o raio passa a valer.
+
+**O que falhou de verdade foi a verificação.** O teste
+`test_o_raio_da_pastilha_cabe_na_altura_do_botao`, escrito na Fatia 78
+EXATAMENTE pra isso, passou com o bug vivo — porque listava só
+`CategoryButton` e `FilterButton`. O seletor usa o mesmo `$radius_pill`
+e não estava na lista. Um teste que cobre dois dos três usuários de um
+token não protege o token. `LibrarySwitcher` incluído, e a captura foi
+confirmada revertendo o padding de propósito:
+
+    AssertionError: LibrarySwitcher (fonte sistema) tem 31px de altura;
+    um raio de 18px passa da metade e o Qt descarta o arredondamento
+
+Vale como regra pras próximas: teste de token tem de enumerar TODOS os
+widgets que consomem o token, não uma amostra.

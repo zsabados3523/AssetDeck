@@ -1937,6 +1937,9 @@ class MainWindow(QMainWindow):
             )),
             "icon_size": self.size_slider.value(),
             "tag_tree_expanded_ids": sorted(self.tags._tags_expandidas()),
+            # Seções do painel de detalhes abertas/fechadas (Fatia 79) —
+            # fechar uma seção só ajuda se ela continuar fechada amanhã.
+            "details_sections": self.details.secoes_expandidas(),
             "filters": self._current_filters_dict(),
         }
         config.save_config(cfg)
@@ -1981,6 +1984,10 @@ class MainWindow(QMainWindow):
         expandidas = estado.get("tag_tree_expanded_ids")
         if expandidas is not None:
             self.tags.set_expanded(set(expandidas))
+
+        secoes = estado.get("details_sections")
+        if secoes:
+            self.details.restaurar_secoes(secoes)
 
         filtros = estado.get("filters")
         if filtros:
