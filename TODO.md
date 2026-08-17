@@ -2956,3 +2956,37 @@ atravessa a fronteira do pacote (Vol 148 não pega prévia do Vol 149).
 **Registrado à parte:** o `library_root` do app está apontando pra
 `/mnt/sdb1/.../BIBLIOTECA {CURA}`, não pra testlib — provavelmente o
 Rafael trocou pelo seletor novo enquanto testava. Avisado a ele.
+
+### ☐ Fatia 82 — painel de detalhes cortado e "flickando" (regressão da 79)
+
+"A janela de detalhes está toda ferrada, com algumas coisas flickando…
+ela não aparece por completo também." **Regressão minha da Fatia 79**,
+que só apareceu quando ele trocou pra biblioteca real.
+
+**Causa:** um `QLabel` deixa o CONTEÚDO ditar a largura mínima do layout —
+com `wordWrap` ela vira a maior PALAVRA, sem `wordWrap` vira a linha
+inteira. Os nomes dos packs dele são tokens sem espaço
+(`MT_PM_V139_Cortaderia_selloana_pumila_01_01`). Medido no app dele: o
+NOME exigia 349px e o CAMINHO 284px, num painel cujo miolo tem 272px — o
+conteúdo saía com 361px e era CORTADO, porque a Fatia 79 tinha desligado
+a rolagem lateral (trocou rolagem por corte).
+
+**O flicker era da minha própria correção anterior:** a Fatia 79 elidia o
+TEXTO e reescrevia o rótulo. Só que o texto elidido volta a ser a largura
+mínima do rótulo, e cada mudança de largura disparava outra elisão —
+conteúdo e layout se empurrando.
+
+**Correção:** `_RotuloElidido`, um `QLabel` que guarda o texto inteiro e
+DESENHA elidido no `paintEvent`, com `minimumSizeHint` fixo. O texto nunca
+muda, então não há realimentação: o flicker some por construção, não por
+remendo. Nome e caminho completos ficam no tooltip. Conteúdo caiu de
+361px pra 272px, exatamente a largura do painel.
+
+**Por que só apareceu agora:** na testlib os nomes são curtos
+("Cadeira_POC") e nada estourava o limite. Só a biblioteca real, com
+nomes de pack, ultrapassa — mais um caso de que a verificação visual
+precisa incluir os dados DELE, não só os do teste.
+
+**Testes (2):** nome e caminho longos não alargam o painel (confirmado
+que pega — revertendo o rótulo pra `QLabel` comum ele acusa "o nome exige
+273px"), e o texto completo continua alcançável por `text()`/tooltip.
