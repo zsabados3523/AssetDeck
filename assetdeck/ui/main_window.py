@@ -68,17 +68,24 @@ log = logging.getLogger(__name__)
 # botões de cor pré-definidos em vez de um seletor livre. Um hex
 # representativo por balde; a tolerância de "quão perto conta" mora em
 # assets_repo.COLOR_TOLERANCE, não aqui.
+#
+# Fatia 76: cada tom foi recentrado no MEIO da sua família de matiz, não num
+# tom bonito qualquer. Isso importa desde que a comparação virou perceptual
+# (ver `db/connection._color_distance`): o balde é uma fatia do círculo de
+# cor em volta deste hex, então um verde puxado pro azul — era o caso do
+# `#27ae60`, matiz 145° — deixava a folhagem real (matiz ~88°) fora do
+# alcance. O verde agora está em 122°, no meio do caminho.
 PALETA_CORES = [
     ("Cor: todas", None),
-    ("Vermelho", "#c0392b"),
-    ("Laranja", "#e67e22"),
-    ("Amarelo", "#f1c40f"),
-    ("Verde", "#27ae60"),
-    ("Azul", "#2980b9"),
-    ("Roxo", "#8e44ad"),
-    ("Rosa", "#e84393"),
-    ("Marrom", "#7f5539"),
-    ("Cinza", "#7f8c8d"),
+    ("Vermelho", "#c0392b"),     # ~6°
+    ("Laranja", "#e67e22"),      # ~28°
+    ("Amarelo", "#f1c40f"),      # ~48°
+    ("Verde", "#43a047"),        # ~122° (era #27ae60, 145° — verde-esmeralda)
+    ("Azul", "#2980b9"),         # ~204°
+    ("Roxo", "#8e44ad"),         # ~282°
+    ("Rosa", "#e84393"),         # ~330°
+    ("Marrom", "#7f5539"),       # ~24°, escuro — separado do laranja pelo brilho
+    ("Cinza", "#7f8c8d"),        # acromáticos: distinguidos por claro/escuro
     ("Branco", "#f5f5f5"),
     ("Preto", "#1a1a1a"),
 ]
@@ -247,7 +254,15 @@ class MainWindow(QMainWindow):
         self.details = DetailsPanel(self._library_root)
         self.details.setMinimumWidth(300)
         self.details.setMaximumWidth(380)
-        theme.apply_card_shadow(self.details)
+        # SEM sombra (Fatia 76) — o Rafael viu "a sombra do painel de detalhes
+        # parece estar vazando, tente deixar que nem no grid de assets". Era o
+        # único dos três painéis com `apply_card_shadow`: a lateral e a grade
+        # já usam `make_card(sombra=False)`. Um `QGraphicsDropShadowEffect`
+        # desenha a sombra DENTRO do retângulo que o layout deu ao widget —
+        # como o splitter entrega o espaço exato, ela não tem pra onde ir e
+        # espalha por cima do próprio conteúdo, ainda por cima interagindo com
+        # o `QScrollArea` de dentro. O contorno + a superfície do `#card` já
+        # separam o painel do fundo, que é exatamente como a grade faz.
         self.details.notes_saved.connect(self._on_notes_saved)
         self.details.tag_toggled.connect(self._on_tag_toggled)
         self.details.starred_changed.connect(self._on_starred_changed)

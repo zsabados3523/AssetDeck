@@ -41,6 +41,10 @@ class CategoryButton(QToolButton):
 
     def __init__(self, categoria: Category, parent=None) -> None:
         super().__init__(parent)
+        # Pastilha totalmente arredondada (Fatia 76, pedido do Rafael: "os
+        # botões de filtragem por tipo deveriam ser totalmente arredondados").
+        # O formato vem do QSS via este objectName — nada de setStyleSheet.
+        self.setObjectName("pill")
         self.categoria = categoria
         self._ext_checks: dict[str, QCheckBox] = {}
         self._total = 0

@@ -39,7 +39,7 @@ _BADGE_BG = QColor(0, 0, 0, 140)   # fundo dos selos sobre a miniatura
 
 # Espessura do contorno de SELEÇÃO (Fatia 47) — o único estado que ainda usa
 # contorno. Repouso e hover pararam de ter contorno na Fatia 74: quem separa
-# o card do fundo em hover é o FUNDO próprio do card (`theme.CARD_HOVER`),
+# o card do fundo em hover é o FUNDO próprio do card (`theme.SURFACE_RAISED`),
 # que aparece só sob o cursor, crescendo de leve.
 _BORDA_SELECAO = 2.0
 
@@ -153,20 +153,20 @@ class AssetCardDelegate(QStyledItemDelegate):
         self._pen_selected_border = QColor(pal["accent"])
         self._type_tint_color = QColor(pal["type_tint"])
 
-        # Fundo do card por estado (Fatia 74) — ver `theme.CARD_HOVER` pro
+        # Fundo do card por estado (Fatia 74) — ver `theme.SURFACE_RAISED` pro
         # porquê disto ter substituído a sombra pintada à mão. `_brush_base`
         # é a cor do PAINEL: pintar ela é o mesmo que não pintar nada, e é o
         # ponto de partida da animação (o fundo de hover nasce dela).
         self._brush_base = QColor(base)
-        self._brush_card_hover = QColor(pal["card_hover"])
-        self._brush_card_press = QColor(pal["card_press"])
+        self._brush_card_hover = QColor(pal["surface_raised"])
+        self._brush_card_press = QColor(pal["surface_sunken"])
         # Mesmos três, já com o véu de seleção composto por cima — assim um
         # card selecionado também responde ao mouse, sem precisar compor cor
         # (operação de string) dentro do `paint()`.
         self._brush_selected_hover = QColor(
-            theme.blend(pal["selection"], pal["card_hover"]))
+            theme.blend(pal["selection"], pal["surface_raised"]))
         self._brush_selected_press = QColor(
-            theme.blend(pal["selection"], pal["card_press"]))
+            theme.blend(pal["selection"], pal["surface_sunken"]))
 
         # O raio acompanha a variante ATIVA. Era constante de módulo, avaliada
         # no import a partir de `theme.DEFAULT` — trocar de variante ao vivo
@@ -286,7 +286,7 @@ class AssetCardDelegate(QStyledItemDelegate):
         # repouso PLANO de verdade (não pinta fundo nenhum), hover mostra a
         # pastilha de fundo crescendo de leve, clique "afunda" (tom mais
         # fundo, pastilha no tamanho normal). Tudo DENTRO do retângulo do
-        # card — ver `theme.CARD_HOVER` pro porquê da sombra pintada à mão
+        # card — ver `theme.SURFACE_RAISED` pro porquê da sombra pintada à mão
         # ter sido removida (era recortada pela célula e escurecia o card).
         #
         # O quanto hover está "ligado" vem do progresso ANIMADO

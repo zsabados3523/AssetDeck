@@ -121,12 +121,19 @@ HOVER = (0, 0, 0, 0.035)
 # inteiramente DENTRO do card: nada pra recortar, nada pra escurecer.
 #
 # Os tons são um degrau a partir de `surface` (o painel onde a grade mora):
-# no claro escurecem de leve, no escuro clareiam — em ambos o card lê como
-# "levantado" em relação ao painel. Neutros de propósito, nunca a cor de
-# destaque: o mesmo motivo já registrado em SELECTION logo acima — cor
+# no claro escurecem de leve, no escuro clareiam — em ambos o elemento lê
+# como "levantado" em relação ao painel. Neutros de propósito, nunca a cor
+# de destaque: o mesmo motivo já registrado em SELECTION logo acima — cor
 # atrás de uma miniatura suja a leitura da imagem.
-CARD_HOVER = "#EFEFF4"
-CARD_PRESS = "#E4E4EB"
+#
+# Não são só do card (Fatia 75): BOTÃO e outros controles usam o MESMO
+# degrau pra hover/clique. Antes cada controle usava `$surface_hover`, que é
+# o véu de 3,5% de preto — quase invisível, e a razão de o app inteiro
+# parecer não responder ao mouse. Um degrau só, compartilhado, é o que faz
+# "levantado" e "afundado" quererem dizer a mesma coisa em qualquer lugar da
+# tela; por isso o nome é do ESTADO (raised/sunken), não do widget.
+SURFACE_RAISED = "#EFEFF4"
+SURFACE_SUNKEN = "#E4E4EB"
 
 # Fundo do card quando o asset não tem miniatura. Segue NEUTRO de propósito,
 # mesmo agora que existe cor de destaque: é uma pastilha que aparece dezenas de
@@ -185,13 +192,13 @@ FOCUS_DARK = ACCENT_DARK
 SELECTION_DARK = (255, 255, 255, 0.09)
 HOVER_DARK = (255, 255, 255, 0.06)
 
-# Fundo do card em hover/clique no escuro (Fatia 74) — ver `CARD_HOVER`
-# acima pro porquê de isto não ser uma sombra. Aqui os tons CLAREIAM a
-# partir de `SURFACE_DARK` (#1A1B1F): no escuro, "levantado" é mais claro,
-# não mais escuro — sombra preta sobre fundo quase preto não rende nada
-# (mesmo problema já registrado em `apply_card_shadow()`).
-CARD_HOVER_DARK = "#24252B"
-CARD_PRESS_DARK = "#2C2D34"
+# Degraus de elevação no escuro (Fatia 74/75) — ver `SURFACE_RAISED` acima
+# pro porquê de isto não ser uma sombra. Aqui os tons CLAREIAM a partir de
+# `SURFACE_DARK` (#1A1B1F): no escuro, "levantado" é mais claro, não mais
+# escuro — sombra preta sobre fundo quase preto não rende nada (mesmo
+# problema já registrado em `apply_card_shadow()`).
+SURFACE_RAISED_DARK = "#24252B"
+SURFACE_SUNKEN_DARK = "#2C2D34"
 
 # Mesma decisão do modo claro: pastilha neutra, não azul (ver TYPE_TINT). Aqui
 # ela é ESCURA com texto claro por cima — no escuro, a pastilha cinza-clara que
@@ -210,7 +217,7 @@ _PALETA_CLARA = {
     "warning": WARNING, "danger": DANGER, "ok": OK,
     "popover": POPOVER, "border": BORDER, "border_strong": BORDER_STRONG, "focus": FOCUS,
     "selection": SELECTION, "hover": HOVER,
-    "card_hover": CARD_HOVER, "card_press": CARD_PRESS,
+    "surface_raised": SURFACE_RAISED, "surface_sunken": SURFACE_SUNKEN,
     "type_tint": TYPE_TINT, "on_type_tint": ON_TYPE_TINT,
 }
 _PALETA_ESCURA = {
@@ -223,7 +230,7 @@ _PALETA_ESCURA = {
     "popover": POPOVER_DARK, "border": BORDER_DARK, "border_strong": BORDER_STRONG_DARK,
     "focus": FOCUS_DARK,
     "selection": SELECTION_DARK, "hover": HOVER_DARK,
-    "card_hover": CARD_HOVER_DARK, "card_press": CARD_PRESS_DARK,
+    "surface_raised": SURFACE_RAISED_DARK, "surface_sunken": SURFACE_SUNKEN_DARK,
     "type_tint": TYPE_TINT_DARK, "on_type_tint": ON_TYPE_TINT_DARK,
 }
 
@@ -483,6 +490,10 @@ def build_tokens(variant: Variant = DEFAULT) -> dict[str, str]:
 
         "surface": pal["surface"],
         "surface_hover": rgba_css(pal["hover"]),
+        # Degraus de elevação (Fatia 75) — os MESMOS que o card da grade usa,
+        # agora também para botões e controles. Ver `SURFACE_RAISED`.
+        "surface_raised": pal["surface_raised"],
+        "surface_sunken": pal["surface_sunken"],
         "selection": rgba_css(pal["selection"]),
         "field": pal["field"],
         "popover": pal["popover"],
@@ -509,6 +520,16 @@ def build_tokens(variant: Variant = DEFAULT) -> dict[str, str]:
         "radius_panel": f"{raio_painel}px",
         "radius_card": f"{raio_card}px",
         "radius_control": f"{raio_controle}px",
+        # Pastilha (Fatia 76): pontas em semicírculo nos botões de categoria e
+        # de filtro. O valor tem de ser CONCRETO e no máximo METADE da altura
+        # do botão — descoberto na marra: o Qt não aceita `50%`, e quando o
+        # raio passa da metade da altura ele DESCARTA a regra inteira em
+        # silêncio, deixando o canto reto (a 1ª tentativa usou `999px`
+        # justamente pra "deixar o Qt cortar", e o resultado foi botão
+        # quadrado). Medido com os botões reais: categoria 39px de altura,
+        # filtro 37px — 18px é a metade do menor. `test_theme.py` falha se
+        # algum deles encolher a ponto de o raio parar de valer.
+        "radius_pill": "18px",
 
         "pad_s": "4px",
         "pad_m": "8px",
