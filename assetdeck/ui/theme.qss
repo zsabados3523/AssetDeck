@@ -409,6 +409,86 @@ QToolButton#pill::menu-indicator {
     width: 10px;
 }
 
+/* ------------------------------------------ seletor de biblioteca (F77) -- */
+
+/* O Rafael: "o botão de trocar de biblioteca parece meio cru". Era um
+ * `#ghost` com o nome da biblioteca em texto pelado — sem ícone, sem
+ * contorno, sem nada dizendo que abria um menu. Agora tem ícone à esquerda,
+ * seta à direita e os mesmos estados de elevação do resto do app. Fica em
+ * pastilha porque mora na faixa da marca, onde não há moldura nenhuma pra
+ * apoiá-lo. */
+QToolButton#libSwitch {
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: $radius_pill;
+    padding: 5px 10px;
+    color: $text_muted;
+    font-weight: 600;
+}
+
+QToolButton#libSwitch:hover {
+    background-color: $surface_raised;
+    border: 1px solid $border;
+    color: $text;
+}
+
+QToolButton#libSwitch:pressed {
+    background-color: $surface_sunken;
+    border: 1px solid $border;
+    padding-top: 6px;
+    padding-bottom: 4px;
+}
+
+/* Mesma correção da pastilha de filtro: a seta é desenhada no canto
+ * inferior-direito, que aqui a curva já cortou — puxada pra dentro. */
+QToolButton#libSwitch::menu-indicator {
+    subcontrol-origin: padding;
+    subcontrol-position: center right;
+    right: 2px;
+    width: 10px;
+}
+
+/* Linha do menu: duas alturas de texto + bolinha (ver `_LinhaBiblioteca`).
+ * `#libRow` é um QWidget dentro de um QWidgetAction, e um QWidgetAction NÃO
+ * recebe o realce que o QMenu pinta nos itens normais — por isso o hover
+ * precisa estar aqui. */
+QWidget#libRow {
+    background: transparent;
+    border-radius: $radius_control;
+}
+
+QWidget#libRow:hover {
+    background-color: $surface_raised;
+}
+
+/* Bolinha de "esta é a ativa". Tamanho fixo em Python (8x8); aqui só a cor e
+ * o raio que a deixa redonda. A apagada continua ocupando o mesmo espaço,
+ * senão o texto pularia de lugar entre as linhas. */
+QLabel#libDot {
+    background-color: $accent;
+    border-radius: 4px;
+}
+
+QLabel#libDotOff {
+    background: transparent;
+    border-radius: 4px;
+}
+
+QLabel#libName {
+    color: $accent;
+    font-weight: 600;
+}
+
+QLabel#libNameOff {
+    color: $text;
+    font-weight: 600;
+}
+
+QLabel#libMeta {
+    color: $text_muted;
+    font-size: $font_size_small;
+}
+
 /* Botão sem moldura, para ações discretas (estrelas, ícones do painel). */
 QPushButton#ghost, QToolButton#ghost {
     background: transparent;
@@ -585,6 +665,11 @@ QTreeView, QTreeWidget, QListView, QListWidget, QTableView, QTableWidget {
     outline: none;
     selection-background-color: $selection;
     selection-color: $text;
+    /* Prende o realce da seleção ao `::item` — sem isto o Qt o estende pela
+     * faixa do indicador de expandir, que NÃO é arredondada, e a pastilha do
+     * item aparece com um bloco quadrado grudado à esquerda (Fatia 78). É a
+     * forma suportada de resolver isso; mexer em `::branch` apaga as setas. */
+    show-decoration-selected: 0;
 }
 
 /* A borda entra JÁ AQUI, transparente, e o padding é 1px menor dos dois lados
@@ -594,6 +679,7 @@ QTreeView, QTreeWidget, QListView, QListWidget, QTableView, QTableWidget {
 QTreeView::item, QListWidget::item, QTableView::item {
     padding: 3px 5px;
     border: 1px solid transparent;
+    border-radius: $radius_control;
 }
 
 /* O Rafael, olhando a lateral: "os botões da janela de pastas, tags, barra
@@ -624,13 +710,35 @@ QTreeView::item:selected, QListWidget::item:selected, QTableView::item:selected 
     font-weight: 600;
 }
 
-/* Seleção arredondada só onde NÃO há coluna de indicador (as listas).
- * Na árvore, o indicador de expandir é pintado quadrado pelo estilo e fica um
- * degrau visível ao lado do item arredondado — medido pixel a pixel. Estilizar
- * `QTreeView::branch` para corrigir é pior: o Qt volta a pintar a seleção com
- * o azul padrão dele. Então a árvore usa barra de linha inteira, de propósito. */
 QListWidget::item {
     border-radius: $radius_control;
+}
+
+/* A faixa do indicador de expandir NÃO leva fundo de seleção (Fatia 78).
+ *
+ * O Rafael pediu os itens da árvore arredondados. Só arredondar o `::item`
+ * não bastava: o Qt pintava o realce também nesta faixa, que fica FORA do
+ * `::item`, e sobrava um bloco quadrado grudado à esquerda da pastilha — a
+ * ressalva registrada aqui desde a Fatia 43, que manteve a árvore com barra
+ * de linha inteira até agora.
+ *
+ * Zerar só o `background` apagou as SETAS na primeira tentativa (regra 2 do
+ * cabeçalho deste arquivo, confirmada na tela). Por isso as imagens são
+ * repostas logo abaixo — aí dá pra ter as duas coisas. Os quatro seletores
+ * de `closed`/`open` são os que o Qt exige pra cobrir item com e sem irmãos;
+ * faltando um, aquele caso volta a ficar sem seta. */
+QTreeView::branch {
+    background: $surface;
+}
+
+QTreeView::branch:has-children:!has-siblings:closed,
+QTreeView::branch:closed:has-children:has-siblings {
+    image: url($branch_closed_icon);
+}
+
+QTreeView::branch:open:has-children:!has-siblings,
+QTreeView::branch:open:has-children:has-siblings {
+    image: url($branch_open_icon);
 }
 
 QHeaderView::section {
@@ -812,11 +920,22 @@ QSplitter::handle:hover {
 
 /* Compacto de propósito (pedido do Rafael): é uma linha de status, não
  * precisa da altura padrão do Fusion. */
+/* Respiro lateral maior (Fatia 78): o rodapé encostava nas bordas da janela.
+ * A altura é fixada em Python (`setFixedHeight`) pra sobrar folga em cima e
+ * embaixo — com o teto de 24px que havia antes, o Qt encolhia a barra até o
+ * texto colar nas duas bordas. */
 QStatusBar {
     background: transparent;
     color: $text_muted;
-    padding: 1px 10px;
+    padding: 0 20px;
     font-size: $font_size_small;
+}
+
+/* Os rótulos do rodapé (contagem, tamanho) são `addPermanentWidget`, e o
+ * QStatusBar os estica na altura toda — o texto ficava alinhado ao topo do
+ * próprio rótulo. Sem margem própria eles também colavam um no outro. */
+QStatusBar QLabel {
+    padding: 0 4px;
 }
 
 QStatusBar::item {
