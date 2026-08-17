@@ -542,6 +542,13 @@ def build_tokens(variant: Variant = DEFAULT) -> dict[str, str]:
 
         "check_icon": str(icon_asset_path("check", pal["on_accent"], 12)),
         "chevron_icon": str(icon_asset_path("chevron-down", pal["text_muted"], 12)),
+        # Setas da árvore (Fatia 78). Existem porque zerar o fundo do
+        # `QTreeView::branch` — necessário pra pastilha do item não ganhar um
+        # bloco quadrado ao lado — APAGA as setas que o Fusion desenhava (a
+        # regra 2 do cabeçalho do `theme.qss`, confirmada na tela). Repondo
+        # aqui, o `::branch` pode ficar sem fundo sem perder o indicador.
+        "branch_closed_icon": str(icon_asset_path("chevron-right", pal["text_muted"], 10)),
+        "branch_open_icon": str(icon_asset_path("chevron-down", pal["text_muted"], 10)),
     }
 
 
