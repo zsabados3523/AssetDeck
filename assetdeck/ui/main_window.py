@@ -444,9 +444,26 @@ class MainWindow(QMainWindow):
         self.footer_size = QLabel()
         self.footer_size.setObjectName("muted")
         self.statusBar().addPermanentWidget(self.footer_size)
-        # É uma linha de status, não precisa da altura padrão do Fusion
-        # (pedido do Rafael de enxutar o rodapé).
-        self.statusBar().setMaximumHeight(24)
+        # Altura FIXA em vez de só um teto (Fatia 78, pedido do Rafael:
+        # "deixe centralizado verticalmente nesse espaço em que está, além de
+        # colocar margens maiores das bordas"). Com `setMaximumHeight` o Qt
+        # encolhia a barra até o texto encostar em cima e embaixo; com altura
+        # fixa sobra folga, e o respiro lateral vem do `padding` do
+        # `QStatusBar` no QSS. Continua enxuto — só não espremido.
+        self.statusBar().setFixedHeight(32)
+        self.statusBar().setSizeGripEnabled(False)  # o canto pontilhado comia a margem direita
+        # Margem lateral do rodapé (Fatia 78, "colocar margens maiores das
+        # bordas"). Vale para os widgets permanentes da direita — contagem,
+        # tamanho, LED do Blender —, que é onde mora a informação que fica.
+        #
+        # A MENSAGEM DA ESQUERDA não se move por aqui: o `QStatusBar` a
+        # desenha ele mesmo no `paintEvent`, ignorando tanto o `padding` do
+        # QSS quanto `contentsMargins` (as três formas foram medidas na tela:
+        # o texto seguia a 7px da borda nas três). Movê-la exigiria trocar os
+        # 45 `showMessage()` deste arquivo por um QLabel próprio — e mais 7
+        # testes que leem `currentMessage()`. Não compensa por 11px, mas fica
+        # registrado caso o Rafael queira.
+        self.statusBar().layout().setContentsMargins(18, 0, 18, 0)
 
         self.statusBar().showMessage(f"v{__version__} · banco: {db_path}")
         self._reload_all()
@@ -802,8 +819,15 @@ class MainWindow(QMainWindow):
         self.library_switcher.switch_requested.connect(self._on_switch_library)
         self.brand_context = QLabel()
         self.brand_context.setObjectName("brandContext")
-        contexto_layout.addWidget(self.library_switcher)
-        contexto_layout.addWidget(self.brand_context)
+        # AlignVCenter explícito (Fatia 78, pedido do Rafael: "deixe a parte
+        # de trocar a biblioteca centralizada verticalmente nesse espaço").
+        # Sem isso o QHBoxLayout ESTICA os dois na altura toda do canto da
+        # barra de menus — a pastilha do seletor ficava alta demais e colada
+        # nas bordas de cima e de baixo, em vez de boiar no meio.
+        contexto_layout.addWidget(
+            self.library_switcher, 0, Qt.AlignmentFlag.AlignVCenter)
+        contexto_layout.addWidget(
+            self.brand_context, 0, Qt.AlignmentFlag.AlignVCenter)
 
         # Mesmo motivo do `_brand_widget` acima: sem a referência em `self`,
         # o Python coleta `contexto` assim que a função retorna.
@@ -911,6 +935,7 @@ class MainWindow(QMainWindow):
         self.details.refresh_theme()
         self.sidebar.refresh_theme()
         self._bridge_led.refresh_theme()
+        self.library_switcher.refresh_theme()  # ícone tingido à mão (Fatia 77)
 
         self._search_icon_action.setIcon(icons.icon("search", pal["text_muted"]))
         self.rescan_btn.setIcon(icons.icon("refresh", pal["on_accent"]))

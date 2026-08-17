@@ -2691,3 +2691,95 @@ REAL dele foi de `escuro` pra `claro` por causa dos meus testes de tela
 (não consegui reproduzir qual script; o app em si foi verificado duas
 vezes e NÃO troca sozinho, e a suíte isola config com `monkeypatch`).
 Restaurado pra `escuro`.
+
+### ☐ Fatia 77 — Fase 7, Etapa 1: seletor de biblioteca
+
+"O botão de trocar de biblioteca parece meio cru." Era um `#ghost` com o
+nome da biblioteca em texto pelado — sem ícone, sem contorno, nada dizendo
+que abria menu —, e cada entrada do menu era um `QAction` de UMA linha
+("nome · N assets"). O formato de duas linhas com bolinha já estava
+desenhado e aprovado no mockup da Fatia 70, e tinha ficado pendente desde
+então (registrado no checklist do F6).
+
+- **Botão:** `objectName` próprio (`libSwitch`), ícone à esquerda, seta do
+  menu puxada pro centro-direita (mesma correção das pastilhas de filtro —
+  no canto ela cai onde a curva já cortou o fundo) e os mesmos estados de
+  elevação do resto do app.
+- **Menu:** cada biblioteca virou `QWidgetAction` com duas linhas — nome em
+  cima; caminho (elidido no MEIO, que é onde dá pra perder sem confundir
+  duas pastas de mesmo nome) e contagem de assets embaixo. A ativa tem
+  bolinha e nome na cor de destaque. "Adicionar biblioteca…" continua
+  `QAction` normal de propósito: é a única entrada que a navegação por
+  teclado ainda alcança, já que `QWidgetAction` sai das setas.
+
+**Testes:** 3 dos 8 quebraram — não porque o comportamento mudou, mas
+porque liam `isCheckable()`/`isChecked()`/`trigger()`, que só existem no
+`QAction` antigo. Reescritos pra verificar o MESMO comportamento no
+formato novo (a ativa é a que tem a bolinha acesa; o clique entra pelo
+`mouseReleaseEvent` do widget, não por `trigger()`), mais um teste novo
+de que cada linha mostra caminho e contagem.
+
+**Ainda falta da Etapa 1:** a densidade do **painel de detalhes** (6+
+seções empilhadas sem colapsar). Isso é REORGANIZAÇÃO de layout, não
+estilo — pela regra do projeto ("mockup antes de mudança de layout"), não
+dá pra tocar sem mockup aprovado antes. O `PreviewPopup` e o rodapé foram
+conferidos e já herdaram a fundação nova (tokens, elevação, pastilhas) sem
+precisar de mudança própria.
+
+**Fora do código, achado nesta sessão:** o virtualenv em
+`assetdeck/.venv` SUMIU no meio da sessão (não foi comando meu — nenhum
+`rm` foi executado). O do worktree (`assetdeck-correcoes/.venv`, Python
+3.12.3 + PySide6 6.11.1) está íntegro e passou a ser o usado. Se o Rafael
+rodar o app pela pasta antiga, vai precisar recriar o venv de lá.
+
+### ☐ Fatia 78 — Fase 7, Etapa 1: cantos, centralização e margens
+
+Três ajustes pontuais do Rafael sobre a 77.
+
+**1. Cantos arredondados na árvore (pastas/tags).** Custou mais do que
+parecia. Arredondar só o `QTreeView::item` deixava um BLOCO QUADRADO
+grudado à esquerda da pastilha: o Qt pinta o realce também na faixa do
+indicador de expandir, que fica FORA do `::item`. Era exatamente a
+ressalva registrada aqui desde a Fatia 43 — e foi ela que manteve a
+árvore com barra de linha inteira até agora.
+
+Duas tentativas antes de acertar, as duas conferidas na tela:
+- `show-decoration-selected: 0` na view — sozinho não resolveu; o
+  realce continuou aparecendo na faixa.
+- `QTreeView::branch { background: transparent }` — **apagou todas as
+  setas de expandir**. É a regra 2 do cabeçalho do `theme.qss` valendo
+  na prática: estilizar subcontrole sem repor `image:` some com o
+  desenho do Fusion. Confirmado pintando o `::branch` de VERMELHO num
+  screenshot de diagnóstico, que mostrou a faixa inteira acesa.
+
+Solução: `::branch` com o fundo da SUPERFÍCIE (cobre o realce que vem
+por baixo, em vez de deixar passar) + as setas repostas por `image:`,
+com um `chevron-right.svg` novo desenhado no mesmo traço do
+`chevron-down.svg` que já existia. Os quatro seletores de
+`closed`/`open` são os que o Qt exige pra cobrir item com e sem irmãos.
+
+**2. Seletor de biblioteca centralizado verticalmente.** `AlignVCenter`
+explícito ao adicionar no layout do canto da barra de menus — sem ele o
+`QHBoxLayout` ESTICA o widget na altura toda e a pastilha ficava colada
+nas bordas de cima e de baixo.
+
+**3. Rodapé centralizado e com margens.** Altura passou de teto de 24px
+pra `setFixedHeight(32)` — com teto, o Qt encolhia a barra até o texto
+colar nas duas bordas. Medido depois: 10px de folga acima, 9px abaixo.
+Margem lateral pelo layout (18px) e `setSizeGripEnabled(False)`, que
+comia a margem direita.
+
+**Limite honesto, medido:** a MENSAGEM DA ESQUERDA do rodapé não se
+move. `padding` no QSS, `contentsMargins` do widget e do layout foram
+testados — o texto seguiu a 7px da borda nos três, porque o
+`QStatusBar` desenha essa mensagem ele mesmo no `paintEvent`. Movê-la
+exigiria trocar os 45 `showMessage()` de `main_window.py` por um QLabel
+próprio, mais 7 testes que leem `currentMessage()`. Registrado como
+pendência, não feito — 11px não pagam esse risco sem ele pedir.
+
+**Mockup do painel de detalhes entregue** (o Rafael aprovou fazer):
+seções colapsáveis com estado salvo, quatro botões empilhados virando
+um + dois ícones, tipo/formato/tamanho em pastilhas e contadores no
+cabeçalho de cada seção. Interativo, nos dois modos, com as cores reais
+do `theme.py`. **Nada de código até ele aprovar** — é reorganização de
+layout, e a regra do projeto pede mockup antes.
