@@ -485,11 +485,18 @@ QToolButton#pill::menu-indicator {
  * há painel nenhum atrás pra apoiá-lo; sem contorno permanente ele lê como
  * texto, não como controle. É a exceção deliberada à regra dos botões
  * discretos do app (`#ghost`), que vivem DENTRO de painéis. */
+/* O padding é o MESMO dos outros botões de propósito (Fatia 79b). Com os
+ * 5px que havia aqui o botão media 31px de altura, e um raio de 18px passa
+ * de metade disso — o Qt então DESCARTA o arredondamento inteiro e devolve
+ * um retângulo, sem erro nenhum. Foi exatamente o que o Rafael viu ("o botão
+ * de selecionar a biblioteca ainda não está arredondado"), e é a mesma
+ * armadilha já documentada em `theme.radius_pill`. Com 8px ele vai a 37px,
+ * igual ao botão de filtro, e o raio passa a caber. */
 QToolButton#libSwitch {
     background: transparent;
     border: 1px solid $border;
     border-radius: $radius_pill;
-    padding: 5px 10px;
+    padding: 8px 12px;
     color: $text_muted;
     font-weight: 600;
 }
@@ -503,8 +510,8 @@ QToolButton#libSwitch:hover {
 QToolButton#libSwitch:pressed {
     background-color: $surface_sunken;
     border: 1px solid $border;
-    padding-top: 6px;
-    padding-bottom: 4px;
+    padding-top: 9px;
+    padding-bottom: 7px;
 }
 
 /* Mesma correção da pastilha de filtro: a seta é desenhada no canto
