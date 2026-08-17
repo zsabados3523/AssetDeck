@@ -268,17 +268,17 @@ def test_assinalar_previews_automaticamente_sem_par_de_nome_nao_cria_nada(janela
     assert "Nenhum modelo" in janela.statusBar().currentMessage()
 
 
-def test_settings_window_tem_as_seis_categorias(janela):
+def test_a_barra_de_menus_fica_vazia(janela):
     """Fatia 67: os 5 menus de topo (Arquivo/Editar/Ferramentas/
     Configurações/Janela) viraram uma janela única de configurações,
     acessada pela engrenagem — pedido do Rafael, mockup aprovado antes de
-    programar. Categorias na lateral, uma página por categoria."""
-    nomes = [janela.settings_window._lista.item(i).text()
-             for i in range(janela.settings_window._lista.count())]
-    for esperado in ("Ferramentas", "Blender", "Preferências", "Aparência",
-                     "Painéis e filtros", "Geral"):
-        assert esperado in nomes, f"categoria {esperado!r} não encontrada em {nomes}"
-    # E a barra de menus propriamente dita fica vazia — nenhum QMenu de topo.
+    programar.
+
+    QUAIS são as categorias é assunto de `test_settings_window.py` desde a
+    Fatia 80 (elas foram renomeadas e repartidas lá). O que este teste
+    guarda, e só ele, é a outra metade da Fatia 67: nenhum menu voltou pro
+    topo da janela.
+    """
     # `findChildren(QMenu)` pegaria também o popup do `LibrarySwitcher`
     # (Fatia 70, mora num corner widget da própria barra) — o que prova
     # "sem menu de topo" de verdade é a barra não ter NENHUMA QAction.
