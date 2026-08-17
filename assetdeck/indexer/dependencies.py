@@ -40,6 +40,37 @@ def _dir_of(rel_path: str) -> str:
     return rel_path.rsplit("/", 1)[0] if "/" in rel_path else ""
 
 
+def _pacote_de(rel_path: str) -> str:
+    """A pasta que CONTÉM a pasta do arquivo — o "pacote" a que ele pertence.
+
+    Existe por causa de como os packs comerciais se organizam (Fatia 81,
+    relatado pelo Rafael: "assinalar previews por nome não parece estar
+    funcionando"). Um Maxtree separa modelo e prévia em pastas IRMÃS:
+
+        Maxtree Vol 148/MT_PM_V148_Blender_CyclesEevee/MT_..._01_01.blend
+        Maxtree Vol 148/MT_PM_V148_Thumbnails/        MT_..._01_01.jpg
+
+    Nome idêntico, pasta diferente. Casar só dentro da MESMA pasta — como
+    a Fatia 57 fazia — descartava todos: medido na biblioteca real dele,
+    0 de 2.530 modelos sem capa casavam; subindo um nível, 342. Na testlib,
+    de 8 para 69.
+
+    Um nível só, de propósito: o pacote é a fronteira natural desse tipo de
+    coleção. Subir mais deixaria um modelo casar com a imagem de outro
+    canto qualquer da biblioteca.
+
+    E quando esse nível acima é a RAIZ da biblioteca, o escopo volta a ser
+    a própria pasta do arquivo. Sem essa ressalva, 'MOVEIS/Banco.blend' e
+    'OUTRAPASTA/Banco.jpg' passariam a casar — as duas pastas são "irmãs"
+    na raiz, mas raiz não é pacote, é a biblioteca inteira. Foi um teste
+    da Fatia 57 (`test_pasta_diferente_nao_casa_por_engano`) que pegou esse
+    exagero quando a regra foi afrouxada.
+    """
+    pasta = _dir_of(rel_path)
+    acima = _dir_of(pasta)
+    return acima or pasta
+
+
 def _ancestors(directory: str, levels: int) -> list[str]:
     """['a/b/c', 'a/b', 'a'] limitado a `levels` subidas."""
     saida = [directory]
@@ -168,16 +199,23 @@ def attach_pack_previews(conn: sqlite3.Connection, library_id: int,
 def attach_stem_match_previews(conn: sqlite3.Connection, library_id: int,
                                library_root, previews_dir,
                                hide_source: bool = False) -> int:
-    """Casa 'Cadeira.blend' com 'Cadeira.jpg' pelo NOME (mesma pasta, mesmo
-    nome-base) e usa a imagem como capa automática do modelo (Fatia 57,
-    pedido do Rafael).
+    """Casa 'Cadeira.blend' com 'Cadeira.jpg' pelo NOME e usa a imagem como
+    capa automática do modelo (Fatia 57, pedido do Rafael).
+
+    **Fatia 81:** o casamento deixou de exigir a MESMA pasta e passou a
+    aceitar pasta IRMÃ (mesmo pacote — ver `_pacote_de`). O Rafael relatou
+    que a função "não parecia estar funcionando": ela funcionava, mas a
+    regra de mesma pasta não alcançava a organização real da biblioteca
+    dele, onde os packs separam modelo e prévia em pastas irmãs. Medido:
+    0 de 2.530 modelos sem capa casavam na biblioteca real; agora 342. Na
+    testlib, de 8 para 69.
 
     Diferente de `attach_pack_previews` (que casa por PASTA, um preview por
-    pasta): aqui uma pasta pode ter vários modelos, cada um casando com a
-    própria imagem de mesmo nome. Só aplica quando há exatamente UM
-    candidato por modelo — 2+ imagens com o mesmo nome-base é ambíguo,
-    pulado e logado, nunca adivinhado (regra do projeto: nenhum erro
-    silencioso).
+    pasta): aqui um pacote pode ter vários modelos, cada um casando com a
+    própria imagem de mesmo nome. Só aplica quando o par é ÚNICO nos dois
+    sentidos — uma imagem para aquele nome e um modelo para aquele nome.
+    Qualquer disputa é pulada e logada, nunca adivinhada (regra do projeto:
+    nenhum erro silencioso).
 
     `hide_source=True` some a imagem da grade (reversível, mesmo flag
     `hidden` do drag-and-drop manual) — separado do `hide_preview_source`
@@ -192,8 +230,12 @@ def attach_stem_match_previews(conn: sqlite3.Connection, library_id: int,
     from assetdeck.db.repos import previews as previews_repo
     from assetdeck.thumbs.preview import can_preview
 
-    # Modelos sem capa, indexados por (pasta, nome-base em minúsculas).
-    modelos: dict[tuple[str, str], tuple[int, str]] = {}
+    # Modelos sem capa, indexados por (PACOTE, nome-base em minúsculas) —
+    # ver `_pacote_de` pro que "pacote" quer dizer aqui. Guarda LISTA, não
+    # um par só: dois modelos de mesmo nome dentro do mesmo pacote são
+    # ambíguos e têm de ser pulados. Antes isto era um dict de par único e
+    # o segundo modelo simplesmente SOBRESCREVIA o primeiro em silêncio.
+    modelos: dict[tuple[str, str], list[tuple[int, str]]] = {}
     for row in conn.execute(
         f"""SELECT a.id, f.rel_path FROM assets a
             JOIN files f ON f.asset_id = a.id AND f.is_primary = 1
@@ -205,7 +247,8 @@ def attach_stem_match_previews(conn: sqlite3.Connection, library_id: int,
         (library_id, *OWNER_TYPES),
     ):
         rel = row["rel_path"]
-        modelos[(_dir_of(rel), Path(rel).stem.lower())] = (row["id"], rel)
+        modelos.setdefault(
+            (_pacote_de(rel), Path(rel).stem.lower()), []).append((row["id"], rel))
 
     if not modelos:
         return 0
@@ -222,18 +265,28 @@ def attach_stem_match_previews(conn: sqlite3.Connection, library_id: int,
     ):
         rel = row["rel_path"]
         p = Path(rel)
-        chave = (_dir_of(rel), p.stem.lower())
+        chave = (_pacote_de(rel), p.stem.lower())
         if chave in modelos and can_preview(p):
             candidatos.setdefault(chave, []).append((rel, row["asset_id"]))
 
     criadas = 0
     for chave, itens in candidatos.items():
         if len(itens) != 1:
-            log.info("Preview por nome ambíguo em %r: %d candidatos — pulado (%s).",
-                     chave, len(itens), ", ".join(rel for rel, _aid in itens))
+            log.info("Preview por nome ambíguo em %r: %d imagens candidatas — "
+                     "pulado (%s).", chave, len(itens),
+                     ", ".join(rel for rel, _aid in itens))
+            continue
+        donos = modelos[chave]
+        if len(donos) != 1:
+            # Dois modelos de mesmo nome no mesmo pacote: não dá pra saber de
+            # quem é a imagem. Antes da Fatia 81 este caso nem era detectado —
+            # o segundo modelo sobrescrevia o primeiro no dicionário.
+            log.info("Preview por nome ambíguo em %r: %d modelos disputam a "
+                     "mesma imagem — pulado (%s).", chave, len(donos),
+                     ", ".join(rel for _aid, rel in donos))
             continue
         rel_imagem, imagem_asset_id = itens[0]
-        asset_id, _modelo_rel = modelos[chave]
+        asset_id, _modelo_rel = donos[0]
         try:
             previews_repo.add(conn, asset_id, Path(library_root) / rel_imagem,
                               Path(previews_dir), origin="auto")

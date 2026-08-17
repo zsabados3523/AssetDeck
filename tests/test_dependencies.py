@@ -290,7 +290,12 @@ def test_sem_imagem_de_mesmo_nome_nao_cria_nada(env_nomes):
 
 def test_pasta_diferente_nao_casa_por_engano(env_nomes):
     """'OUTRAPASTA/Banco.jpg' tem o MESMO nome-base de 'MOVEIS/Banco.blend',
-    mas pasta diferente — casar por nome só vale dentro da mesma pasta."""
+    mas as duas pastas estão na RAIZ da biblioteca.
+
+    Desde a Fatia 81 o casamento aceita pasta irmã (mesmo pacote), mas raiz
+    não é pacote — é a biblioteca inteira. Este teste, escrito na Fatia 57,
+    foi justamente quem pegou o exagero da primeira versão daquela mudança:
+    com a regra afrouxada sem ressalva, estes dois passavam a casar."""
     conn, lib_id, root, tmp_path = env_nomes
     banco_id = _id_por_caminho(conn, "MOVEIS/Banco.blend")
 
@@ -341,3 +346,88 @@ def test_hide_source_ligado_oculta_a_imagem_usada(env_nomes):
     linha = assets_repo.list_for_grid(conn, include_hidden=True)
     hidden = next(r for r in linha if r["id"] == imagem_id)["hidden"]
     assert hidden == 1
+
+
+# ------------------------------------------ pasta irmã (Fatia 81) --
+
+@pytest.fixture
+def env_pack(tmp_path):
+    """Um pack comercial de verdade: modelos e prévias em pastas IRMÃS.
+
+    É como o Maxtree se organiza, e era o caso que a regra de "mesma pasta"
+    não alcançava — o Rafael relatou a função como se estivesse quebrada.
+    """
+    root = tmp_path / "lib"
+    pack = root / "VEGETACAO" / "Maxtree Vol 148"
+    modelos = pack / "Blender_CyclesEevee"
+    thumbs = pack / "Thumbnails"
+    modelos.mkdir(parents=True)
+    thumbs.mkdir(parents=True)
+
+    (modelos / "MT_Palmeira_01.blend").write_bytes(b"b" * 30)
+    (thumbs / "MT_Palmeira_01.jpg").write_bytes(b"j" * 30)
+
+    # Dois modelos disputando a mesma prévia: ambíguo do lado do MODELO.
+    # É o caso REAL do Maxtree, que entrega o mesmo modelo numa pasta por
+    # renderizador — as duas são irmãs, no mesmo pacote.
+    octane = pack / "Blender_Octane"
+    octane.mkdir(parents=True)
+    (modelos / "MT_Repetido.blend").write_bytes(b"b" * 30)
+    (octane / "MT_Repetido.blend").write_bytes(b"b" * 30)
+    (thumbs / "MT_Repetido.jpg").write_bytes(b"j" * 30)
+
+    # pack VIZINHO com nome igual: não pode atravessar a fronteira do pacote
+    outro = root / "VEGETACAO" / "Maxtree Vol 149"
+    (outro / "Thumbnails").mkdir(parents=True)
+    (outro / "Thumbnails" / "MT_Sozinho.jpg").write_bytes(b"j" * 30)
+    (pack / "Blender_CyclesEevee" / "MT_Sozinho.blend").write_bytes(b"b" * 30)
+
+    conn = connect(tmp_path / "t.db")
+    apply_migrations(conn)
+    lib_id = libraries_repo.get_or_create(conn, root)
+    scan_library(conn, lib_id, root)
+    yield conn, lib_id, root, tmp_path
+    conn.close()
+
+
+def test_casa_com_imagem_em_pasta_irma_do_mesmo_pacote(env_pack):
+    """O caso que motivou a fatia: modelo em 'Blender_CyclesEevee/' e
+    prévia em 'Thumbnails/', irmãs dentro do mesmo pack."""
+    conn, lib_id, root, tmp_path = env_pack
+    modelo_id = _id_por_caminho(
+        conn, "VEGETACAO/Maxtree Vol 148/Blender_CyclesEevee/MT_Palmeira_01.blend")
+
+    attach_stem_match_previews(conn, lib_id, root, tmp_path / "previews")
+
+    galeria = previews_repo.list_for(conn, modelo_id)
+    assert len(galeria) == 1
+    assert galeria[0]["is_cover"] == 1
+    assert galeria[0]["origin"] == "auto"
+
+
+def test_dois_modelos_de_mesmo_nome_no_pacote_e_ambiguo(env_pack):
+    """Ambiguidade do lado do MODELO — antes da Fatia 81 nem era detectada:
+    o dicionário guardava um par só e o segundo modelo sobrescrevia o
+    primeiro em silêncio, dando a capa pra um deles ao acaso."""
+    conn, lib_id, root, tmp_path = env_pack
+    a = _id_por_caminho(
+        conn, "VEGETACAO/Maxtree Vol 148/Blender_CyclesEevee/MT_Repetido.blend")
+    b = _id_por_caminho(
+        conn, "VEGETACAO/Maxtree Vol 148/Blender_Octane/MT_Repetido.blend")
+
+    attach_stem_match_previews(conn, lib_id, root, tmp_path / "previews")
+
+    assert previews_repo.list_for(conn, a) == []
+    assert previews_repo.list_for(conn, b) == []
+
+
+def test_nao_atravessa_a_fronteira_do_pacote(env_pack):
+    """'Vol 149/Thumbnails/MT_Sozinho.jpg' tem o nome do modelo que está no
+    'Vol 148' — packs diferentes não se misturam."""
+    conn, lib_id, root, tmp_path = env_pack
+    modelo_id = _id_por_caminho(
+        conn, "VEGETACAO/Maxtree Vol 148/Blender_CyclesEevee/MT_Sozinho.blend")
+
+    attach_stem_match_previews(conn, lib_id, root, tmp_path / "previews")
+
+    assert previews_repo.list_for(conn, modelo_id) == []
