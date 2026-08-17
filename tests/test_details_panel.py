@@ -174,3 +174,43 @@ def test_o_tipo_aparece_com_o_rotulo_da_categoria(painel):
 
     painel.show_asset(dict(_row("x.zzz"), asset_type="tipo_novo"), None)
     assert painel.f_type.text() == "tipo_novo"
+
+
+# ------------------------------- largura do painel (Fatia 82) --
+
+def test_nome_e_caminho_longos_nao_alargam_o_painel(painel, qapp):
+    """Regressão do que o Rafael relatou: "a janela de detalhes está toda
+    ferrada... não aparece por completo".
+
+    Um `QLabel` comum deixa o CONTEÚDO ditar a largura mínima do layout —
+    com `wordWrap` ela vira a maior PALAVRA, sem `wordWrap` vira a linha
+    inteira. Os nomes da biblioteca dele são tokens sem espaço, então o
+    nome exigia 349px e o caminho 284px num painel cujo miolo tem 272px: o
+    conteúdo saía 89px mais largo e era cortado.
+
+    O número aqui é o do painel, não o do texto: o rótulo pode desenhar o
+    que quiser, desde que não OBRIGUE o painel a crescer.
+    """
+    longo = "MT_PM_V139_Cortaderia_selloana_pumila_01_01"
+    painel.name.setText(longo)
+    painel.f_path.setText(f"01_MODELOS/Vegetação/Arvores/Maxtree Vol 139/{longo}.blend")
+    painel.resize(300, 700)
+    painel.show()
+    qapp.processEvents()
+
+    for rotulo, campo in (("nome", painel.name), ("caminho", painel.f_path)):
+        exigido = campo.minimumSizeHint().width()
+        assert exigido <= 120, (
+            f"o {rotulo} exige {exigido}px de largura mínima e empurra o painel"
+        )
+    painel.close()
+
+
+def test_o_texto_completo_continua_alcancavel(painel):
+    """Elidir é cortar na TELA, não perder o dado — o inteiro fica no
+    tooltip, e `text()` segue devolvendo tudo (é dele que a elisão parte)."""
+    longo = "MT_PM_V139_Cortaderia_selloana_pumila_01_01"
+    painel.name.setText(longo)
+
+    assert painel.name.text() == longo
+    assert painel.name.toolTip() == longo
