@@ -104,6 +104,68 @@ QLabel#kvValue {
     font-size: $font_size_small;
 }
 
+/* Pastilhas do topo do painel (Fatia 79): formato, tipo e tamanho. Eram três
+ * das cinco linhas da ficha técnica — respostas curtas demais pra ocuparem
+ * uma linha inteira cada. A do FORMATO é a mais forte: é o que se procura
+ * primeiro ao bater o olho num asset. */
+QLabel#chip, QLabel#chipForte {
+    background-color: $surface_raised;
+    border: 1px solid $border;
+    border-radius: $radius_pill;
+    padding: 2px 10px;
+    color: $text_muted;
+    font-size: $font_size_small;
+}
+
+QLabel#chipForte {
+    color: $text;
+    font-weight: 600;
+}
+
+/* Cabeçalho de seção colapsável (Fatia 79). Linha inteira clicável, com o
+ * mesmo realce de hover dos outros itens do app. */
+QWidget#secHeader {
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: $radius_control;
+}
+
+QWidget#secHeader:hover {
+    background-color: $surface_raised;
+    border: 1px solid $border;
+}
+
+QLabel#secTitulo {
+    color: $text_muted;
+    font-size: $font_size_small;
+    font-weight: 600;
+    letter-spacing: .5px;
+}
+
+/* Contador da seção: é ele que faz FECHAR valer a pena — dá pra saber que há
+ * 3 tags sem abrir. Fica na pastilha suave do destaque quando há o que
+ * contar. */
+QLabel#secContador {
+    background-color: $accent_soft;
+    color: $accent;
+    border-radius: 8px;
+    padding: 0 7px;
+    font-size: $font_size_small;
+    font-weight: 600;
+}
+
+/* Ações em ícone ao lado do botão principal (Fatia 79) — quadradas, pra não
+ * competirem em largura com o "Abrir". */
+QPushButton#acaoIcone {
+    padding: 8px 10px;
+    min-width: 16px;
+}
+
+QPushButton#acaoIcone:checked {
+    background-color: $accent_soft;
+    border: 1px solid transparent;
+}
+
 /* Cabeçalho da lista (faixa 3 do topo, Fatia 46): o escopo em destaque e a
  * contagem apagada ao lado. O contraste entre os dois é o que faz a linha ser
  * lida como "título + apoio" em vez de duas informações concorrendo. */
@@ -417,9 +479,15 @@ QToolButton#pill::menu-indicator {
  * seta à direita e os mesmos estados de elevação do resto do app. Fica em
  * pastilha porque mora na faixa da marca, onde não há moldura nenhuma pra
  * apoiá-lo. */
+/* Borda VISÍVEL em repouso (Fatia 79). Na 77 ela só aparecia no hover, e o
+ * Rafael voltou a cobrar: "ainda estou esperando a borda do botão de trocar a
+ * biblioteca". Ele está certo — este botão mora na faixa da marca, onde não
+ * há painel nenhum atrás pra apoiá-lo; sem contorno permanente ele lê como
+ * texto, não como controle. É a exceção deliberada à regra dos botões
+ * discretos do app (`#ghost`), que vivem DENTRO de painéis. */
 QToolButton#libSwitch {
     background: transparent;
-    border: 1px solid transparent;
+    border: 1px solid $border;
     border-radius: $radius_pill;
     padding: 5px 10px;
     color: $text_muted;
