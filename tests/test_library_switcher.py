@@ -48,12 +48,53 @@ def test_menu_tem_uma_acao_por_biblioteca_mais_adicionar(qapp, duas_bibliotecas)
     assert acoes[-1].text() == "Adicionar biblioteca…"
 
 
+def _linhas(botao) -> dict:
+    """As linhas de biblioteca do menu, por caminho.
+
+    Desde a Fatia 77 cada biblioteca é um `QWidgetAction` com um widget de
+    duas linhas (nome + caminho/contagem + bolinha da ativa), não mais um
+    `QAction` marcável — `isCheckable()`/`isChecked()` deixaram de existir
+    aqui. Quem carrega o estado agora é o `objectName` da bolinha, e o clique
+    entra pelo widget, não pelo `trigger()` da ação.
+    """
+    from PySide6.QtWidgets import QWidgetAction
+
+    achadas = {}
+    for acao in botao.menu().actions():
+        if isinstance(acao, QWidgetAction) and acao.defaultWidget() is not None:
+            w = acao.defaultWidget()
+            achadas[w.toolTip()] = w
+    return achadas
+
+
+def _esta_ativa(linha) -> bool:
+    from PySide6.QtWidgets import QLabel
+
+    bolinhas = [f.objectName() for f in linha.findChildren(QLabel)]
+    return "libDot" in bolinhas
+
+
 def test_a_biblioteca_ativa_aparece_marcada(qapp, duas_bibliotecas):
     conn, lib_a, _lib_b, root_a, root_b = duas_bibliotecas
     botao = LibrarySwitcher(conn, lib_a)
-    acoes = {a.toolTip(): a for a in botao.menu().actions() if a.isCheckable()}
-    assert acoes[str(root_a)].isChecked() is True
-    assert acoes[str(root_b)].isChecked() is False
+    linhas = _linhas(botao)
+    assert _esta_ativa(linhas[str(root_a)]) is True
+    assert _esta_ativa(linhas[str(root_b)]) is False
+
+
+def _clicar(linha) -> None:
+    """Clique de verdade na linha: `QWidgetAction` não dispara por
+    `trigger()` — quem responde é o `mouseReleaseEvent` do widget."""
+    from PySide6.QtCore import QPointF, Qt
+    from PySide6.QtGui import QMouseEvent
+
+    centro = QPointF(linha.width() / 2, linha.height() / 2)
+    evento = QMouseEvent(
+        QMouseEvent.Type.MouseButtonRelease, centro, centro,
+        Qt.MouseButton.LeftButton, Qt.MouseButton.LeftButton,
+        Qt.KeyboardModifier.NoModifier,
+    )
+    linha.mouseReleaseEvent(evento)
 
 
 def test_clicar_na_biblioteca_ja_ativa_nao_emite_nada(qapp, duas_bibliotecas):
@@ -62,9 +103,7 @@ def test_clicar_na_biblioteca_ja_ativa_nao_emite_nada(qapp, duas_bibliotecas):
     recebidos = []
     botao.switch_requested.connect(recebidos.append)
 
-    acao_ativa = next(a for a in botao.menu().actions()
-                      if a.isCheckable() and a.toolTip() == str(root_a))
-    acao_ativa.trigger()
+    _clicar(_linhas(botao)[str(root_a)])
 
     assert recebidos == []
 
@@ -75,11 +114,26 @@ def test_clicar_em_outra_biblioteca_emite_switch_requested(qapp, duas_biblioteca
     recebidos = []
     botao.switch_requested.connect(recebidos.append)
 
-    acao_b = next(a for a in botao.menu().actions()
-                  if a.isCheckable() and a.toolTip() == str(root_b))
-    acao_b.trigger()
+    _clicar(_linhas(botao)[str(root_b)])
 
     assert recebidos == [str(root_b)]
+
+
+def test_cada_linha_mostra_caminho_e_contagem(qapp, duas_bibliotecas):
+    """O que o Rafael chamou de "meio cru" era uma linha só de texto. Cada
+    biblioteca agora mostra nome, caminho e quantos assets tem — é o que
+    deixa distinguir duas pastas de mesmo nome em lugares diferentes."""
+    from PySide6.QtWidgets import QLabel
+
+    conn, lib_a, _lib_b, root_a, _root_b = duas_bibliotecas
+    botao = LibrarySwitcher(conn, lib_a)
+    linha = _linhas(botao)[str(root_a)]
+
+    textos = [f.text() for f in linha.findChildren(QLabel)]
+    assert root_a.name in " ".join(textos)
+    meta = next(t for t in textos if "assets" in t)
+    assert "1 assets" in meta          # a lib_a tem exatamente 1 imagem
+    assert root_a.name in meta         # o fim do caminho sobrevive à elisão
 
 
 def test_adicionar_biblioteca_registra_e_repopula_o_menu(qapp, duas_bibliotecas,

@@ -409,6 +409,86 @@ QToolButton#pill::menu-indicator {
     width: 10px;
 }
 
+/* ------------------------------------------ seletor de biblioteca (F77) -- */
+
+/* O Rafael: "o botão de trocar de biblioteca parece meio cru". Era um
+ * `#ghost` com o nome da biblioteca em texto pelado — sem ícone, sem
+ * contorno, sem nada dizendo que abria um menu. Agora tem ícone à esquerda,
+ * seta à direita e os mesmos estados de elevação do resto do app. Fica em
+ * pastilha porque mora na faixa da marca, onde não há moldura nenhuma pra
+ * apoiá-lo. */
+QToolButton#libSwitch {
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: $radius_pill;
+    padding: 5px 10px;
+    color: $text_muted;
+    font-weight: 600;
+}
+
+QToolButton#libSwitch:hover {
+    background-color: $surface_raised;
+    border: 1px solid $border;
+    color: $text;
+}
+
+QToolButton#libSwitch:pressed {
+    background-color: $surface_sunken;
+    border: 1px solid $border;
+    padding-top: 6px;
+    padding-bottom: 4px;
+}
+
+/* Mesma correção da pastilha de filtro: a seta é desenhada no canto
+ * inferior-direito, que aqui a curva já cortou — puxada pra dentro. */
+QToolButton#libSwitch::menu-indicator {
+    subcontrol-origin: padding;
+    subcontrol-position: center right;
+    right: 2px;
+    width: 10px;
+}
+
+/* Linha do menu: duas alturas de texto + bolinha (ver `_LinhaBiblioteca`).
+ * `#libRow` é um QWidget dentro de um QWidgetAction, e um QWidgetAction NÃO
+ * recebe o realce que o QMenu pinta nos itens normais — por isso o hover
+ * precisa estar aqui. */
+QWidget#libRow {
+    background: transparent;
+    border-radius: $radius_control;
+}
+
+QWidget#libRow:hover {
+    background-color: $surface_raised;
+}
+
+/* Bolinha de "esta é a ativa". Tamanho fixo em Python (8x8); aqui só a cor e
+ * o raio que a deixa redonda. A apagada continua ocupando o mesmo espaço,
+ * senão o texto pularia de lugar entre as linhas. */
+QLabel#libDot {
+    background-color: $accent;
+    border-radius: 4px;
+}
+
+QLabel#libDotOff {
+    background: transparent;
+    border-radius: 4px;
+}
+
+QLabel#libName {
+    color: $accent;
+    font-weight: 600;
+}
+
+QLabel#libNameOff {
+    color: $text;
+    font-weight: 600;
+}
+
+QLabel#libMeta {
+    color: $text_muted;
+    font-size: $font_size_small;
+}
+
 /* Botão sem moldura, para ações discretas (estrelas, ícones do painel). */
 QPushButton#ghost, QToolButton#ghost {
     background: transparent;

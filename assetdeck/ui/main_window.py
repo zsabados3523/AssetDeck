@@ -911,6 +911,7 @@ class MainWindow(QMainWindow):
         self.details.refresh_theme()
         self.sidebar.refresh_theme()
         self._bridge_led.refresh_theme()
+        self.library_switcher.refresh_theme()  # ícone tingido à mão (Fatia 77)
 
         self._search_icon_action.setIcon(icons.icon("search", pal["text_muted"]))
         self.rescan_btn.setIcon(icons.icon("refresh", pal["on_accent"]))
