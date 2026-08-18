@@ -2990,3 +2990,43 @@ precisa incluir os dados DELE, não só os do teste.
 **Testes (2):** nome e caminho longos não alargam o painel (confirmado
 que pega — revertendo o rótulo pra `QLabel` comum ele acusa "o nome exige
 273px"), e o texto completo continua alcançável por `text()`/tooltip.
+
+### ☐ Fatia 83 — não dava mais pra maximizar a janela (bug da Fatia 72)
+
+"Agora eu não consigo mais maximizar a janela." **Não era das mudanças
+visuais** — é do `prewarm_gl_viewers()`, o fix do "piscar" da Fatia 72.
+
+**Causa, medida na abertura real:**
+
+    apos show():   1920x1010  max=True    <- abre maximizada
+    apos prewarm:  1920x1010  max=False   <- perde o ESTADO, mantém o tamanho
+
+Os visualizadores são janelas de topo FILHAS da principal. Mostrar e
+esconder uma delas faz o Qt recalcular o estado do PAI e deixá-lo em
+"normal" — só o estado, o tamanho continua o de maximizada. Na tela
+sobra uma janela do tamanho do monitor que o gerenciador considera
+normal: o botão de maximizar "maximiza" pro mesmo tamanho e nada muda.
+
+**Por que só apareceu agora:** só quebra se a janela foi FECHADA
+maximizada — é aí que ela reabre maximizada e o prewarm tem um estado
+pra destruir. Passou despercebido desde a Fatia 72 enquanto ele usou a
+janela em tamanho normal.
+
+**Correção:** guardar `windowState()` antes do pré-aquecimento e repor
+depois. Verificado o ciclo completo (fechar maximizada → reabrir →
+prewarm → continua maximizada).
+
+**Descartado no caminho, com medição:** a largura mínima da janela é
+IDÊNTICA antes e depois de todo o redesign visual (1546px nos dois
+pontos, medido em worktree no commit da Fatia 72) — nenhuma das fatias
+73-82 inflou a janela. E nada no código fixa o tamanho dela.
+
+**Teste:** não chama `prewarm_gl_viewers` (QOpenGLWidget derruba o
+processo no modo offscreen do pytest — fronteira já registrada em
+`test_hdri_viewer.py`); guarda que o método LÊ e REPÕE o estado, e que
+guardar/repor devolve o mesmo valor. Confirmado que falha sem o fix.
+
+**Nota da suíte:** esta rodada saiu **880 passed, 0 failed** — as 4
+falhas de `test_render.py`/`test_missing_textures.py` que acompanharam a
+sessão inteira passaram. Elas dependem do Blender de verdade no
+ambiente; não foi mudança de código nesta fatia.
