@@ -18,6 +18,16 @@ THUMB_SIZE = 256
 THUMB_VERSION = 3
 
 
+def thumb_name(content_hash: str, size: int = THUMB_SIZE) -> str:
+    """Só o NOME do arquivo da thumbnail.
+
+    Existe pro pré-aquecimento (Fatia 88) poder comparar contra um `listdir`
+    sem construir um `Path` por item — são ~127 mil itens na biblioteca real
+    do Rafael, e 99% deles só passam pelo teste de "já existe". Fica aqui,
+    coladinho no `thumb_path`, pra regra de nomenclatura ter UM dono."""
+    return f"{content_hash}_{size}_v{THUMB_VERSION}.png"
+
+
 def thumb_path(thumbs_dir: Path, content_hash: str, size: int = THUMB_SIZE) -> Path:
     """Onde a thumbnail deste conteúdo vive (exista ela ou não)."""
-    return thumbs_dir / f"{content_hash}_{size}_v{THUMB_VERSION}.png"
+    return thumbs_dir / thumb_name(content_hash, size)

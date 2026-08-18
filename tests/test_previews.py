@@ -171,3 +171,44 @@ def test_add_de_arquivo_inexistente_da_erro_legivel(env):
     conn, _, pdir, _ = env
     with pytest.raises(FileNotFoundError):
         previews_repo.add(conn, _id(conn, "modelo"), pdir / "nada.png", pdir)
+
+
+def test_prewarm_nao_pergunta_ao_disco_por_item(tmp_path, monkeypatch):
+    """Regressão de desempenho (Fatia 88).
+
+    O pré-aquecimento recebe a biblioteca INTEIRA — ~127 mil itens na do
+    Rafael — e agenda umas centenas. A versão antiga fazia um `exists()`
+    por item, ou seja 99,4% das chamadas só confirmavam que a miniatura já
+    estava lá. Agora a pasta (plana) é listada UMA vez.
+
+    O teste conta chamadas a `Path.exists`, não tempo: medir tempo aqui
+    daria um teste instável.
+    """
+    from pathlib import Path
+
+    from assetdeck.thumbs.cache import thumb_name
+    from assetdeck.thumbs.pipeline import ThumbnailPipeline
+
+    thumbs = tmp_path / "thumbs"
+    thumbs.mkdir()
+    # 50 itens que JÁ têm miniatura no disco
+    itens = []
+    for i in range(50):
+        h = f"hash{i:04d}"
+        (thumbs / thumb_name(h)).write_bytes(b"png")
+        itens.append((i, tmp_path / f"a{i}.png", h))
+
+    chamadas = []
+    original = Path.exists
+    monkeypatch.setattr(Path, "exists",
+                        lambda self: (chamadas.append(1), original(self))[1])
+
+    pipe = ThumbnailPipeline(thumbs)
+    agendadas = pipe.warmup(itens)
+    pipe.shutdown()
+
+    assert agendadas == 0, "nada devia ser agendado: todos já têm miniatura"
+    assert len(chamadas) <= 5, (
+        f"{len(chamadas)} chamadas a exists() para 50 itens — voltou a "
+        "perguntar ao disco item a item"
+    )
