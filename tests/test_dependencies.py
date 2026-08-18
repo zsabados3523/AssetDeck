@@ -431,3 +431,110 @@ def test_nao_atravessa_a_fronteira_do_pacote(env_pack):
     attach_stem_match_previews(conn, lib_id, root, tmp_path / "previews")
 
     assert previews_repo.list_for(conn, modelo_id) == []
+
+
+# --------------------------------------- Chaos Cosmos (Fatia 84) --
+
+@pytest.fixture
+def env_cosmos(tmp_path):
+    """A estrutura REAL do Chaos Cosmos, copiada da biblioteca do Rafael:
+
+        Furniture/Chair_125_029/Chair_125_029.blend
+        Furniture/Chair_125_029/previews/Chair_125_029_01.png
+        Furniture/Chair_125_029/previews/Chair_125_029_02.png
+
+    Vários previews por modelo, com sufixo de sequência, numa SUBPASTA.
+    """
+    root = tmp_path / "lib"
+
+    # caso comum: prévias com o nome do modelo + _01/_02
+    a = root / "Furniture" / "Chair_125_029"
+    (a / "previews").mkdir(parents=True)
+    (a / "Chair_125_029.blend").write_bytes(b"b" * 30)
+    (a / "previews" / "Chair_125_029_01.png").write_bytes(b"j" * 30)
+    (a / "previews" / "Chair_125_029_02.png").write_bytes(b"j" * 30)
+
+    # ~11% do Cosmos: prévias com nome de hash, sem relação com o modelo
+    b = root / "Furniture" / "Kitchen_Props_187_029"
+    (b / "previews").mkdir(parents=True)
+    (b / "Kitchen_Props_187_029.blend").write_bytes(b"b" * 30)
+    (b / "previews" / "a586041c_1755512249817171783.png").write_bytes(b"j" * 30)
+    (b / "previews" / "e76a21c7_1755512249334076233.png").write_bytes(b"j" * 30)
+
+    # o modelo já termina em número de catálogo: não pode virar "Coffee_Table"
+    c = root / "Furniture" / "Coffee_Table_273_006_001"
+    (c / "previews").mkdir(parents=True)
+    (c / "Coffee_Table_273_006_001.blend").write_bytes(b"b" * 30)
+    (c / "previews" / "Coffee_Table_273_006_001_01.png").write_bytes(b"j" * 30)
+
+    conn = connect(tmp_path / "t.db")
+    apply_migrations(conn)
+    lib_id = libraries_repo.get_or_create(conn, root)
+    scan_library(conn, lib_id, root)
+    yield conn, lib_id, root, tmp_path
+    conn.close()
+
+
+def test_cosmos_usa_o_primeiro_preview_como_capa(env_cosmos):
+    """Vários previews numerados não são ambiguidade — são uma SEQUÊNCIA de
+    ângulos. O `_01` é a capa natural."""
+    conn, lib_id, root, tmp_path = env_cosmos
+    modelo = _id_por_caminho(conn, "Furniture/Chair_125_029/Chair_125_029.blend")
+
+    attach_stem_match_previews(conn, lib_id, root, tmp_path / "previews")
+
+    galeria = previews_repo.list_for(conn, modelo)
+    assert len(galeria) == 1
+    assert galeria[0]["is_cover"] == 1
+    assert galeria[0]["origin"] == "auto"
+
+
+def test_cosmos_casa_preview_de_nome_hash_pela_pasta(env_cosmos):
+    """Prévia chamada 'a586041c_1755512249817171783.png' não tem relação
+    NENHUMA com o nome do modelo — só a pasta 'previews/' as liga."""
+    conn, lib_id, root, tmp_path = env_cosmos
+    modelo = _id_por_caminho(
+        conn, "Furniture/Kitchen_Props_187_029/Kitchen_Props_187_029.blend")
+
+    attach_stem_match_previews(conn, lib_id, root, tmp_path / "previews")
+
+    assert len(previews_repo.list_for(conn, modelo)) == 1
+
+
+def test_numero_de_catalogo_do_modelo_nao_e_confundido_com_sequencia(env_cosmos):
+    """'Coffee_Table_273_006_001.blend' termina em número, mas isso é o
+    CATÁLOGO, não um sufixo de sequência. Normalizar o nome do modelo o
+    reduziria a 'Coffee_Table' e ele casaria com qualquer mesa de centro —
+    por isso só o nome da IMAGEM é normalizado."""
+    conn, lib_id, root, tmp_path = env_cosmos
+    modelo = _id_por_caminho(
+        conn,
+        "Furniture/Coffee_Table_273_006_001/Coffee_Table_273_006_001.blend")
+
+    attach_stem_match_previews(conn, lib_id, root, tmp_path / "previews")
+
+    galeria = previews_repo.list_for(conn, modelo)
+    assert len(galeria) == 1, "o modelo com número de catálogo ficou sem capa"
+
+
+def test_pasta_previews_com_dois_modelos_nao_adivinha(tmp_path):
+    """A regra de PASTA só vale onde há um modelo — com dois, não dá pra
+    saber de quem é a prévia de nome de hash."""
+    root = tmp_path / "lib"
+    pasta = root / "Furniture" / "Combo"
+    (pasta / "previews").mkdir(parents=True)
+    (pasta / "Sofa.blend").write_bytes(b"b" * 30)
+    (pasta / "Mesa.blend").write_bytes(b"b" * 30)
+    (pasta / "previews" / "hash_123456.png").write_bytes(b"j" * 30)
+
+    conn = connect(tmp_path / "t.db")
+    apply_migrations(conn)
+    lib_id = libraries_repo.get_or_create(conn, root)
+    scan_library(conn, lib_id, root)
+
+    attach_stem_match_previews(conn, lib_id, root, tmp_path / "previews")
+
+    for nome in ("Sofa", "Mesa"):
+        aid = _id_por_caminho(conn, f"Furniture/Combo/{nome}.blend")
+        assert previews_repo.list_for(conn, aid) == []
+    conn.close()

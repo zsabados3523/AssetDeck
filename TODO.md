@@ -3030,3 +3030,50 @@ guardar/repor devolve o mesmo valor. Confirmado que falha sem o fix.
 falhas de `test_render.py`/`test_missing_textures.py` que acompanharam a
 sessão inteira passaram. Elas dependem do Blender de verdade no
 ambiente; não foi mudança de código nesta fatia.
+
+### ☐ Fatia 84 — previews do Chaos Cosmos (vários por modelo, com sufixo)
+
+"Cada .blend vem com vários previews, e apesar de ter nome igual, cada
+preview tem um sufixo depois (_001, _002 etc)."
+
+**Estrutura real** (achada em `~/Documentos/CHAOS COSMOS`, 6.475 modelos):
+
+    Furniture/Chair_125_029/Chair_125_029.blend
+    Furniture/Chair_125_029/previews/Chair_125_029_01.png
+                                     Chair_125_029_02.png
+
+Numa amostra de 400 pastas: 707 previews no formato `_01`/`_02`, **91 com
+nome de HASH** (`a586041c_1755512249817171783.png`, sem relação nenhuma
+com o modelo) e 10 em variações (`_01_v001`, `-01`).
+
+**Duas regras novas de candidato:**
+1. **Por nome com sufixo de sequência** — o stem da imagem, tirando 1 ou 2
+   sufixos numéricos, bate com o nome do modelo. Vários numerados NÃO são
+   ambiguidade: são ângulos, e o primeiro (ordem natural) é a capa. A
+   ambiguidade de verdade continua valendo — `Mesa.jpg` + `Mesa.png`, mesmo
+   nome-base e extensões diferentes, segue pulado.
+2. **Por pasta** — imagem dentro de `previews/` pertence ao modelo da pasta
+   acima. É o que alcança os de nome de hash. Só quando há UM modelo na
+   pasta; com dois, não dá pra saber de quem é.
+
+**Armadilha tratada:** muitos modelos do Cosmos já terminam em número de
+catálogo (`Coffee_Table_273_006_001.blend`). Normalizar o nome do MODELO o
+reduziria a `Coffee_Table` e ele casaria com qualquer mesa de centro — por
+isso só o nome da IMAGEM é normalizado. Tem teste pra isso.
+
+**Escopo generalizado:** `_escopos_de` (pasta do arquivo + a de cima)
+substituiu o `_pacote_de` da Fatia 81. Um conjunto cruzando com o outro
+cobre os três arranjos reais: mesma pasta, SUBpasta (`previews/`, Cosmos)
+e pasta IRMÃ (`Thumbnails/`, Maxtree). A raiz fica fora, senão duas pastas
+quaisquer no topo passariam a se enxergar (o limite que o teste da Fatia
+57 guarda).
+
+**Decisão tomada por mim, fácil de reverter:** só o primeiro preview vira
+capa; os demais NÃO são copiados. Isso evita dobrar tempo e espaço numa
+primeira varredura de 6.475 modelos. `previews_repo.add` já aceita
+`make_cover=False`, então mandar todos pra galeria é mudança pequena se
+ele quiser depois.
+
+**Verificado com dados REAIS:** 40 pastas do Cosmos dele copiadas pra um
+banco isolado — **40 de 40 capas (100%)**, incluindo os de nome de hash.
+4 testes novos.

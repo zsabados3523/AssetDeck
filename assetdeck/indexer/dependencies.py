@@ -71,6 +71,52 @@ def _pacote_de(rel_path: str) -> str:
     return acima or pasta
 
 
+# Sufixo numérico de sequência no fim do nome: "_01", "-02", "_v003".
+# Usado SÓ no nome da imagem, nunca no do modelo — muitos modelos terminam
+# em número de catálogo ("Chair_125_029.blend") e normalizá-los quebraria
+# tudo (viraria "Chair", casando com qualquer cadeira).
+_SUFIXO_SEQUENCIA = re.compile(r"[-_]v?\d+$", re.IGNORECASE)
+
+# Pasta de prévias que os packs criam ao lado do modelo (Chaos Cosmos).
+_PASTA_PREVIEWS = "previews"
+
+
+def _bases_da_imagem(stem: str) -> list[str]:
+    """Nomes de modelo que esta imagem PODE estar servindo.
+
+    O Chaos Cosmos entrega 'Chair_125_029.blend' com
+    'previews/Chair_125_029_01.png' e '_02.png' — mesmo nome mais um sufixo
+    de sequência. Devolve o stem inteiro e ele sem 1 e sem 2 sufixos, porque
+    aparecem os dois formatos na biblioteca do Rafael ('_01' e '_01_v001').
+    Tirar mais que dois começaria a comer o número de catálogo do próprio
+    modelo.
+    """
+    saida = [stem]
+    atual = stem
+    for _ in range(2):
+        novo = _SUFIXO_SEQUENCIA.sub("", atual)
+        if novo == atual or not novo:
+            break
+        atual = novo
+        saida.append(atual)
+    return saida
+
+
+def _escopos_de(rel_path: str) -> set[str]:
+    """Onde este arquivo "conta" pra efeito de casamento.
+
+    A pasta dele e a de cima. Duas pastas casam quando os conjuntos se
+    cruzam, o que cobre os três arranjos reais das bibliotecas dele:
+    imagem na MESMA pasta do modelo; imagem numa SUBPASTA dele
+    ('previews/', Cosmos); e imagem numa pasta IRMÃ ('Thumbnails/',
+    Maxtree). A raiz ("") fica de fora de propósito — senão duas pastas
+    quaisquer no topo da biblioteca passariam a se enxergar.
+    """
+    pasta = _dir_of(rel_path)
+    acima = _dir_of(pasta)
+    return {pasta} | ({acima} if acima else set())
+
+
 def _ancestors(directory: str, levels: int) -> list[str]:
     """['a/b/c', 'a/b', 'a'] limitado a `levels` subidas."""
     saida = [directory]
@@ -230,12 +276,11 @@ def attach_stem_match_previews(conn: sqlite3.Connection, library_id: int,
     from assetdeck.db.repos import previews as previews_repo
     from assetdeck.thumbs.preview import can_preview
 
-    # Modelos sem capa, indexados por (PACOTE, nome-base em minúsculas) —
-    # ver `_pacote_de` pro que "pacote" quer dizer aqui. Guarda LISTA, não
-    # um par só: dois modelos de mesmo nome dentro do mesmo pacote são
-    # ambíguos e têm de ser pulados. Antes isto era um dict de par único e
-    # o segundo modelo simplesmente SOBRESCREVIA o primeiro em silêncio.
-    modelos: dict[tuple[str, str], list[tuple[int, str]]] = {}
+    # Modelos sem capa. Indexados por NOME (minúsculo), guardando lista: dois
+    # modelos de mesmo nome disputando a mesma imagem é ambíguo e tem de ser
+    # pulado. Antes da Fatia 81 isto era um par único e o segundo modelo
+    # sobrescrevia o primeiro em silêncio.
+    modelos: dict[str, list[tuple[int, str]]] = {}
     for row in conn.execute(
         f"""SELECT a.id, f.rel_path FROM assets a
             JOIN files f ON f.asset_id = a.id AND f.is_primary = 1
@@ -247,16 +292,30 @@ def attach_stem_match_previews(conn: sqlite3.Connection, library_id: int,
         (library_id, *OWNER_TYPES),
     ):
         rel = row["rel_path"]
-        modelos.setdefault(
-            (_pacote_de(rel), Path(rel).stem.lower()), []).append((row["id"], rel))
+        modelos.setdefault(Path(rel).stem.lower(), []).append((row["id"], rel))
 
     if not modelos:
         return 0
 
-    # Imagens candidatas, agrupadas pela MESMA chave (pasta, nome-base) —
-    # o próprio arquivo do modelo nunca bate aqui: `can_preview` é falso
-    # pra .blend/.fbx/.obj.
-    candidatos: dict[tuple[str, str], list[tuple[str, int]]] = {}
+    # Quantos modelos existem em cada pasta — a regra de PASTA (abaixo) só
+    # vale onde há exatamente UM, senão não dá pra saber de quem é a prévia.
+    modelos_por_pasta: dict[str, int] = {}
+    for lista in modelos.values():
+        for _aid, rel in lista:
+            pasta = _dir_of(rel)
+            modelos_por_pasta[pasta] = modelos_por_pasta.get(pasta, 0) + 1
+
+    # Candidatas por modelo: chave = nome do modelo, valor = lista de
+    # (rel_path, asset_id). Duas formas de virar candidata:
+    #
+    #  1. POR NOME — o stem da imagem, tirando o sufixo de sequência, bate
+    #     com o nome do modelo, e os escopos se cruzam (mesma pasta,
+    #     subpasta ou pasta irmã). Cobre Maxtree e a maioria do Cosmos.
+    #  2. POR PASTA — a imagem está numa subpasta "previews/" do modelo.
+    #     ~11% das prévias do Cosmos têm nome de hash
+    #     ("a586041c_1755512249817171783.png"), sem relação nenhuma com o
+    #     nome do modelo; só a pasta as liga. Exige um único modelo na pasta.
+    candidatos: dict[str, list[tuple[str, int]]] = {}
     for row in conn.execute(
         """SELECT f.rel_path, a.id AS asset_id FROM files f
            JOIN assets a ON a.id = f.asset_id
@@ -265,27 +324,64 @@ def attach_stem_match_previews(conn: sqlite3.Connection, library_id: int,
     ):
         rel = row["rel_path"]
         p = Path(rel)
-        chave = (_pacote_de(rel), p.stem.lower())
-        if chave in modelos and can_preview(p):
-            candidatos.setdefault(chave, []).append((rel, row["asset_id"]))
+        if not can_preview(p):
+            continue
+
+        pasta = _dir_of(rel)
+        acima = _dir_of(pasta)
+        escopos = _escopos_de(rel)
+
+        # (1) por nome
+        casou = False
+        for base in _bases_da_imagem(p.stem):
+            chave = base.lower()
+            donos = modelos.get(chave)
+            if not donos:
+                continue
+            if any(escopos & _escopos_de(m_rel) for _aid, m_rel in donos):
+                candidatos.setdefault(chave, []).append((rel, row["asset_id"]))
+                casou = True
+                break
+        if casou:
+            continue
+
+        # (2) por pasta: .../<pasta do modelo>/previews/<qualquer imagem>
+        if pasta.rsplit("/", 1)[-1].lower() != _PASTA_PREVIEWS:
+            continue
+        if modelos_por_pasta.get(acima, 0) != 1:
+            continue
+        for chave, donos in modelos.items():
+            if any(_dir_of(m_rel) == acima for _aid, m_rel in donos):
+                candidatos.setdefault(chave, []).append((rel, row["asset_id"]))
+                break
 
     criadas = 0
     for chave, itens in candidatos.items():
-        if len(itens) != 1:
-            log.info("Preview por nome ambíguo em %r: %d imagens candidatas — "
-                     "pulado (%s).", chave, len(itens),
-                     ", ".join(rel for rel, _aid in itens))
-            continue
         donos = modelos[chave]
         if len(donos) != 1:
-            # Dois modelos de mesmo nome no mesmo pacote: não dá pra saber de
-            # quem é a imagem. Antes da Fatia 81 este caso nem era detectado —
-            # o segundo modelo sobrescrevia o primeiro no dicionário.
+            # Dois modelos de mesmo nome: não dá pra saber de quem é a imagem.
             log.info("Preview por nome ambíguo em %r: %d modelos disputam a "
                      "mesma imagem — pulado (%s).", chave, len(donos),
                      ", ".join(rel for _aid, rel in donos))
             continue
-        rel_imagem, imagem_asset_id = itens[0]
+
+        # Dois arquivos com o MESMO nome-base (Mesa.jpg e Mesa.png) são um
+        # empate de verdade: as duas dizem ser "a" imagem do modelo, e
+        # escolher seria adivinhar. Já nomes DIFERENTES ("_01", "_02") são
+        # uma sequência — o pack entregou vários ângulos, e o primeiro é a
+        # capa natural.
+        por_nome: dict[str, list[tuple[str, int]]] = {}
+        for rel, aid in itens:
+            por_nome.setdefault(Path(rel).stem.lower(), []).append((rel, aid))
+        empatados = [k for k, v in por_nome.items() if len(v) > 1]
+        if empatados:
+            log.info("Preview ambíguo em %r: nome-base repetido em %s — "
+                     "pulado.", chave, ", ".join(sorted(empatados)))
+            continue
+
+        # Ordem natural pelo nome: "_01" antes de "_02"; o primeiro é a capa.
+        em_ordem = sorted(itens, key=lambda par: Path(par[0]).name.lower())
+        rel_imagem, imagem_asset_id = em_ordem[0]
         asset_id, _modelo_rel = donos[0]
         try:
             previews_repo.add(conn, asset_id, Path(library_root) / rel_imagem,
