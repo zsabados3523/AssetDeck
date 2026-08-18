@@ -28,7 +28,7 @@ from __future__ import annotations
 
 import logging
 
-from PySide6.QtCore import QSize, Qt, Signal
+from PySide6.QtCore import QSize, Qt, QTimer, Signal
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -158,13 +158,37 @@ class SidebarSection(QWidget):
         # collection...) e chamar a recontagem em cada um deles é um convite a
         # esquecer o oitavo — o número ficaria mentindo sobre a lista logo
         # abaixo dele. Ligado aqui, não tem como divergir.
+        # A recontagem é ADIADA e coalescida (Fatia 87). Ligar `rowsInserted`
+        # direto em `refresh_count` custava O(n²): cada pasta inserida
+        # percorria a árvore inteira pra contar. Com a biblioteca real do
+        # Rafael — 28.520 pastas — isso vira 813 MILHÕES de iterações e o app
+        # simplesmente não abria ("é normal que o programa nem abra?").
+        #
+        # `blockSignals(True)` na view NÃO resolve: quem emite `rowsInserted`
+        # é o MODELO, e bloquear o widget não bloqueia o modelo dele.
+        #
+        # Um QTimer de intervalo zero reinicia a cada sinal, então uma carga
+        # de 28 mil inserções termina em UMA contagem, depois que a fila de
+        # eventos esvazia.
+        self._recontagem = QTimer(self)
+        self._recontagem.setSingleShot(True)
+        self._recontagem.setInterval(0)
+        self._recontagem.timeout.connect(self.refresh_count)
+
         modelo = view.model()
         for sinal in (modelo.rowsInserted, modelo.rowsRemoved,
                       modelo.modelReset, modelo.layoutChanged):
-            sinal.connect(self.refresh_count)
+            sinal.connect(self._agendar_recontagem)
         self.refresh_count()
 
+    def _agendar_recontagem(self, *_args) -> None:
+        """Pede uma recontagem pro fim da fila de eventos. Chamadas seguidas
+        se fundem numa só — é isso que tira o custo quadrático."""
+        self._recontagem.start()
+
     def refresh_count(self) -> None:
+        """Reconta AGORA. Continua público: `Sidebar.refresh_counts()` e o
+        `MainWindow` chamam direto quando querem o número na hora."""
         self.header.set_count(contar_itens(self.view))
 
     def is_collapsed(self) -> bool:
