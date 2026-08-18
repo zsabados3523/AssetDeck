@@ -7,7 +7,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QObject, QRunnable, QThreadPool, Signal
 
-from assetdeck.thumbs.cache import thumb_path
+from assetdeck.thumbs.cache import thumb_name, thumb_path
 from assetdeck.thumbs.preview import make_any_thumbnail
 
 log = logging.getLogger(__name__)
@@ -73,11 +73,44 @@ class ThumbnailPipeline(QObject):
         `items` = (asset_id, caminho absoluto, content_hash). Retorna quantos
         jobs foram agendados. A UI continua na frente da fila.
         """
+        # Lista a pasta de miniaturas UMA vez em vez de perguntar ao disco
+        # por item (Fatia 88). Na biblioteca real do Rafael o pré-aquecimento
+        # recebe ~127 mil itens e agenda 726 — ou seja, 99,4% das chamadas
+        # eram só pra confirmar que a miniatura já existia. Um `listdir` de
+        # 46 mil nomes custa uma fração de 127 mil `exists()`.
+        #
+        # A pasta é PLANA (`thumb_path` = um arquivo por content_hash), então
+        # comparar nomes num set é equivalente a perguntar ao disco.
+        try:
+            existentes = {p.name for p in self._thumbs_dir.iterdir()}
+        except OSError:
+            # Pasta ainda não existe (primeira execução) ou ilegível: cai no
+            # caminho antigo, que pergunta ao disco item a item.
+            log.warning("Não consegui listar %s — pré-aquecimento item a item.",
+                        self._thumbs_dir, exc_info=True)
+            existentes = None
+
         scheduled = 0
         for asset_id, src, content_hash in items:
-            if self.get_or_request(asset_id, src, content_hash, priority=0) is None \
-                    and asset_id in self._inflight:
-                scheduled += 1
+            if existentes is None:
+                if self.get_or_request(asset_id, src, content_hash, priority=0) is None \
+                        and asset_id in self._inflight:
+                    scheduled += 1
+                continue
+
+            # Monta só o NOME, sem criar um `Path` — são 127 mil itens, e
+            # 99% deles só passam pelo teste de "já existe". O `Path` sai
+            # depois, para as poucas centenas que de fato vão gerar.
+            if thumb_name(content_hash) in existentes:
+                continue
+            if asset_id in self._inflight or asset_id in self._failed:
+                continue
+            self._inflight.add(asset_id)
+            self._pool.start(
+                _ThumbJob(self._sig, asset_id, src,
+                          thumb_path(self._thumbs_dir, content_hash)), 0)
+            scheduled += 1
+
         if scheduled:
             log.info("Pré-aquecimento: %d thumbnails agendadas em background.", scheduled)
         return scheduled

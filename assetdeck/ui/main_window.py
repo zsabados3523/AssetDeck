@@ -206,6 +206,7 @@ class MainWindow(QMainWindow):
 
         self.folders = FolderTree()
         self.folders.dir_selected.connect(self._on_dir_selected)
+        self.folders.assets_dropped.connect(self._mover_assets)  # Fatia 85
         self.history = NavHistory()
 
         self.tags = TagTree()
@@ -1033,6 +1034,70 @@ class MainWindow(QMainWindow):
 
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(config.logs_dir())))
 
+    def _mover_assets(self, asset_ids: list, destino: str) -> None:
+        """Assets arrastados da grade pra uma pasta da árvore (Fatia 85).
+
+        Esta é a segunda operação do app que ESCREVE na biblioteca (a
+        primeira é o batch rename). Por isso o caminho é: planejar sem
+        tocar em disco → mostrar exatamente o que vai acontecer → só então
+        mover. O Rafael vê a conta antes, não depois.
+        """
+        from PySide6.QtWidgets import QMessageBox
+
+        from assetdeck import mover
+        from assetdeck.ui.details_panel import human_size
+
+        plano = mover.planejar(self._conn, self._library_id, self._library_root,
+                               [int(i) for i in asset_ids], destino)
+
+        onde = destino or "a raiz da biblioteca"
+        if not plano.mover:
+            # Nada a fazer: explica POR QUE, item a item. "Não deu" sem
+            # motivo é o tipo de mensagem que faz o Rafael abrir o log.
+            detalhe = "\n".join(f"• {r.nome}: {r.motivo}" for r in plano.recusar)
+            QMessageBox.information(
+                self, "Nada para mover",
+                f"Nenhum dos assets selecionados pode ir para {onde}.\n\n{detalhe}")
+            return
+
+        linhas = [f"• {m.nome}  ({m.arquivos} arquivo(s))" for m in plano.mover[:12]]
+        if len(plano.mover) > 12:
+            linhas.append(f"…e mais {len(plano.mover) - 12}")
+        texto = (
+            f"Mover {len(plano.mover)} asset(s) para {onde}?\n\n"
+            + "\n".join(linhas)
+            + f"\n\nTotal: {plano.total_arquivos} arquivos, "
+              f"{human_size(plano.total_bytes)}.\n"
+              "A pasta de cada asset vai inteira — texturas e previews junto."
+        )
+        if plano.recusar:
+            texto += f"\n\n{len(plano.recusar)} asset(s) ficam onde estão:\n"
+            texto += "\n".join(f"• {r.nome}: {r.motivo}" for r in plano.recusar[:6])
+
+        escolha = QMessageBox.question(
+            self, "Mover assets", texto,
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
+            QMessageBox.StandardButton.Cancel,   # padrão é NÃO mexer
+        )
+        if escolha != QMessageBox.StandardButton.Yes:
+            log.info("Mover assets cancelado pelo Rafael.")
+            return
+
+        movidos, falhas = mover.executar(self._conn, self._library_id,
+                                         self._library_root, plano)
+        # `warmup=False` (Fatia 89): mover NÃO traz arquivo novo pra
+        # biblioteca — são os mesmos arquivos em outro lugar, e a miniatura é
+        # indexada por `content_hash`, não por caminho, então continua
+        # valendo. Com o padrão `warmup=True` cada arrasto pagava o
+        # pente-fino de ~127 mil itens (medido na Fatia 88: 1,9s de UI
+        # congelada) sem ter o que descobrir. É exatamente o caso que a
+        # docstring de `_reload_all` descreve.
+        self._reload_all(warmup=False)
+        recado = f"{movidos} asset(s) movidos para {onde}"
+        if falhas:
+            recado += f" — {falhas} falharam (ver log)"
+        self.statusBar().showMessage(recado)
+
     def _relocate_lost_assets(self) -> None:
         from PySide6.QtWidgets import QMessageBox
 
@@ -1416,6 +1481,16 @@ class MainWindow(QMainWindow):
         """
         from PySide6.QtWidgets import QApplication
 
+        # O ESTADO da janela principal (maximizada/normal) tem de sobreviver
+        # a isto (Fatia 83). Os visualizadores são janelas de topo FILHAS
+        # desta; mostrar e esconder uma delas fazia o Qt recalcular o estado
+        # do pai e deixá-lo em "normal" — só o ESTADO, o tamanho continuava o
+        # de maximizada. O resultado na tela: uma janela do tamanho da tela
+        # que o gerenciador considera normal, então o botão de maximizar
+        # "maximiza" pro mesmo tamanho e nada acontece. Foi como o Rafael
+        # relatou: "não consigo mais maximizar a janela".
+        estado_antes = self.windowState()
+
         for viewer in (self._hdri_viewer(), self._model_viewer()):
             pos_original = viewer.pos()
             viewer.move(-10000, -10000)
@@ -1423,6 +1498,9 @@ class MainWindow(QMainWindow):
             QApplication.processEvents()
             viewer.hide()
             viewer.move(pos_original)
+
+        if self.windowState() != estado_antes:
+            self.setWindowState(estado_antes)
 
     def _grid_menu(self, pos) -> None:
         from PySide6.QtWidgets import QMenu

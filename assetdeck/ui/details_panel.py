@@ -32,6 +32,55 @@ def human_size(n: int) -> str:
     return f"{n:.1f} GB"
 
 
+class _RotuloElidido(QLabel):
+    """QLabel que ENCOLHE: guarda o texto inteiro e DESENHA elidido.
+
+    Existe porque um `QLabel` comum deixa o conteúdo ditar a largura mínima
+    do layout — com `wordWrap` ela vira a largura da maior PALAVRA, e sem
+    `wordWrap` vira a linha inteira. Os nomes da biblioteca do Rafael são
+    tokens sem espaço ("MT_PM_V139_Cortaderia_selloana_pumila_01_01"), então
+    o nome exigia 349px e o caminho 284px num painel cujo miolo tem 272px:
+    o conteúdo ficava 89px mais largo que o painel e era CORTADO — ele
+    relatou como "a janela de detalhes não aparece por completo".
+
+    Elidir o TEXTO (o que a Fatia 79 fazia) não resolve, porque o resultado
+    da elisão volta a ser a largura mínima do rótulo — e cada mudança de
+    largura reelide, o que também explica o "flickando". Aqui o texto nunca
+    muda: quem elide é o `paintEvent`, e `minimumSizeHint` é fixo. Sem
+    realimentação entre conteúdo e layout, não há oscilação.
+    """
+
+    def __init__(self, modo: Qt.TextElideMode = Qt.TextElideMode.ElideMiddle,
+                 parent=None) -> None:
+        super().__init__(parent)
+        self._modo = modo
+        self.setTextFormat(Qt.TextFormat.PlainText)
+
+    def setText(self, texto: str) -> None:  # noqa: N802
+        super().setText(texto)
+        # O texto inteiro fica sempre alcançável, mesmo cortado na tela.
+        self.setToolTip(texto)
+
+    def minimumSizeHint(self):  # noqa: N802
+        from PySide6.QtCore import QSize
+
+        return QSize(40, super().minimumSizeHint().height())
+
+    def sizeHint(self):  # noqa: N802
+        from PySide6.QtCore import QSize
+
+        return QSize(40, super().sizeHint().height())
+
+    def paintEvent(self, event) -> None:  # noqa: N802
+        from PySide6.QtGui import QPainter
+
+        painter = QPainter(self)
+        rect = self.contentsRect()
+        texto = self.fontMetrics().elidedText(self.text(), self._modo, rect.width())
+        painter.setPen(self.palette().color(self.foregroundRole()))
+        painter.drawText(rect, int(self.alignment()), texto)
+
+
 class _Secao(QWidget):
     """Bloco colapsável do painel de detalhes (Fatia 79).
 
@@ -170,27 +219,18 @@ class DetailsPanel(QWidget):
         self.preview.setMinimumSize(220, 200)
         self.preview.setMaximumHeight(260)
 
-        self.name = QLabel("—")
-        self.name.setWordWrap(True)
+        # Elidido à DIREITA: o começo do nome é o que identifica o asset.
+        self.name = _RotuloElidido(Qt.TextElideMode.ElideRight)
+        self.name.setText("—")
         self.name.setObjectName("title")
 
         self.f_type = QLabel("—")
         self.f_dims = QLabel("—")
         self.f_size = QLabel("—")
         self.f_format = QLabel("—")
-        self.f_path = QLabel("—")
-        # NÃO quebra linha (Fatia 79): um caminho de biblioteca não tem
-        # espaços onde quebrar, então o `minimumSizeHint` de um QLabel com
-        # `wordWrap` vira a largura da MAIOR palavra — medido em 345px num
-        # painel cujo conteúdo cabe em 260px. Isso empurrava o painel inteiro
-        # pra 422px e fazia surgir rolagem lateral (ou corte, depois que ela
-        # foi desligada). Agora o texto é elidido no MEIO — começo e fim de um
-        # caminho são o que identificam o arquivo — e o caminho completo fica
-        # no tooltip.
-        self.f_path.setWordWrap(False)
-        self._caminho_completo = "—"
-        self._elidindo = False
-        self.f_path.installEventFilter(self)
+        self.f_path = _RotuloElidido(Qt.TextElideMode.ElideMiddle)
+        self.f_path.setText("—")
+
 
         # PASTILHAS (Fatia 79, mockup aprovado): formato, tipo e tamanho são
         # três respostas curtas que ocupavam três das cinco linhas da ficha
@@ -474,48 +514,11 @@ class DetailsPanel(QWidget):
         self.f_size.setText(human_size(row["size_bytes"]))
         self.f_format.setText(path.suffix.lstrip(".").upper() or "—")
         sumido = row["missing_since"] is not None
-        self._caminho_completo = (
-            f"{row['rel_path']}  ⚠ ARQUIVO SUMIDO" if sumido else row["rel_path"]
-        )
-        self._elidir_caminho()
+        # `_RotuloElidido` guarda o texto inteiro e desenha elidido sozinho —
+        # aqui é só atribuir.
+        self.f_path.setText(
+            f"{row['rel_path']}  ⚠ ARQUIVO SUMIDO" if sumido else row["rel_path"])
         self._set_buttons(not sumido, path)
-
-    def _elidir_caminho(self) -> None:
-        """Encaixa o caminho na largura disponível, cortando o MEIO — começo
-        e fim são o que identificam o arquivo. O completo fica no tooltip."""
-        from PySide6.QtGui import QFontMetrics
-
-        if self._elidindo:
-            return
-        largura = max(60, self.f_path.width())
-        metrica = QFontMetrics(self.f_path.font())
-        curto = metrica.elidedText(
-            self._caminho_completo, Qt.TextElideMode.ElideMiddle, largura)
-        if curto == self.f_path.text():
-            return
-        # `setText` pode mudar o tamanho do rótulo e disparar outro Resize —
-        # sem esta trava a elisão se chama em cadeia.
-        self._elidindo = True
-        try:
-            self.f_path.setText(curto)
-            self.f_path.setToolTip(self._caminho_completo)
-        finally:
-            self._elidindo = False
-
-    def eventFilter(self, obj, event):  # noqa: N802 (nome vem do Qt)
-        """Reencaixa o caminho quando o RÓTULO muda de largura.
-
-        Não dá pra fazer isso só no `show_asset`: ali o layout ainda não
-        distribuiu a largura final, e o texto saía elidido pra bem menos do
-        que cabia (visto na tela — um caminho inteiro virava "01 - M...o.jpg"
-        num painel com espaço de sobra). O rótulo avisa quando de fato ganha
-        seu tamanho, e é aí que a conta fecha.
-        """
-        from PySide6.QtCore import QEvent
-
-        if obj is self.f_path and event.type() == QEvent.Type.Resize:
-            self._elidir_caminho()
-        return super().eventFilter(obj, event)
 
     def _read_dims(self, path: Path) -> str:
         """Resolução lida na hora (só formatos raster; os demais mostram —)."""
