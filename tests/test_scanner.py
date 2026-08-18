@@ -193,3 +193,73 @@ def test_get_or_create_nao_duplica_library(conn, tmp_path):
     a = libraries_repo.get_or_create(conn, tmp_path)
     b = libraries_repo.get_or_create(conn, tmp_path)
     assert a == b
+
+
+# ------------------------------------- varredura paralela (Fatia 86) --
+
+def _linhas_do_banco(conn):
+    return [tuple(r) for r in conn.execute(
+        """SELECT rel_path, size_bytes, content_hash, width, height,
+                  has_alpha, bit_depth, phash, dominant_color
+           FROM files ORDER BY rel_path""")]
+
+
+def test_paralelo_produz_exatamente_o_mesmo_banco_que_serial(tmp_path):
+    """O ganho de velocidade não pode custar UM bit de diferença.
+
+    Importa especialmente pelo phash: a detecção de duplicados compara por
+    IGUALDADE EXATA, sem tolerância. Se o cálculo variasse entre serial e
+    paralelo, arquivos indexados em passadas diferentes deixariam de casar
+    entre si — e ninguém perceberia até procurar duplicados.
+    """
+    from PIL import Image
+
+    raiz = tmp_path / "lib"
+    (raiz / "sub").mkdir(parents=True)
+    for i in range(12):
+        Image.new("RGB", (40 + i, 30 + i), (i * 9, 60, 200 - i * 5)).save(
+            raiz / "sub" / f"tex_{i:02d}.png")
+    (raiz / "modelo.blend").write_bytes(b"blend" * 50)
+
+    bancos = []
+    for workers in (1, 2):
+        conn = connect(tmp_path / f"t{workers}.db")
+        apply_migrations(conn)
+        lib_id = libraries_repo.get_or_create(conn, raiz)
+        stats = scan_library(conn, lib_id, raiz, workers=workers)
+        assert stats.added == 13
+        bancos.append(_linhas_do_banco(conn))
+        conn.close()
+
+    assert bancos[0] == bancos[1]
+
+
+def test_arquivo_intocado_nao_vai_pro_pool(tmp_path):
+    """A paralelização é pra arquivo NOVO ou MUDADO. Numa reindexação a
+    maioria está intocada, e mandar todos pro pool desperdiçaria justamente
+    onde não há trabalho a fazer."""
+    from PIL import Image
+
+    from assetdeck.indexer.scanner import _precisa_calcular
+
+    raiz = tmp_path / "lib"
+    raiz.mkdir()
+    img = raiz / "tex.png"
+    Image.new("RGB", (32, 32)).save(img)
+
+    conn = connect(tmp_path / "t.db")
+    apply_migrations(conn)
+    lib_id = libraries_repo.get_or_create(conn, raiz)
+    scan_library(conn, lib_id, raiz, workers=1)
+
+    known = {row["rel_path"]: row for row in conn.execute(
+        """SELECT f.id, f.rel_path, f.size_bytes, f.mtime_ns, f.missing_since,
+                  f.width, f.phash, f.dominant_color
+           FROM files f JOIN assets a ON a.id = f.asset_id
+           WHERE a.library_id = ?""", (lib_id,))}
+
+    assert _precisa_calcular(raiz, img, known) is False
+
+    img.write_bytes(img.read_bytes() + b"\x00")   # mudou de tamanho
+    assert _precisa_calcular(raiz, img, known) is True
+    conn.close()
