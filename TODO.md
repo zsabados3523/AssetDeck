@@ -3221,3 +3221,41 @@ religar o sinal direto em `refresh_count`.
 28 mil itens de árvore. Candidato natural pra próxima fatia, junto da
 investigação de abertura lenta que já estava pendente (Fatia 83 mediu
 ~2,2s só no prewarm dos visualizadores).
+
+### ☐ Fatia 88 — "Sincronizando biblioteca…" congelava a UI
+
+Medido na biblioteca real (50 mil assets, 143 mil linhas no modo
+expandido), por parte do `_reload_all(warmup=True)`:
+
+| parte | antes | agora |
+|---|---|---|
+| consulta (expand_sets) | 0,79s | 0,78s |
+| filtro + montagem de caminhos | 0,98s | 0,88s |
+| **checagem de miniaturas no disco** | **1,36s** | **0,25s** |
+| **total** | **3,13s** | **1,92s** |
+
+(A árvore de pastas, medida junto, custa mais 0,7s — total do `_reload_all`
+caiu de ~4,5s pra ~2,6s.)
+
+**O achado:** o pré-aquecimento recebia **127 mil itens e agendava 577** —
+99,5% do trabalho era um `exists()` por item só pra confirmar que a
+miniatura já existia. Como a pasta de miniaturas é PLANA (um arquivo por
+`content_hash`), passou a ser listada UMA vez e comparada em memória.
+Junto: `thumb_name()` novo em `cache.py` evita construir um `Path` por
+item (só as centenas que vão gerar precisam dele), e `_warmup` monta o
+caminho de cada linha uma vez em vez de duas.
+
+**Teste:** conta chamadas a `Path.exists`, não tempo — 50 itens não podem
+gerar 50 consultas ao disco. Confirmado que falha ao desligar a
+otimização.
+
+**O que NÃO foi feito, e por quê:** sobra ~1,7s de congelamento (consulta
++ montagem da lista), que continuam na thread da UI. Zerar isso exige
+movê-las pra thread da varredura — o Rafael aprovou a ideia, mas isso
+muda o que o `ScanWorker` devolve no sinal `finished`, e depois da
+sequência de regressões do dia não valia emendar essa mudança na mesma
+fatia sem ele ver a anterior funcionando. Fica como próxima.
+
+**Contexto:** o problema GRAVE que ele relatou ("o programa nem abre") era
+outro e está na Fatia 87 — a contagem da lateral em O(n²) com 28 mil
+pastas. Esta fatia é o congelamento que sobrou depois daquilo.
