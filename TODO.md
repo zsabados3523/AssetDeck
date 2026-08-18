@@ -2912,3 +2912,376 @@ ANTES do `connect`. Registrado no teste pra não parecer bug depois.
 
 **Falta da Fase 7:** Etapa 3 (`HdriViewer`/`ModelViewer` + diálogos
 secundários) e a investigação da abertura lenta.
+
+### ☐ Fatia 81 — preview por nome não alcançava a organização real da biblioteca
+
+Rafael, testando: "assinalar previews automaticamente pelo nome não
+parece estar funcionando". **Não era regressão da Fatia 80** — a função
+funcionava, mas o critério dela não alcançava a biblioteca dele.
+
+**Causa:** a Fatia 57 casava modelo e imagem só na MESMA pasta. Os packs
+comerciais separam em pastas IRMÃS:
+
+    Maxtree Vol 148/MT_PM_V148_Blender_CyclesEevee/MT_..._01_01.blend
+    Maxtree Vol 148/MT_PM_V148_Thumbnails/        MT_..._01_01.jpg
+
+Nome idêntico, pasta diferente — todos descartados. Medido antes de
+mexer em qualquer código: na biblioteca real dele, **0 de 2.530** modelos
+sem capa casavam; aceitando pasta irmã, 342. Na testlib, de 8 para 69
+(80 no teste real depois, com o banco recém-varrido).
+
+**Correção:** o escopo do casamento passou de "mesma pasta" para "mesmo
+PACOTE" (`_pacote_de` — a pasta que contém a pasta do arquivo). Continua
+só aplicando quando o par é único NOS DOIS SENTIDOS.
+
+**Dois achados que valem mais que o patch:**
+
+1. **Um teste da Fatia 57 pegou um exagero da minha primeira versão.**
+   Eu subia um nível sempre — e na RAIZ da biblioteca isso vira
+   "biblioteca inteira": `MOVEIS/Banco.blend` passava a casar com
+   `OUTRAPASTA/Banco.jpg`. O `test_pasta_diferente_nao_casa_por_engano`
+   falhou e obrigou a ressalva: raiz não é pacote. O teste continua verde,
+   agora guardando esse limite (docstring atualizada explicando).
+2. **Ambiguidade do lado do MODELO nunca era detectada.** `modelos` era um
+   dict de par único: dois modelos de mesmo nome e o segundo SOBRESCREVIA
+   o primeiro em silêncio, dando a capa a um deles ao acaso. Raro com a
+   regra de mesma pasta; comum com pasta irmã — o Maxtree entrega o mesmo
+   modelo numa pasta por renderizador (CyclesEevee e Octane). Agora vira
+   lista, é detectado, pulado e logado.
+
+**Testes novos (3):** casa com imagem em pasta irmã do mesmo pacote; dois
+modelos de mesmo nome no pacote é ambíguo (nenhum ganha capa); não
+atravessa a fronteira do pacote (Vol 148 não pega prévia do Vol 149).
+
+**Registrado à parte:** o `library_root` do app está apontando pra
+`/mnt/sdb1/.../BIBLIOTECA {CURA}`, não pra testlib — provavelmente o
+Rafael trocou pelo seletor novo enquanto testava. Avisado a ele.
+
+### ☐ Fatia 82 — painel de detalhes cortado e "flickando" (regressão da 79)
+
+"A janela de detalhes está toda ferrada, com algumas coisas flickando…
+ela não aparece por completo também." **Regressão minha da Fatia 79**,
+que só apareceu quando ele trocou pra biblioteca real.
+
+**Causa:** um `QLabel` deixa o CONTEÚDO ditar a largura mínima do layout —
+com `wordWrap` ela vira a maior PALAVRA, sem `wordWrap` vira a linha
+inteira. Os nomes dos packs dele são tokens sem espaço
+(`MT_PM_V139_Cortaderia_selloana_pumila_01_01`). Medido no app dele: o
+NOME exigia 349px e o CAMINHO 284px, num painel cujo miolo tem 272px — o
+conteúdo saía com 361px e era CORTADO, porque a Fatia 79 tinha desligado
+a rolagem lateral (trocou rolagem por corte).
+
+**O flicker era da minha própria correção anterior:** a Fatia 79 elidia o
+TEXTO e reescrevia o rótulo. Só que o texto elidido volta a ser a largura
+mínima do rótulo, e cada mudança de largura disparava outra elisão —
+conteúdo e layout se empurrando.
+
+**Correção:** `_RotuloElidido`, um `QLabel` que guarda o texto inteiro e
+DESENHA elidido no `paintEvent`, com `minimumSizeHint` fixo. O texto nunca
+muda, então não há realimentação: o flicker some por construção, não por
+remendo. Nome e caminho completos ficam no tooltip. Conteúdo caiu de
+361px pra 272px, exatamente a largura do painel.
+
+**Por que só apareceu agora:** na testlib os nomes são curtos
+("Cadeira_POC") e nada estourava o limite. Só a biblioteca real, com
+nomes de pack, ultrapassa — mais um caso de que a verificação visual
+precisa incluir os dados DELE, não só os do teste.
+
+**Testes (2):** nome e caminho longos não alargam o painel (confirmado
+que pega — revertendo o rótulo pra `QLabel` comum ele acusa "o nome exige
+273px"), e o texto completo continua alcançável por `text()`/tooltip.
+
+### ☐ Fatia 83 — não dava mais pra maximizar a janela (bug da Fatia 72)
+
+"Agora eu não consigo mais maximizar a janela." **Não era das mudanças
+visuais** — é do `prewarm_gl_viewers()`, o fix do "piscar" da Fatia 72.
+
+**Causa, medida na abertura real:**
+
+    apos show():   1920x1010  max=True    <- abre maximizada
+    apos prewarm:  1920x1010  max=False   <- perde o ESTADO, mantém o tamanho
+
+Os visualizadores são janelas de topo FILHAS da principal. Mostrar e
+esconder uma delas faz o Qt recalcular o estado do PAI e deixá-lo em
+"normal" — só o estado, o tamanho continua o de maximizada. Na tela
+sobra uma janela do tamanho do monitor que o gerenciador considera
+normal: o botão de maximizar "maximiza" pro mesmo tamanho e nada muda.
+
+**Por que só apareceu agora:** só quebra se a janela foi FECHADA
+maximizada — é aí que ela reabre maximizada e o prewarm tem um estado
+pra destruir. Passou despercebido desde a Fatia 72 enquanto ele usou a
+janela em tamanho normal.
+
+**Correção:** guardar `windowState()` antes do pré-aquecimento e repor
+depois. Verificado o ciclo completo (fechar maximizada → reabrir →
+prewarm → continua maximizada).
+
+**Descartado no caminho, com medição:** a largura mínima da janela é
+IDÊNTICA antes e depois de todo o redesign visual (1546px nos dois
+pontos, medido em worktree no commit da Fatia 72) — nenhuma das fatias
+73-82 inflou a janela. E nada no código fixa o tamanho dela.
+
+**Teste:** não chama `prewarm_gl_viewers` (QOpenGLWidget derruba o
+processo no modo offscreen do pytest — fronteira já registrada em
+`test_hdri_viewer.py`); guarda que o método LÊ e REPÕE o estado, e que
+guardar/repor devolve o mesmo valor. Confirmado que falha sem o fix.
+
+**Nota da suíte:** esta rodada saiu **880 passed, 0 failed** — as 4
+falhas de `test_render.py`/`test_missing_textures.py` que acompanharam a
+sessão inteira passaram. Elas dependem do Blender de verdade no
+ambiente; não foi mudança de código nesta fatia.
+
+### ☐ Fatia 84 — previews do Chaos Cosmos (vários por modelo, com sufixo)
+
+"Cada .blend vem com vários previews, e apesar de ter nome igual, cada
+preview tem um sufixo depois (_001, _002 etc)."
+
+**Estrutura real** (achada em `~/Documentos/CHAOS COSMOS`, 6.475 modelos):
+
+    Furniture/Chair_125_029/Chair_125_029.blend
+    Furniture/Chair_125_029/previews/Chair_125_029_01.png
+                                     Chair_125_029_02.png
+
+Numa amostra de 400 pastas: 707 previews no formato `_01`/`_02`, **91 com
+nome de HASH** (`a586041c_1755512249817171783.png`, sem relação nenhuma
+com o modelo) e 10 em variações (`_01_v001`, `-01`).
+
+**Duas regras novas de candidato:**
+1. **Por nome com sufixo de sequência** — o stem da imagem, tirando 1 ou 2
+   sufixos numéricos, bate com o nome do modelo. Vários numerados NÃO são
+   ambiguidade: são ângulos, e o primeiro (ordem natural) é a capa. A
+   ambiguidade de verdade continua valendo — `Mesa.jpg` + `Mesa.png`, mesmo
+   nome-base e extensões diferentes, segue pulado.
+2. **Por pasta** — imagem dentro de `previews/` pertence ao modelo da pasta
+   acima. É o que alcança os de nome de hash. Só quando há UM modelo na
+   pasta; com dois, não dá pra saber de quem é.
+
+**Armadilha tratada:** muitos modelos do Cosmos já terminam em número de
+catálogo (`Coffee_Table_273_006_001.blend`). Normalizar o nome do MODELO o
+reduziria a `Coffee_Table` e ele casaria com qualquer mesa de centro — por
+isso só o nome da IMAGEM é normalizado. Tem teste pra isso.
+
+**Escopo generalizado:** `_escopos_de` (pasta do arquivo + a de cima)
+substituiu o `_pacote_de` da Fatia 81. Um conjunto cruzando com o outro
+cobre os três arranjos reais: mesma pasta, SUBpasta (`previews/`, Cosmos)
+e pasta IRMÃ (`Thumbnails/`, Maxtree). A raiz fica fora, senão duas pastas
+quaisquer no topo passariam a se enxergar (o limite que o teste da Fatia
+57 guarda).
+
+**Decisão tomada por mim, fácil de reverter:** só o primeiro preview vira
+capa; os demais NÃO são copiados. Isso evita dobrar tempo e espaço numa
+primeira varredura de 6.475 modelos. `previews_repo.add` já aceita
+`make_cover=False`, então mandar todos pra galeria é mudança pequena se
+ele quiser depois.
+
+**Verificado com dados REAIS:** 40 pastas do Cosmos dele copiadas pra um
+banco isolado — **40 de 40 capas (100%)**, incluindo os de nome de hash.
+4 testes novos.
+
+### ☐ Fatia 85 — mover assets arrastando da grade pra uma pasta
+
+"Percebi que tem uma árvore na pasta de vasos, porém até eu mover no
+navegador de arquivos iria demorar demais… será que não teria a
+possibilidade de eu selecionar os assets no grid e arrastar pra pasta?"
+
+**Isto abre a regra de somente-leitura.** O `CLAUDE.md` foi atualizado: o
+app tem agora DUAS exceções, `batch_rename` (Fatia 23) e `mover` (esta),
+e nenhuma nova entra sem ele pedir. As duas seguem o mesmo padrão —
+planejar sem tocar em disco, confirmar mostrando o que vai acontecer,
+item problemático pulado e logado sem derrubar o lote.
+
+**O que se move é a PASTA do asset, não o arquivo.** No Cosmos o `.blend`
+tem `textures_cache/` e `previews/` embaixo; mover só o `.blend` entrega
+um asset quebrado. Um asset só é movível quando nenhum OUTRO modelo/cena
+mora na pasta dele — textura, imagem e preview viajam junto, porque a
+pasta É o asset. Quem divide pasta (Maxtree, 108 arquivos e dezenas de
+modelos juntos) é RECUSADO com motivo; o Rafael aceitou esse limite
+explicitamente ("já aceitei que os do maxtree ficarão onde estão").
+
+**Decisão de implementação registrada:** o bloqueio olha `asset_type IN
+(model, scene)`, NÃO `is_dependency`. Essa marca é calculada por
+`dependencies.detect()`, que roda na varredura — numa biblioteca
+recém-indexada ela ainda pode estar zerada, e o mover recusaria assets
+legítimos por um motivo que ele não teria como entender.
+
+**Salvaguardas:** nunca sobrescreve (colisão de nome vira recusa, não
+substituição); só move dentro da biblioteca; o padrão do diálogo é
+Cancelar; e o disco vem ANTES do banco — se o `shutil.move` falhar, o
+banco fica intocado e a biblioteca segue coerente (o contrário deixaria o
+banco apontando pra lugar nenhum).
+
+**Testes (8):** planejar não toca em disco; move a pasta inteira e
+reaponta TODOS os arquivos; o `asset_id` sobrevive (tags/notas/favorito
+moram nele); e as quatro recusas.
+
+**PENDENTE DE TESTE DELE — o gesto do arrasto.** O caminho completo foi
+provado 3 vezes com mouse REAL (XTEST), mas o harness é instável (~1 em
+3): o XTEST move o cursor de verdade, então briga com ele usando o
+computador, e depende de temporização de duplo-clique. Quando o drop
+chega, a cadeia inteira funciona (disco + banco + rodapé). Ele se
+ofereceu pra testar à mão, que vale mais — regra do projeto desde a
+Fatia 52: arrasto testado sem mouse real não prova nada, e aqui o mouse
+real não é confiável o bastante pra fechar a questão sozinho.
+
+### ☐ Fatia 86 — varredura 4× mais rápida (paralelizada)
+
+"~10 assets/segundo é o normal ou poderia ir mais rápido?" Medido antes
+de mexer em qualquer código, em 400 arquivos reais da biblioteca dele:
+
+| etapa | % do tempo |
+|---|---|
+| `stat()` | 3% |
+| impressão digital | 16% |
+| **abrir a imagem (phash + cor)** | **81%** |
+
+O gargalo era decodificar cada imagem em RESOLUÇÃO CHEIA pra calcular duas
+coisas minúsculas — o phash usa 9×8 pixels, a cor dominante usa 1×1. Uma
+textura 4K era decodificada inteira pra produzir 64 pixels.
+
+**Otimização DESCARTADA, e o porquê:** decodificar em resolução reduzida
+(o Pillow faz JPEG a 1/8 direto) daria ganho maior, mas MUDA o phash. E
+`find_duplicate_groups` agrupa por igualdade EXATA de phash, sem
+tolerância — arquivos indexados antes e depois parariam de casar entre si,
+silenciosamente, até alguém procurar duplicados. Só valeria com um
+recálculo de todos os phashes existentes, que é a operação cara, uma vez.
+
+**Feito:** o cálculo pesado (`fingerprint` + `image_meta`) vai pra um pool
+de processos, em blocos de 200. Mesma conta, só distribuída. Escritas no
+banco seguem em série na thread principal.
+
+**Medido na máquina dele** (pasta `03_TEXTURAS/Madeiras`, 275 texturas 4K):
+
+    série    : 50,5s =>  5,4 arq/s
+    4 proc.  : 12,7s => 21,6 arq/s   (4,0x)
+
+E o **banco sai bit a bit idêntico** — comparado linha a linha em
+`rel_path/size/content_hash/width/height/phash/dominant_color`.
+
+**Quatro processos por MEDIÇÃO, não por chute:** 8 processos deram 28
+arq/s, PIOR que os 40 de 4, porque a partir dali o disco externo vira o
+gargalo e os processos passam a disputar I/O em vez de somar CPU.
+
+**Duas armadilhas achadas no caminho:**
+1. **`fork()` numa thread pode travar.** A varredura roda numa thread do
+   Qt e o Python 3.12 avisa que forkar dali pode congelar o filho — sem
+   erro na tela. Trocado por `spawn` (~100ms a mais por processo, uma vez
+   por varredura). O `__main__.py` do app já tem a guarda
+   `if __name__ == "__main__"`, então os filhos não re-executam nada.
+2. **O "Parar" parou de responder.** A 1ª versão checava cancelamento só
+   por bloco de 200 — numa biblioteca menor que isso, não respondia nunca.
+   Pego pelo `test_parada_a_pedido_interrompe_sem_corromper`, que já
+   existia; a checagem voltou a ser por arquivo.
+
+Arquivo já indexado e intocado NÃO vai pro pool (`_precisa_calcular`) —
+numa reindexação é a maioria, e mandá-los junto desperdiçaria a
+paralelização onde não há trabalho.
+
+**Testes (2):** paralelo produz exatamente o mesmo banco que série, e
+arquivo intocado não entra no pool.
+
+### ☐ Fatia 87 — o app não abria mais (contagem da lateral em O(n²))
+
+"Mas é normal que o programa nem abra?" Não era — o app TRAVAVA de
+verdade. E não era a paralelização da Fatia 86: um `faulthandler` mostrou
+o congelamento em `sidebar.contar_itens`, montando a árvore de pastas.
+
+**Causa:** o contador de cada seção da lateral escuta `rowsInserted` do
+MODELO da view e, a cada sinal, percorre a árvore INTEIRA pra contar.
+Custo O(n²). A biblioteca real dele tem hoje **28.520 pastas**:
+
+    28.520² = 813 MILHÕES de iterações  ->  o app não abre
+
+**A armadilha que escondeu isso:** `FolderTree.reload()` chama
+`blockSignals(True)` na árvore, o que PARECE proteger. Mas quem emite
+`rowsInserted` é o MODELO — bloquear o widget não bloqueia o modelo dele.
+
+**Por que só agora:** o custo existe desde a fatia da lateral, mas era
+invisível com poucas dezenas de pastas na testlib. Ele trocou pra
+biblioteca real e vem indexando o Chaos Cosmos — 6.475 modelos, cada um
+com `previews/` e `textures_cache/`, ~19 mil pastas só desse pack. Foi o
+que cruzou o limite.
+
+**Correção:** a recontagem virou um `QTimer` de intervalo zero, single
+shot, reiniciado a cada sinal — as 28 mil inserções viram UMA contagem,
+depois que a fila de eventos esvazia. `refresh_count()` segue público e
+imediato pra quem chama direto. App abre em ~15s.
+
+**Efeito colateral MEU, corrigido junto:** fechar o app durante uma
+varredura passou a estourar o limite de 5s do `ScanController` ("thread
+não terminou em 5000ms" + `QThread: Destroyed while running`), porque o
+bloco de 200 arquivos no pool não era interrompível. Agora o pré-cálculo
+consome o `map` preguiçosamente e olha `should_stop` a cada resultado, o
+bloco caiu pra 100, e o `shutdown` usa `cancel_futures=True`.
+
+**Teste:** conta CHAMADAS, não tempo (medir tempo daria teste instável) —
+300 inserções têm de virar UMA recontagem. Confirmado que falha ao
+religar o sinal direto em `refresh_count`.
+
+**Fica registrado:** ~15s de abertura ainda é muito, e boa parte é montar
+28 mil itens de árvore. Candidato natural pra próxima fatia, junto da
+investigação de abertura lenta que já estava pendente (Fatia 83 mediu
+~2,2s só no prewarm dos visualizadores).
+
+### ☐ Fatia 88 — "Sincronizando biblioteca…" congelava a UI
+
+Medido na biblioteca real (50 mil assets, 143 mil linhas no modo
+expandido), por parte do `_reload_all(warmup=True)`:
+
+| parte | antes | agora |
+|---|---|---|
+| consulta (expand_sets) | 0,79s | 0,78s |
+| filtro + montagem de caminhos | 0,98s | 0,88s |
+| **checagem de miniaturas no disco** | **1,36s** | **0,25s** |
+| **total** | **3,13s** | **1,92s** |
+
+(A árvore de pastas, medida junto, custa mais 0,7s — total do `_reload_all`
+caiu de ~4,5s pra ~2,6s.)
+
+**O achado:** o pré-aquecimento recebia **127 mil itens e agendava 577** —
+99,5% do trabalho era um `exists()` por item só pra confirmar que a
+miniatura já existia. Como a pasta de miniaturas é PLANA (um arquivo por
+`content_hash`), passou a ser listada UMA vez e comparada em memória.
+Junto: `thumb_name()` novo em `cache.py` evita construir um `Path` por
+item (só as centenas que vão gerar precisam dele), e `_warmup` monta o
+caminho de cada linha uma vez em vez de duas.
+
+**Teste:** conta chamadas a `Path.exists`, não tempo — 50 itens não podem
+gerar 50 consultas ao disco. Confirmado que falha ao desligar a
+otimização.
+
+**O que NÃO foi feito, e por quê:** sobra ~1,7s de congelamento (consulta
++ montagem da lista), que continuam na thread da UI. Zerar isso exige
+movê-las pra thread da varredura — o Rafael aprovou a ideia, mas isso
+muda o que o `ScanWorker` devolve no sinal `finished`, e depois da
+sequência de regressões do dia não valia emendar essa mudança na mesma
+fatia sem ele ver a anterior funcionando. Fica como próxima.
+
+**Contexto:** o problema GRAVE que ele relatou ("o programa nem abre") era
+outro e está na Fatia 87 — a contagem da lateral em O(n²) com 28 mil
+pastas. Esta fatia é o congelamento que sobrou depois daquilo.
+
+### ☐ Fatia 89 — mover disparava o pré-aquecimento da biblioteca à toa
+
+Pergunta dele: "toda vez que eu movo um asset para uma pasta precisa
+reindexar?" **Não precisa** — `mover.executar` já reaponta no banco os
+caminhos de TODOS os arquivos da pasta (modelo, texturas, previews,
+sidecars). Miniatura é indexada por `content_hash`, não por caminho, então
+continua valendo; tags, notas e favorito moram no `asset_id`, que não muda.
+
+**Mas a pergunta expôs um bug meu:** `_mover_assets` chamava
+`self._reload_all()` sem argumento, e o padrão é `warmup=True`. Cada
+arrasto pagava o pente-fino de ~127 mil itens da biblioteca real — 1,9s de
+UI congelada (medido na Fatia 88) pra não descobrir nada, porque mover não
+traz arquivo novo. A própria docstring de `_reload_all` já avisava contra
+isso ("nunca a cada mudancinha").
+
+**Teste:** `warmup_library` não pode ser chamado num mover. Confirmado que
+falha ao remover o `warmup=False`.
+
+**Ressalva registrada, não corrigida:** mover pode deixar levemente
+desatualizada a marca `is_dependency` de assets VIZINHOS — se a pasta de
+origem ficar sem nenhum modelo, texturas que sobraram lá seguem marcadas
+como dependência até a próxima reindexação. Não afeta o asset movido nem
+quebra nada; no máximo faz uma textura aparecer/sumir conforme o filtro
+"Mostrar dependências". Recalcular só as pastas afetadas é pequeno, se
+virar incômodo real.

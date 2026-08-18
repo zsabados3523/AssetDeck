@@ -7,7 +7,12 @@ Rafael usa o app desktop, não o terminal — execute os comandos você mesmo.
 
 ## Regras absolutas
 - A biblioteca de teste é "/home/rafael/00 - PROJETOS/assetdeck-testlib". NUNCA aponte para outro caminho.
-- O app é somente-leitura sobre a biblioteca. Nada move, renomeia ou apaga.
+- O app é somente-leitura sobre a biblioteca, com DUAS exceções que o Rafael
+  abriu explicitamente: `batch_rename` (renomeia, Fatia 23) e `mover`
+  (move a pasta do asset, Fatia 85). Fora dessas, nada move, renomeia ou
+  apaga — e nenhuma exceção nova entra sem ele pedir. As duas seguem o
+  mesmo padrão: planejar sem tocar em disco, confirmar mostrando o que vai
+  acontecer, e item problemático pulado e logado sem derrubar o lote.
 - Nenhum `except` silencioso. Todo erro é logado com contexto.
 - Nenhum dado mockado no código de produção. Mock só em teste.
 - Não enfraqueça um teste para ele passar. Conserte o código.

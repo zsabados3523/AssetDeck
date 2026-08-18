@@ -834,3 +834,43 @@ def test_prewarm_gl_viewers_existe(janela):
     mesma fronteira de `test_hdri_viewer.py`/`test_model_viewer.py`, que
     também não instanciam os widgets de OpenGL de verdade)."""
     assert callable(janela.prewarm_gl_viewers)
+
+
+def test_prewarm_preserva_o_estado_da_janela(janela):
+    """Regressão do que o Rafael relatou: "não consigo mais maximizar a
+    janela".
+
+    Os visualizadores são janelas de topo FILHAS da principal. Mostrar e
+    esconder uma delas — que é o que `prewarm_gl_viewers` faz na abertura,
+    pra matar o "piscar" (Fatia 72) — fazia o Qt recalcular o estado do PAI
+    e deixá-lo em "normal". Só o ESTADO: o tamanho continuava o de
+    maximizada. Na tela sobrava uma janela do tamanho do monitor que o
+    gerenciador considera normal, então o botão de maximizar não mudava
+    nada.
+
+    O teste não CHAMA `prewarm_gl_viewers` — `QOpenGLWidget` derruba o
+    processo no modo offscreen do pytest, fronteira já registrada em
+    `test_hdri_viewer.py`. O que ele guarda é a parte verificável sem GL:
+    que o método lê o estado antes e o repõe depois.
+    """
+    import inspect
+
+    from PySide6.QtCore import Qt
+
+    fonte = inspect.getsource(janela.prewarm_gl_viewers)
+    assert "windowState()" in fonte, (
+        "prewarm_gl_viewers precisa LER o estado da janela antes de mexer "
+        "nos visualizadores"
+    )
+    assert "setWindowState(" in fonte, (
+        "prewarm_gl_viewers precisa REPOR o estado depois — sem isso a "
+        "janela perde o 'maximizada' e o botão do gerenciador para de "
+        "surtir efeito"
+    )
+
+    # E o estado é de fato reponível: guardar/repor devolve o mesmo valor.
+    janela.setWindowState(Qt.WindowState.WindowMaximized)
+    guardado = janela.windowState()
+    janela.setWindowState(Qt.WindowState.WindowNoState)
+    janela.setWindowState(guardado)
+    assert janela.windowState() == guardado

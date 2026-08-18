@@ -149,6 +149,95 @@ def fingerprint(path: Path) -> str:
     return h.hexdigest()
 
 
+# Quantos processos a varredura usa pra calcular hash e metadados de
+# imagem. QUATRO por medição, não por chute: na máquina do Rafael (16
+# núcleos, biblioteca num SSD externo) 4 processos deram 40 arq/s contra
+# 11 em série — e 8 deram 28, PIOR que 4, porque a partir dali o disco vira
+# o gargalo e os processos passam a disputar I/O em vez de somar CPU.
+WORKERS_PADRAO = 4
+
+# Tamanho do bloco processado por vez. Existe pra que "Parar" e a barra de
+# progresso continuem respondendo: com um único `map` sobre a biblioteca
+# inteira, cancelar no meio não teria efeito nenhum até o fim.
+_BLOCO = 100
+
+
+def calcular_pesado(path: Path) -> tuple:
+    """A parte cara de um arquivo: impressão digital + metadados de imagem.
+
+    Módulo de nível de topo e sem estado de propósito — é isto que roda nos
+    processos filhos, e só função importável é picklável.
+
+    NÃO muda nenhuma conta: são exatamente `fingerprint` e `image_meta`, os
+    mesmos de sempre. Isso importa porque o phash é comparado por
+    IGUALDADE EXATA na detecção de duplicados — qualquer mudança no cálculo
+    faria arquivos indexados antes e depois pararem de casar entre si.
+    """
+    return fingerprint(path), image_meta(path)
+
+
+def _abrir_pool(workers: int):
+    """Pool de processos pra varredura, ou `None` pra ir em série.
+
+    **`spawn`, não `fork`** — e isto não é preferência. A varredura roda
+    numa thread do Qt (`ScanController`), e o próprio Python avisa que
+    `fork()` num processo multi-thread pode travar o filho
+    (DeprecationWarning no 3.12, padrão mudando nas próximas versões). Um
+    deadlock aqui congelaria a indexação sem erro nenhum na tela — o pior
+    tipo de falha. `spawn` custa uns 100ms a mais pra subir cada processo,
+    pagos UMA vez por varredura.
+
+    Devolve `None` se o pool não subir (limite de processos, app
+    empacotado): a varredura tem de acontecer de qualquer jeito, só mais
+    devagar.
+    """
+    if workers <= 1:
+        return None
+    try:
+        import multiprocessing
+        from concurrent.futures import ProcessPoolExecutor
+
+        return ProcessPoolExecutor(
+            max_workers=workers, mp_context=multiprocessing.get_context("spawn"))
+    except Exception:
+        log.warning("Pool de processos indisponível — varrendo em série.",
+                    exc_info=True)
+        return None
+
+
+def _pre_calcular(pool, paths: list[Path], should_stop=None) -> dict[Path, tuple]:
+    """Calcula o bloco em paralelo (ou em série, se não houver pool).
+
+    Consome o `map` PREGUIÇOSAMENTE e olha `should_stop` a cada resultado.
+    Sem isso, fechar o app no meio de uma varredura esperava o bloco inteiro
+    terminar — o `ScanController` reclamava "thread não terminou em 5000ms" e
+    matava a thread na marra. Parar aqui ainda espera as tarefas JÁ em voo
+    (no máximo alguns arquivos por processo), não as 200 do bloco.
+    """
+    if not paths:
+        return {}
+    if pool is None:
+        saida = {}
+        for p in paths:
+            if should_stop and should_stop():
+                break
+            saida[p] = calcular_pesado(p)
+        return saida
+    try:
+        saida = {}
+        for path, resultado in zip(paths, pool.map(calcular_pesado, paths, chunksize=4)):
+            saida[path] = resultado
+            if should_stop and should_stop():
+                log.info("Pré-cálculo interrompido a pedido (%d de %d do bloco).",
+                         len(saida), len(paths))
+                break
+        return saida
+    except Exception:
+        # Um pool que morreu no meio não pode levar a varredura junto.
+        log.warning("Pool falhou neste bloco — calculando em série.", exc_info=True)
+        return {p: calcular_pesado(p) for p in paths}
+
+
 def iter_library_files(root: Path):
     """Percorre a biblioteca pulando ocultos e sidecars do próprio AssetDeck."""
     for dirpath, dirnames, filenames in os.walk(root):
@@ -170,6 +259,7 @@ def scan_library(
     progress: Callable[[int, int, ScanStats], None] | None = None,
     should_stop: Callable[[], bool] | None = None,
     batch_size: int = 50,
+    workers: int = WORKERS_PADRAO,
 ) -> ScanStats:
     """Uma passada completa de indexação. Retorna estatísticas do que fez."""
     stats = ScanStats()
@@ -199,24 +289,56 @@ def scan_library(
 
     seen: set[str] = set()
     since_commit = 0
-    for done, path in enumerate(paths, start=1):
-        if should_stop and should_stop():
-            stats.aborted = True
-            log.warning("Varredura interrompida a pedido (%d/%d processados).", done - 1, total)
-            break
-        try:
-            _process_file(conn, library_id, root, path, known, seen, stats)
-        except OSError:
-            # Arquivo ilegível não derruba a varredura, mas fica no log.
-            stats.errors += 1
-            log.exception("Erro ao ler %s — pulando.", path)
+    done = 0
+    pool = _abrir_pool(workers)
+    try:
+      for inicio in range(0, total, _BLOCO):
+          if should_stop and should_stop():
+              stats.aborted = True
+              log.warning("Varredura interrompida a pedido (%d/%d processados).",
+                          done, total)
+              break
 
-        since_commit += 1
-        if since_commit >= batch_size:
-            conn.commit()
-            since_commit = 0
-        if progress:
-            progress(done, total, stats)
+          bloco = paths[inicio:inicio + _BLOCO]
+          # Pré-calcula em paralelo SÓ o que vai precisar. Arquivo já indexado
+          # e intocado não paga nada — é o caso da maioria numa reindexação.
+          cache = _pre_calcular(
+              pool, [p for p in bloco if _precisa_calcular(root, p, known)],
+              should_stop=should_stop)
+
+          for path in bloco:
+              # Checagem POR ARQUIVO, não só por bloco: com só a do bloco, o
+              # "Parar" levava até 200 arquivos pra surtir efeito — e numa
+              # biblioteca menor que um bloco não surtia efeito nenhum (foi o
+              # que o teste de parada pegou).
+              if should_stop and should_stop():
+                  stats.aborted = True
+                  log.warning("Varredura interrompida a pedido (%d/%d processados).",
+                              done, total)
+                  break
+              done += 1
+              try:
+                  _process_file(conn, library_id, root, path, known, seen, stats,
+                                cache=cache)
+              except OSError:
+                  # Arquivo ilegível não derruba a varredura, mas fica no log.
+                  stats.errors += 1
+                  log.exception("Erro ao ler %s — pulando.", path)
+
+              since_commit += 1
+              if since_commit >= batch_size:
+                  conn.commit()
+                  since_commit = 0
+              if progress:
+                  progress(done, total, stats)
+
+          if stats.aborted:
+              break
+    finally:
+        if pool is not None:
+            # `cancel_futures` descarta o que ainda não começou — sem isso,
+            # fechar no meio da varredura esperava a fila inteira.
+            pool.shutdown(wait=True, cancel_futures=True)
 
     if not stats.aborted:
         # Quem está no banco mas não no disco: marca sumido (nunca apaga)
@@ -241,7 +363,43 @@ def scan_library(
     return stats
 
 
-def _process_file(conn, library_id, root, path, known, seen, stats) -> None:
+def _pesado(path: Path, cache: dict | None) -> tuple:
+    """Pega do que o pool já calculou; calcula na hora se não estiver lá.
+
+    O fallback não é enfeite: `_precisa_calcular` pode discordar do laço em
+    casos de corrida (arquivo mudou entre a decisão e o processamento), e
+    aí o certo é calcular, não gravar dado errado."""
+    if cache is not None and path in cache:
+        return cache[path]
+    return calcular_pesado(path)
+
+
+def _precisa_calcular(root: Path, path: Path, known: dict) -> bool:
+    """Este arquivo vai exigir hash/metadados nesta passada?
+
+    Decide ANTES de mandar pro pool: arquivo já indexado, do mesmo tamanho,
+    mesmo mtime e com os campos preenchidos não precisa de nada — e é a
+    maioria numa reindexação. Mandar todos pro pool desperdiçaria a
+    paralelização justamente onde ela não é necessária.
+    """
+    if classify(path) is None:
+        return False
+    try:
+        rel = path.relative_to(root).as_posix()
+        st = path.stat()
+    except OSError:
+        return False   # ilegível: o laço serial trata e loga
+    row = known.get(rel)
+    if row is None:
+        return True                                   # novo
+    if row["size_bytes"] != st.st_size or row["mtime_ns"] != st.st_mtime_ns:
+        return True                                   # mudou
+    return (row["width"] is None or row["phash"] is None
+            or row["dominant_color"] is None)         # backfill
+
+
+def _process_file(conn, library_id, root, path, known, seen, stats,
+                  cache: dict | None = None) -> None:
     asset_type = classify(path)
     if asset_type is None:
         ext = path.suffix.lower().lstrip(".") or "(sem extensão)"
@@ -312,14 +470,14 @@ def _process_file(conn, library_id, root, path, known, seen, stats) -> None:
                     tipo = "text"
                 pid = properties_repo.create_def(conn, nome, tipo)
                 properties_repo.set_value(conn, cur.lastrowid, pid, valor)
-        w, h, alpha, depth, phash, dominant_color = image_meta(path)
+        impressao, (w, h, alpha, depth, phash, dominant_color) = _pesado(path, cache)
         conn.execute(
             """INSERT INTO files (asset_id, rel_path, size_bytes, mtime_ns,
                                   content_hash, is_primary,
                                   width, height, has_alpha, bit_depth, phash,
                                   dominant_color)
                VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)""",
-            (cur.lastrowid, rel_path, st.st_size, st.st_mtime_ns, fingerprint(path),
+            (cur.lastrowid, rel_path, st.st_size, st.st_mtime_ns, impressao,
              w, h, alpha, depth, phash, dominant_color),
         )
         stats.added += 1
@@ -329,7 +487,7 @@ def _process_file(conn, library_id, root, path, known, seen, stats) -> None:
         if row["width"] is None or row["phash"] is None or row["dominant_color"] is None:
             # Backfill: linhas antigas (pré-Fatia 9 / pré-Fatia 20 / pré-Fatia
             # 39) ainda sem dimensões e/ou sem phash e/ou sem cor média
-            w, h, alpha, depth, phash, dominant_color = image_meta(path)
+            _fp, (w, h, alpha, depth, phash, dominant_color) = _pesado(path, cache)
             if w is not None:
                 conn.execute(
                     "UPDATE files SET width = ?, height = ?, has_alpha = ?, "
@@ -349,14 +507,14 @@ def _process_file(conn, library_id, root, path, known, seen, stats) -> None:
         return
 
     # Conteúdo mudou → atualiza medidas e hash (uuid do asset não muda NUNCA)
-    w, h, alpha, depth, phash, dominant_color = image_meta(path)
+    impressao, (w, h, alpha, depth, phash, dominant_color) = _pesado(path, cache)
     conn.execute(
         """UPDATE files SET size_bytes = ?, mtime_ns = ?, content_hash = ?,
                             width = ?, height = ?, has_alpha = ?, bit_depth = ?,
                             phash = ?, dominant_color = ?, missing_since = NULL,
                             updated_at = ?
            WHERE id = ?""",
-        (st.st_size, st.st_mtime_ns, fingerprint(path),
+        (st.st_size, st.st_mtime_ns, impressao,
          w, h, alpha, depth, phash, dominant_color, _now(), row["id"]),
     )
     if row["missing_since"] is not None:

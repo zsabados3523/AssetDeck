@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import sqlite3
 
-from PySide6.QtCore import Signal
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QTreeWidget, QTreeWidgetItem, QTreeWidgetItemIterator
 
 log = logging.getLogger(__name__)
@@ -39,11 +39,63 @@ class FolderTree(QTreeWidget):
     """Seleção de pasta emite dir_selected('' = biblioteca inteira)."""
 
     dir_selected = Signal(str)
+    # Assets soltos sobre uma pasta (Fatia 85): [asset_ids], pasta de destino.
+    # A árvore só AVISA — quem confirma com o Rafael e mexe no disco é a
+    # MainWindow. Um widget de navegação não é lugar pra decidir mover
+    # arquivo.
+    assets_dropped = Signal(list, str)
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self.setHeaderHidden(True)
         self.currentItemChanged.connect(self._on_current)
+        # Só RECEBE arrasto; a árvore nunca inicia um (arrastar pasta pra
+        # pasta é outra história, e bem mais arriscada).
+        self.setAcceptDrops(True)
+        self.setDragDropMode(QTreeWidget.DragDropMode.DropOnly)
+        self.viewport().setAcceptDrops(True)
+
+    # ---- receber assets da grade (Fatia 85) ----
+
+    def _pasta_sob(self, pos) -> str | None:
+        item = self.itemAt(pos)
+        return None if item is None else item.data(0, _DIR_ROLE)
+
+    def dragEnterEvent(self, event) -> None:  # noqa: N802
+        from assetdeck.ui.asset_grid import MIME_ASSETS
+
+        if event.mimeData().hasFormat(MIME_ASSETS):
+            event.acceptProposedAction()
+        else:
+            super().dragEnterEvent(event)
+
+    def dragMoveEvent(self, event) -> None:  # noqa: N802
+        from assetdeck.ui.asset_grid import MIME_ASSETS
+
+        # Só aceita SOBRE uma pasta: soltar no vazio não tem destino, e
+        # adivinhar um seria a pior coisa possível numa operação que mexe
+        # em arquivo.
+        if (event.mimeData().hasFormat(MIME_ASSETS)
+                and self._pasta_sob(event.position().toPoint()) is not None):
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dropEvent(self, event) -> None:  # noqa: N802
+        from assetdeck.ui.asset_grid import MIME_ASSETS
+
+        destino = self._pasta_sob(event.position().toPoint())
+        if destino is None or not event.mimeData().hasFormat(MIME_ASSETS):
+            event.ignore()
+            return
+        crus = bytes(event.mimeData().data(MIME_ASSETS)).decode()
+        ids = [int(x) for x in crus.split(",") if x]
+        log.info("Assets soltos na árvore: %d asset(s) -> pasta %r", len(ids), destino)
+        if ids:
+            event.acceptProposedAction()
+            self.assets_dropped.emit(ids, destino)
+        else:
+            event.ignore()
 
     def reload(self, conn: sqlite3.Connection, library_id: int | None = None) -> None:
         self.blockSignals(True)  # recarregar árvore não deve refiltar a grid

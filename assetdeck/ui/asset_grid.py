@@ -202,12 +202,18 @@ class AssetGridModel(QAbstractListModel):
     def _warmup(self) -> None:
         """Gera em background as thumbs da biblioteca TODA — inclusive os
         mapas não-capa dos sets (o modo expandido precisa deles prontos)."""
-        items = [
-            (r["id"], self._root / r["rel_path"], r["content_hash"])
-            for r in assets_repo.list_for_grid(
-                self._conn, expand_sets=True, library_id=self._library_id)
-            if r["missing_since"] is None and can_preview(self._root / r["rel_path"])
-        ]
+        # UM `Path` por linha, não dois (Fatia 88). A versão anterior montava
+        # o caminho no filtro e de novo na tupla — com as ~143 mil linhas da
+        # biblioteca real do Rafael, isso é 286 mil objetos pra usar 127 mil.
+        items = []
+        for r in assets_repo.list_for_grid(
+                self._conn, expand_sets=True, library_id=self._library_id):
+            if r["missing_since"] is not None:
+                continue
+            caminho = self._root / r["rel_path"]
+            if not can_preview(caminho):
+                continue
+            items.append((r["id"], caminho, r["content_hash"]))
         self._pipeline.warmup(items)
 
     def row_at(self, index: QModelIndex):
