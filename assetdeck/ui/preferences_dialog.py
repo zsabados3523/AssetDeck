@@ -48,50 +48,21 @@ _LABEL_ORIGEM = {v: k for k, v in _ORIGEM_LABEL.items()}
 
 
 class PreferencesDialog(QDialog):
+    """Editor da CENA DE RENDER das capas (Fatia 38).
+
+    Era a janela de "Preferências" inteira. Na Fatia 80 (Fase 7, Etapa 2)
+    tudo que era liga/desliga simples — ponte com o Blender, porta, backups,
+    previews automáticos — saiu daqui e virou LINHA na janela de
+    Configurações, onde aplica na hora. Sobrou o que de fato é um formulário
+    de vários campos que só faz sentido confirmar junto: cor do fundo, força
+    do fundo e intensidade do sol. Por isso continua modal, com OK/Cancelar.
+    """
+
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Preferências")
+        self.setWindowTitle("Cena do render")
 
         self._cfg = config.load_config()
-
-        self.bridge_enabled = QCheckBox("Ativar ponte com o Blender")
-        self.bridge_enabled.setChecked(bool(self._cfg.get("bridge_enabled", True)))
-
-        self.bridge_port = QSpinBox()
-        self.bridge_port.setRange(1024, 65535)
-        self.bridge_port.setValue(int(self._cfg.get("bridge_port", 45017)))
-
-        self.hide_preview_source = QComboBox()
-        self.hide_preview_source.addItems(list(_ORIGEM_LABEL.values()))
-        atual = self._cfg.get("hide_preview_source", "ask")
-        self.hide_preview_source.setCurrentText(_ORIGEM_LABEL.get(atual, _ORIGEM_LABEL["ask"]))
-
-        # Preview automático por nome igual (Fatia 57): 'Cadeira.blend' +
-        # 'Cadeira.jpg' na mesma pasta vira capa sozinha, a cada varredura.
-        # Desligado por padrão — mexe em vários assets de uma vez.
-        self.auto_match_previews = QCheckBox("Assinalar previews automaticamente por nome igual")
-        self.auto_match_previews.setChecked(
-            bool(self._cfg.get("auto_match_previews_by_name", False)))
-        self.auto_match_previews.setToolTip(
-            "Ao reindexar, um modelo sem capa que tenha uma imagem de mesmo "
-            "nome na mesma pasta ('Cadeira.blend' + 'Cadeira.jpg') ganha essa "
-            "imagem como capa automaticamente. Ambíguo (2+ imagens com o "
-            "mesmo nome) é pulado, nunca adivinhado."
-        )
-
-        self.auto_match_hide_source = QCheckBox("Ocultar a imagem usada como preview")
-        self.auto_match_hide_source.setChecked(
-            bool(self._cfg.get("auto_match_hide_source", False)))
-        self.auto_match_hide_source.setToolTip(
-            "Reversível em \"Mostrar ocultos\" — só some da grade, o arquivo "
-            "na biblioteca não é tocado."
-        )
-        self.auto_match_previews.toggled.connect(self.auto_match_hide_source.setEnabled)
-        self.auto_match_hide_source.setEnabled(self.auto_match_previews.isChecked())
-
-        self.backup_keep = QSpinBox()
-        self.backup_keep.setRange(1, 365)
-        self.backup_keep.setValue(int(self._cfg.get("backup_keep", 14)))
 
         # Cena de render de capas (Fatia 38) — vale na próxima vez que
         # clicar em "Gerar capas", sem precisar reabrir o app.
@@ -111,8 +82,7 @@ class PreferencesDialog(QDialog):
         self.render_sun_energy.setValue(float(self._cfg.get("render_sun_energy", 3.0)))
 
         aviso = QLabel(
-            "Ativar/desativar a ponte e trocar a porta só valem depois de "
-            "reabrir o AssetDeck."
+            "Vale na próxima vez que gerar capas — não precisa reabrir o app."
         )
         aviso.setWordWrap(True)
 
@@ -125,12 +95,6 @@ class PreferencesDialog(QDialog):
         layout = QFormLayout(self)
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(10)
-        layout.addRow(self.bridge_enabled)
-        layout.addRow("Porta da ponte:", self.bridge_port)
-        layout.addRow("Imagem da biblioteca como preview:", self.hide_preview_source)
-        layout.addRow(self.auto_match_previews)
-        layout.addRow(self.auto_match_hide_source)
-        layout.addRow("Backups diários a manter:", self.backup_keep)
         layout.addRow("Cor do fundo do render:", self.render_bg_color_btn)
         layout.addRow("Força do fundo:", self.render_bg_strength)
         layout.addRow("Intensidade do sol:", self.render_sun_energy)
@@ -145,12 +109,6 @@ class PreferencesDialog(QDialog):
             self.render_bg_color_btn.setIcon(_amostra_de_cor(self._render_bg_color))
 
     def _salvar(self) -> None:
-        self._cfg["bridge_enabled"] = self.bridge_enabled.isChecked()
-        self._cfg["bridge_port"] = self.bridge_port.value()
-        self._cfg["hide_preview_source"] = _LABEL_ORIGEM[self.hide_preview_source.currentText()]
-        self._cfg["auto_match_previews_by_name"] = self.auto_match_previews.isChecked()
-        self._cfg["auto_match_hide_source"] = self.auto_match_hide_source.isChecked()
-        self._cfg["backup_keep"] = self.backup_keep.value()
         self._cfg["render_bg_color"] = self._render_bg_color
         self._cfg["render_bg_strength"] = self.render_bg_strength.value()
         self._cfg["render_sun_energy"] = self.render_sun_energy.value()

@@ -2856,3 +2856,59 @@ confirmada revertendo o padding de propósito:
 
 Vale como regra pras próximas: teste de token tem de enumerar TODOS os
 widgets que consomem o token, não uma amostra.
+
+### ☐ Fatia 80 — Fase 7, Etapa 2: janela de configurações
+
+Mockup aprovado pelo Rafael ("pode ser, prossiga"), incluindo os dois
+pontos que eu tinha destacado como decisão dele: absorver a janela de
+Preferências e renomear duas categorias.
+
+**Cada opção virou uma LINHA** — título, uma frase do que faz, e o
+controle à direita. Antes toda opção era um botão esticado de ponta a
+ponta sem explicação: "Assinalar previews automaticamente por nome
+agora" era um botão de 460px e nada dizendo o que ia acontecer com a
+biblioteca ao clicar.
+
+**Categorias reorganizadas:** "Ferramentas" → **Manutenção**, "Geral" →
+**Sistema**, e "Painéis e filtros" partiu em **Painéis** e **Filtros** —
+são perguntas diferentes ("quais partes da janela aparecem" e "o que a
+grade mostra"), e estavam na mesma lista separadas só por um respiro.
+Ícones na lateral, com a mesma pastilha de item ativo da lateral
+principal.
+
+**A página "Preferências" deixou de existir.** Era uma página cujo único
+conteúdo era um botão que abria OUTRA janela. O que havia lá se
+distribuiu:
+- ponte + porta → **Blender**;
+- previews automáticos (o par assinalar/ocultar origem) e o combo de
+  "imagem da biblioteca como preview" → **Filtros**;
+- backups diários → **Sistema**;
+- cena do render (cor do fundo, força, sol) → **continua em diálogo
+  próprio**, agora chamado "Cena do render", aberto pela linha
+  correspondente. É o único do lote que é um formulário de vários campos
+  que só faz sentido confirmar junto — por isso segue modal com
+  OK/Cancelar, enquanto tudo que virou linha aplica NA HORA (a janela de
+  configurações é não-modal, não tem "OK" pra confirmar).
+
+**"Sair do AssetDeck" ganhou zona própria** ("Zona de risco", em
+vermelho). Estava encostado em "Abrir pasta de logs".
+
+**Testes:** 5 testes de `test_preferences_dialog.py` migraram para o
+novo `tests/test_settings_window.py` junto com os controles que eles
+cobrem — mesmo comportamento verificado no lugar novo, agora incluindo
+"grava na hora" em vez de "grava ao clicar OK". Mais 3 testes novos de
+estrutura (as seis categorias na ordem aprovada, não existe mais página
+"Preferências", uma página por categoria). O
+`test_settings_window_tem_as_seis_categorias` de `test_main_window.py`
+foi reduzido ao que só ele garante — a barra de menus continuar vazia —
+e renomeado, já que a lista de categorias passou a ser assunto do
+arquivo novo.
+
+**Achado no caminho, não é bug:** com `bridge_port = 0` no config (valor
+que os próprios testes usam pra deixar o SO escolher a porta), o spinbox
+mostra 1024, o mínimo dele. Não é perda de dado — o config só é
+reescrito se o Rafael mexer no campo, porque o `setValue` inicial roda
+ANTES do `connect`. Registrado no teste pra não parecer bug depois.
+
+**Falta da Fase 7:** Etapa 3 (`HdriViewer`/`ModelViewer` + diálogos
+secundários) e a investigação da abertura lenta.
