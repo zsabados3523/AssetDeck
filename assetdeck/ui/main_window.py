@@ -1085,7 +1085,14 @@ class MainWindow(QMainWindow):
 
         movidos, falhas = mover.executar(self._conn, self._library_id,
                                          self._library_root, plano)
-        self._reload_all()
+        # `warmup=False` (Fatia 89): mover NÃO traz arquivo novo pra
+        # biblioteca — são os mesmos arquivos em outro lugar, e a miniatura é
+        # indexada por `content_hash`, não por caminho, então continua
+        # valendo. Com o padrão `warmup=True` cada arrasto pagava o
+        # pente-fino de ~127 mil itens (medido na Fatia 88: 1,9s de UI
+        # congelada) sem ter o que descobrir. É exatamente o caso que a
+        # docstring de `_reload_all` descreve.
+        self._reload_all(warmup=False)
         recado = f"{movidos} asset(s) movidos para {onde}"
         if falhas:
             recado += f" — {falhas} falharam (ver log)"
