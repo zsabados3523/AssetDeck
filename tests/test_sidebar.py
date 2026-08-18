@@ -251,3 +251,44 @@ def test_a_lateral_sobrevive_a_troca_de_modo(lateral, qapp):
     lateral.refresh_theme()
     assert _imagem_do_icone(lateral.rail.buttons["pastas"]) != escuro, \
         "o ícone do rail não acompanhou a troca de modo"
+
+
+# ------------------------------- custo da recontagem (Fatia 87) --
+
+def test_carregar_muitas_pastas_nao_reconta_uma_vez_por_pasta(qapp, tmp_path):
+    """Regressão do "é normal que o programa nem abra?".
+
+    O contador da seção escuta `rowsInserted` do MODELO da view. Ligado
+    direto em `refresh_count`, cada pasta inserida percorria a árvore
+    INTEIRA pra contar — O(n²). Na biblioteca real do Rafael, com 28.520
+    pastas, isso dá 813 milhões de iterações e o app não abria.
+
+    `blockSignals(True)` na view não resolvia: quem emite o sinal é o
+    modelo, e bloquear o widget não bloqueia o modelo dele.
+
+    O teste conta CHAMADAS, não tempo: medir tempo aqui daria um teste
+    instável, e o que importa é que N inserções não virem N contagens.
+    """
+    from PySide6.QtWidgets import QTreeWidget, QTreeWidgetItem
+
+    from assetdeck.ui.sidebar import SidebarSection
+
+    arvore = QTreeWidget()
+    arvore.setHeaderHidden(True)
+    secao = SidebarSection("pastas", "Pastas", arvore)
+
+    chamadas = []
+    original = secao.refresh_count
+    secao.refresh_count = lambda: (chamadas.append(1), original())[1]
+    secao._recontagem.timeout.disconnect()
+    secao._recontagem.timeout.connect(secao.refresh_count)
+
+    for i in range(300):
+        arvore.addTopLevelItem(QTreeWidgetItem([f"pasta_{i}"]))
+
+    assert chamadas == [], "recontou DURANTE a carga — é o custo quadrático"
+
+    qapp.processEvents()   # o timer de intervalo zero dispara aqui
+    assert len(chamadas) == 1, (
+        f"300 inserções deviam virar UMA recontagem, viraram {len(chamadas)}")
+    assert secao.header.contador.text() == "299"   # 300 menos a linha sintética

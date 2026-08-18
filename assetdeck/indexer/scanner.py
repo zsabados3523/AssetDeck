@@ -159,7 +159,7 @@ WORKERS_PADRAO = 4
 # Tamanho do bloco processado por vez. Existe pra que "Parar" e a barra de
 # progresso continuem respondendo: com um único `map` sobre a biblioteca
 # inteira, cancelar no meio não teria efeito nenhum até o fim.
-_BLOCO = 200
+_BLOCO = 100
 
 
 def calcular_pesado(path: Path) -> tuple:
@@ -205,14 +205,33 @@ def _abrir_pool(workers: int):
         return None
 
 
-def _pre_calcular(pool, paths: list[Path]) -> dict[Path, tuple]:
-    """Calcula o bloco em paralelo (ou em série, se não houver pool)."""
+def _pre_calcular(pool, paths: list[Path], should_stop=None) -> dict[Path, tuple]:
+    """Calcula o bloco em paralelo (ou em série, se não houver pool).
+
+    Consome o `map` PREGUIÇOSAMENTE e olha `should_stop` a cada resultado.
+    Sem isso, fechar o app no meio de uma varredura esperava o bloco inteiro
+    terminar — o `ScanController` reclamava "thread não terminou em 5000ms" e
+    matava a thread na marra. Parar aqui ainda espera as tarefas JÁ em voo
+    (no máximo alguns arquivos por processo), não as 200 do bloco.
+    """
     if not paths:
         return {}
     if pool is None:
-        return {p: calcular_pesado(p) for p in paths}
+        saida = {}
+        for p in paths:
+            if should_stop and should_stop():
+                break
+            saida[p] = calcular_pesado(p)
+        return saida
     try:
-        return dict(zip(paths, pool.map(calcular_pesado, paths, chunksize=8)))
+        saida = {}
+        for path, resultado in zip(paths, pool.map(calcular_pesado, paths, chunksize=4)):
+            saida[path] = resultado
+            if should_stop and should_stop():
+                log.info("Pré-cálculo interrompido a pedido (%d de %d do bloco).",
+                         len(saida), len(paths))
+                break
+        return saida
     except Exception:
         # Um pool que morreu no meio não pode levar a varredura junto.
         log.warning("Pool falhou neste bloco — calculando em série.", exc_info=True)
@@ -284,7 +303,8 @@ def scan_library(
           # Pré-calcula em paralelo SÓ o que vai precisar. Arquivo já indexado
           # e intocado não paga nada — é o caso da maioria numa reindexação.
           cache = _pre_calcular(
-              pool, [p for p in bloco if _precisa_calcular(root, p, known)])
+              pool, [p for p in bloco if _precisa_calcular(root, p, known)],
+              should_stop=should_stop)
 
           for path in bloco:
               # Checagem POR ARQUIVO, não só por bloco: com só a do bloco, o
@@ -316,7 +336,9 @@ def scan_library(
               break
     finally:
         if pool is not None:
-            pool.shutdown(wait=True)
+            # `cancel_futures` descarta o que ainda não começou — sem isso,
+            # fechar no meio da varredura esperava a fila inteira.
+            pool.shutdown(wait=True, cancel_futures=True)
 
     if not stats.aborted:
         # Quem está no banco mas não no disco: marca sumido (nunca apaga)

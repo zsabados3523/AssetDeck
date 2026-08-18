@@ -3178,3 +3178,46 @@ paralelização onde não há trabalho.
 
 **Testes (2):** paralelo produz exatamente o mesmo banco que série, e
 arquivo intocado não entra no pool.
+
+### ☐ Fatia 87 — o app não abria mais (contagem da lateral em O(n²))
+
+"Mas é normal que o programa nem abra?" Não era — o app TRAVAVA de
+verdade. E não era a paralelização da Fatia 86: um `faulthandler` mostrou
+o congelamento em `sidebar.contar_itens`, montando a árvore de pastas.
+
+**Causa:** o contador de cada seção da lateral escuta `rowsInserted` do
+MODELO da view e, a cada sinal, percorre a árvore INTEIRA pra contar.
+Custo O(n²). A biblioteca real dele tem hoje **28.520 pastas**:
+
+    28.520² = 813 MILHÕES de iterações  ->  o app não abre
+
+**A armadilha que escondeu isso:** `FolderTree.reload()` chama
+`blockSignals(True)` na árvore, o que PARECE proteger. Mas quem emite
+`rowsInserted` é o MODELO — bloquear o widget não bloqueia o modelo dele.
+
+**Por que só agora:** o custo existe desde a fatia da lateral, mas era
+invisível com poucas dezenas de pastas na testlib. Ele trocou pra
+biblioteca real e vem indexando o Chaos Cosmos — 6.475 modelos, cada um
+com `previews/` e `textures_cache/`, ~19 mil pastas só desse pack. Foi o
+que cruzou o limite.
+
+**Correção:** a recontagem virou um `QTimer` de intervalo zero, single
+shot, reiniciado a cada sinal — as 28 mil inserções viram UMA contagem,
+depois que a fila de eventos esvazia. `refresh_count()` segue público e
+imediato pra quem chama direto. App abre em ~15s.
+
+**Efeito colateral MEU, corrigido junto:** fechar o app durante uma
+varredura passou a estourar o limite de 5s do `ScanController` ("thread
+não terminou em 5000ms" + `QThread: Destroyed while running`), porque o
+bloco de 200 arquivos no pool não era interrompível. Agora o pré-cálculo
+consome o `map` preguiçosamente e olha `should_stop` a cada resultado, o
+bloco caiu pra 100, e o `shutdown` usa `cancel_futures=True`.
+
+**Teste:** conta CHAMADAS, não tempo (medir tempo daria teste instável) —
+300 inserções têm de virar UMA recontagem. Confirmado que falha ao
+religar o sinal direto em `refresh_count`.
+
+**Fica registrado:** ~15s de abertura ainda é muito, e boa parte é montar
+28 mil itens de árvore. Candidato natural pra próxima fatia, junto da
+investigação de abertura lenta que já estava pendente (Fatia 83 mediu
+~2,2s só no prewarm dos visualizadores).
