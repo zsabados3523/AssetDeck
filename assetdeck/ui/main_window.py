@@ -1416,6 +1416,16 @@ class MainWindow(QMainWindow):
         """
         from PySide6.QtWidgets import QApplication
 
+        # O ESTADO da janela principal (maximizada/normal) tem de sobreviver
+        # a isto (Fatia 83). Os visualizadores são janelas de topo FILHAS
+        # desta; mostrar e esconder uma delas fazia o Qt recalcular o estado
+        # do pai e deixá-lo em "normal" — só o ESTADO, o tamanho continuava o
+        # de maximizada. O resultado na tela: uma janela do tamanho da tela
+        # que o gerenciador considera normal, então o botão de maximizar
+        # "maximiza" pro mesmo tamanho e nada acontece. Foi como o Rafael
+        # relatou: "não consigo mais maximizar a janela".
+        estado_antes = self.windowState()
+
         for viewer in (self._hdri_viewer(), self._model_viewer()):
             pos_original = viewer.pos()
             viewer.move(-10000, -10000)
@@ -1423,6 +1433,9 @@ class MainWindow(QMainWindow):
             QApplication.processEvents()
             viewer.hide()
             viewer.move(pos_original)
+
+        if self.windowState() != estado_antes:
+            self.setWindowState(estado_antes)
 
     def _grid_menu(self, pos) -> None:
         from PySide6.QtWidgets import QMenu
