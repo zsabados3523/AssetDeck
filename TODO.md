@@ -3285,3 +3285,49 @@ como dependência até a próxima reindexação. Não afeta o asset movido nem
 quebra nada; no máximo faz uma textura aparecer/sumir conforme o filtro
 "Mostrar dependências". Recalcular só as pastas afetadas é pequeno, se
 virar incômodo real.
+
+### ☐ Fatia 90 — visualizadores 3D (Fase 7, Etapa 3)
+
+Mockup aprovado pelo Rafael. Os dois visualizadores (HDRI e modelo)
+eram duas `QDialog` montadas à mão, com layouts levemente diferentes sem
+motivo: nome do asset só na barra de título do sistema, status espremido
+no canto de cima, botões quadrados onde o resto do app já usa pastilha, e
+nenhum jeito de fechar sem ser Esc ou o ✕ do gerenciador.
+
+**Agora é UMA janela** (`ui/viewer_window.py`, `VisualizadorWindow`) com
+as duas superfícies de OpenGL num `QStackedWidget`:
+
+- Cabeçalho com o nome do asset + pastilha da extensão + botão de fechar.
+- Pastilhas (`#pill`) nos modos do HDRI; botão "Enquadrar" no de modelo
+  (recentraliza a câmera — o HDRI já fazia isso com duplo clique).
+- Palco do OpenGL com cantos arredondados e contorno.
+- Rodapé: status à esquerda, "Esc fecha" à direita.
+- **Abre centralizada na janela principal** (pedido explícito), presa à
+  área útil do monitor pra nunca nascer meio pra fora da tela.
+
+**Ganho de abertura:** a transição de modo de composição que o
+`prewarm_gl_viewers` paga é por JANELA DE TOPO. Com duas janelas ela
+acontecia duas vezes; agora, uma. Corta ~metade dos ~2,2s do
+pré-aquecimento — travado pelo teste `test_prewarm_aquece_uma_janela_so`.
+
+**Por que NÃO virou overlay embutido, como o Rafael tinha pedido:** já foi
+tentado e revertido no mesmo dia (Fatia 65). Um `QOpenGLWidget` em
+qualquer lugar da árvore de um top-level muda o modo de composição da
+JANELA INTEIRA — dentro da `MainWindow`, era o app todo que piscava. O
+`PreviewPopup` pode ser embutido porque não usa OpenGL.
+
+**Detalhe técnico que vale lembrar:** `border-radius` do QSS não alcança
+um `QOpenGLWidget` (ele pinta pelo GL, não pelo estilo) e `setMask()`
+recorta serrilhado. Os cantos são um widget POR CIMA do palco
+(`_CantosDoPalco`) que pinta só o que sobra fora do retângulo
+arredondado, com antialiasing.
+
+**Testado:** 8 testes novos do módulo (centralização como função pura +
+pintura dos cantos), 2 na `MainWindow` (janela criada uma vez só;
+pré-aquecimento abre uma janela só). Render conferido em display virtual
+com OpenGL por software, HDRI no escuro e modelo no claro.
+
+**Fica pendente (não é regressão da fatia):** o enquadramento inicial do
+modelo usa como raio a MAIOR meia-dimensão da caixa, não o raio da esfera
+que envolve a malha — num objeto alto e estreito a margem sai justa. Vem
+da Fase 6, só foi movido de lugar aqui.

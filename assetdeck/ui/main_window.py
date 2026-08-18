@@ -938,6 +938,10 @@ class MainWindow(QMainWindow):
         self._bridge_led.refresh_theme()
         self.library_switcher.refresh_theme()  # ícone tingido à mão (Fatia 77)
         self.settings_window.refresh_theme()   # ícones da lateral (Fatia 80)
+        if getattr(self, "_visor_win", None) is not None:
+            # Só se já existir: criar o visualizador aqui montaria um contexto
+            # OpenGL só porque o Rafael trocou de modo claro/escuro.
+            self._visor_win.refresh_theme()
 
         self._search_icon_action.setIcon(icons.icon("search", pal["text_muted"]))
         self.rescan_btn.setIcon(icons.icon("refresh", pal["on_accent"]))
@@ -1426,13 +1430,13 @@ class MainWindow(QMainWindow):
         caminho = Path(self._library_root) / row["rel_path"]
         if can_hdr(caminho):
             # HDRI achatado num QLabel não deixa avaliar a luz (Fatia 34).
-            self._hdri_viewer().show_for(caminho)
+            self._visualizador().abrir_hdri(caminho)
             return
         if caminho.suffix.lower() in model3d_loader.EXTENSOES_SUPORTADAS:
             # Fase 6: modelo com câmera orbitando em vez do preview
             # achatado. content_hash só é usado pelo loader de .blend
             # (cache da exportação via Blender) — o resto ignora.
-            self._model_viewer().show_for(caminho, row["content_hash"])
+            self._visualizador().abrir_modelo(caminho, row["content_hash"])
             return
         maps = None
         if row["asset_type"] == "pbr_set" and self.group_check.isChecked():
@@ -1441,32 +1445,23 @@ class MainWindow(QMainWindow):
         self.preview_popup.show_for(row, self._library_root,
                                     self._thumb_from_disk(row), maps=maps)
 
-    def _hdri_viewer(self):
-        """Criado sob demanda: o contexto OpenGL só é montado se o Rafael
-        realmente abrir um HDRI — quem nunca abre não paga nada.
+    def _visualizador(self):
+        """Janela dos visualizadores 3D (HDRI e modelo na mesma casca desde
+        a Fatia 90), criada sob demanda: o contexto OpenGL só é montado se o
+        Rafael realmente abrir um — quem nunca abre não paga nada.
 
-        Janela PRÓPRIA, não overlay embutido (revertido no dia da Fatia 65 —
-        `QOpenGLWidget` embutido na MainWindow mudava o modo de composição
-        da JANELA INTEIRA do AssetDeck na primeira vez que aparecia,
-        piorando o "piscar" pra afetar o app inteiro em vez de só uma
-        janelinha pequena — ver docstring de `HdriViewer`)."""
-        if getattr(self, "_hdri_win", None) is None:
-            from assetdeck.ui.hdri_viewer import HdriViewer
+        Janela PRÓPRIA, não overlay embutido: um `QOpenGLWidget` dentro da
+        MainWindow muda o modo de composição da JANELA INTEIRA do AssetDeck
+        na primeira vez que aparece, e o app todo pisca (tentado e revertido
+        na Fatia 65 — ver a docstring de `ui/viewer_window.py`)."""
+        if getattr(self, "_visor_win", None) is None:
+            from assetdeck.ui.viewer_window import VisualizadorWindow
 
-            self._hdri_win = HdriViewer(self)
-        return self._hdri_win
-
-    def _model_viewer(self):
-        """Mesmo raciocínio do `_hdri_viewer()` acima: criado sob demanda,
-        janela própria (não overlay — mesmo motivo do HDRI)."""
-        if getattr(self, "_model_win", None) is None:
-            from assetdeck.ui.model_viewer import ModelViewer
-
-            self._model_win = ModelViewer(self)
-        return self._model_win
+            self._visor_win = VisualizadorWindow(self)
+        return self._visor_win
 
     def prewarm_gl_viewers(self) -> None:
-        """Mostra e esconde o HdriViewer e o ModelViewer uma vez, fora da
+        """Mostra e esconde a janela dos visualizadores uma vez, fora da
         tela, na abertura do app — `AA_ShareOpenGLContexts` (`app.py`)
         não bastou (Rafael confirmou na tela: o piscar continua na
         PRIMEIRA vez que uma janela de OpenGL aparece na sessão, some da
@@ -1482,8 +1477,8 @@ class MainWindow(QMainWindow):
         from PySide6.QtWidgets import QApplication
 
         # O ESTADO da janela principal (maximizada/normal) tem de sobreviver
-        # a isto (Fatia 83). Os visualizadores são janelas de topo FILHAS
-        # desta; mostrar e esconder uma delas fazia o Qt recalcular o estado
+        # a isto (Fatia 83). O visualizador é janela de topo FILHA desta;
+        # mostrar e esconder ela fazia o Qt recalcular o estado
         # do pai e deixá-lo em "normal" — só o ESTADO, o tamanho continuava o
         # de maximizada. O resultado na tela: uma janela do tamanho da tela
         # que o gerenciador considera normal, então o botão de maximizar
@@ -1491,13 +1486,17 @@ class MainWindow(QMainWindow):
         # relatou: "não consigo mais maximizar a janela".
         estado_antes = self.windowState()
 
-        for viewer in (self._hdri_viewer(), self._model_viewer()):
-            pos_original = viewer.pos()
-            viewer.move(-10000, -10000)
-            viewer.show()
-            QApplication.processEvents()
-            viewer.hide()
-            viewer.move(pos_original)
+        # UMA janela desde a Fatia 90 (as duas superfícies de GL vivem num
+        # `QStackedWidget` dela). A transição de composição é por JANELA DE
+        # TOPO, então juntar as duas cortou metade deste custo — que é o
+        # trecho mais caro da abertura depois da árvore de pastas.
+        visor = self._visualizador()
+        pos_original = visor.pos()
+        visor.move(-10000, -10000)
+        visor.show()
+        QApplication.processEvents()
+        visor.hide()
+        visor.move(pos_original)
 
         if self.windowState() != estado_antes:
             self.setWindowState(estado_antes)

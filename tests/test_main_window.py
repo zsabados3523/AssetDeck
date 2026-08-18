@@ -783,17 +783,17 @@ def test_on_finished_nada_mudou_nao_chama_reload_all(janela, monkeypatch):
 @pytest.mark.parametrize("nome_arquivo", ["modelo.obj", "modelo.fbx", "modelo.blend"])
 def test_open_preview_roteia_formato_3d_pro_visualizador_de_modelo(
     janela, monkeypatch, nome_arquivo):
-    """Fase 6: duplo clique num .obj/.fbx/.blend abre o ModelViewer em vez
-    do PreviewPopup achatado — mesmo padrão do .hdr/.exr (Fatia 34). Não
-    instancia o ModelViewer de verdade: QOpenGLWidget não roda no modo
-    offscreen do pytest."""
+    """Fase 6: duplo clique num .obj/.fbx/.blend abre o visualizador 3D em
+    vez do PreviewPopup achatado — mesmo padrão do .hdr/.exr (Fatia 34). Não
+    instancia a janela de verdade: QOpenGLWidget não roda no modo offscreen
+    do pytest."""
     chamadas = []
 
     class _FakeViewer:
-        def show_for(self, caminho, content_hash=None):
+        def abrir_modelo(self, caminho, content_hash=None):
             chamadas.append((caminho, content_hash))
 
-    monkeypatch.setattr(janela, "_model_viewer", lambda: _FakeViewer())
+    monkeypatch.setattr(janela, "_visualizador", lambda: _FakeViewer())
     monkeypatch.setattr(janela.model, "row_at", lambda idx: {
         "rel_path": nome_arquivo, "asset_type": "model", "id": 999,
         "content_hash": "hash-de-teste",
@@ -811,8 +811,9 @@ def test_open_preview_nao_roteia_textura_pro_visualizador_de_modelo(janela, monk
     """Extensão fora da lista suportada (Fase 6) continua no PreviewPopup
     de sempre — o roteamento é por extensão, não vira o padrão pra tudo."""
     chamadas = []
-    monkeypatch.setattr(janela, "_model_viewer",
-                        lambda: pytest.fail("não devia chamar o ModelViewer pra textura"))
+    monkeypatch.setattr(
+        janela, "_visualizador",
+        lambda: pytest.fail("não devia abrir o visualizador 3D pra textura"))
     monkeypatch.setattr(janela, "preview_popup",
                         type("Fake", (), {"show_for": lambda *a, **k: chamadas.append(1)})())
     monkeypatch.setattr(janela.model, "row_at", lambda idx: {
@@ -874,3 +875,65 @@ def test_prewarm_preserva_o_estado_da_janela(janela):
     janela.setWindowState(Qt.WindowState.WindowNoState)
     janela.setWindowState(guardado)
     assert janela.windowState() == guardado
+
+
+def _visor_dublado(monkeypatch):
+    """Substitui a janela do visualizador por um dublê que registra o que
+    aconteceu com ela. Instanciar a de verdade monta dois `QOpenGLWidget`,
+    que derrubam o processo no modo offscreen do pytest (fronteira já
+    registrada em `test_hdri_viewer.py`)."""
+    from PySide6.QtCore import QPoint
+
+    from assetdeck.ui import viewer_window
+
+    criadas = []
+
+    class _Dublê:
+        def __init__(self, parent=None):
+            self.mostrada = 0
+            self.escondida = 0
+            criadas.append(self)
+
+        def pos(self):
+            return QPoint(0, 0)
+
+        def move(self, *a):
+            pass
+
+        def show(self):
+            self.mostrada += 1
+
+        def hide(self):
+            self.escondida += 1
+
+    monkeypatch.setattr(viewer_window, "VisualizadorWindow", _Dublê)
+    return criadas
+
+
+def test_visualizador_e_criado_uma_vez_so(janela, monkeypatch):
+    """Cada abertura de HDRI/modelo reusa a MESMA janela: montar contexto
+    de OpenGL de novo a cada duplo clique custa caro e é o que fazia o
+    'piscar' voltar."""
+    criadas = _visor_dublado(monkeypatch)
+
+    primeiro = janela._visualizador()
+    segundo = janela._visualizador()
+
+    assert primeiro is segundo
+    assert len(criadas) == 1
+
+
+def test_prewarm_aquece_uma_janela_so(janela, monkeypatch):
+    """Fatia 90: os dois visualizadores passaram a dividir UMA janela.
+
+    A transição de modo de composição que o pré-aquecimento paga é por
+    JANELA DE TOPO — com duas janelas ela acontecia duas vezes na abertura
+    do app. Se alguém voltar a criar uma janela por tipo, este teste cai.
+    """
+    criadas = _visor_dublado(monkeypatch)
+
+    janela.prewarm_gl_viewers()
+
+    assert len(criadas) == 1, "o pré-aquecimento voltou a abrir mais de uma janela"
+    assert criadas[0].mostrada == 1
+    assert criadas[0].escondida == 1

@@ -205,7 +205,7 @@ def run(argv: list[str]) -> int:
     # aparece nela — é essa negociação que o Rafael vê como "pisca".
     # AA_ShareOpenGLContexts é a flag padrão do Qt pra isso: monta UM
     # contexto GL compartilhado cedo, pras janelas de topo seguintes
-    # (HdriViewer, ModelViewer) reusarem em vez de negociar do zero.
+    # (a `VisualizadorWindow`) reusarem em vez de negociar do zero.
     QApplication.setAttribute(Qt.ApplicationAttribute.AA_ShareOpenGLContexts, True)
 
     app = QApplication(sys.argv[:1])

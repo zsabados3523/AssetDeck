@@ -12,11 +12,14 @@ Mesmo padrão do visualizador de HDRI (Fatia 34/65):
   Qt/OpenGL, testáveis no pytest normal.
 - Carregamento em thread (`QThreadPool`) — não trava a UI abrindo um
   modelo grande.
-- Janela PRÓPRIA (`QDialog`), não overlay embutido: um `QOpenGLWidget`
-  em qualquer lugar da árvore de um top-level muda o modo de composição
-  da JANELA INTEIRA na primeira aparição — dentro da `MainWindow` isso
-  fazia o app inteiro "piscar" (revertido na Fatia 65 por causa disso
-  no HDRI); janela própria, só ela sofre a transição.
+- Janela PRÓPRIA, não overlay embutido: um `QOpenGLWidget` em qualquer
+  lugar da árvore de um top-level muda o modo de composição da JANELA
+  INTEIRA na primeira aparição — dentro da `MainWindow` isso fazia o app
+  inteiro "piscar" (revertido na Fatia 65 por causa disso no HDRI).
+
+Desde a Fatia 90 a janela não mora mais aqui: é a `VisualizadorWindow`
+(`ui/viewer_window.py`), a MESMA do HDRI, com as duas superfícies num
+`QStackedWidget`. Este módulo ficou só com a superfície de render.
 """
 
 from __future__ import annotations
@@ -35,7 +38,6 @@ from PySide6.QtOpenGL import (
     QOpenGLVertexArrayObject,
 )
 from PySide6.QtOpenGLWidgets import QOpenGLWidget
-from PySide6.QtWidgets import QDialog, QHBoxLayout, QLabel, QVBoxLayout
 
 from assetdeck.model3d.loader import load_mesh
 from assetdeck.model3d.obj_parser import Mesh
@@ -92,13 +94,16 @@ def _mesh_to_buffer(mesh: Mesh) -> np.ndarray:
     return buf.reshape(-1)
 
 
-class _Signaller(QObject):
+class SinalCarga(QObject):
+    """Emissor da carga em thread. Público porque quem escuta é a
+    `VisualizadorWindow`, noutro módulo (Fatia 90)."""
+
     loaded = Signal(object)  # Mesh
     failed = Signal(str)
 
 
 class _LoadJob(QRunnable):
-    def __init__(self, sig: _Signaller, path: Path, content_hash: str | None) -> None:
+    def __init__(self, sig: SinalCarga, path: Path, content_hash: str | None) -> None:
         super().__init__()
         self._sig = sig
         self._path = path
@@ -131,10 +136,20 @@ class ModelGLView(QOpenGLWidget):
         self._mesh = mesh
         self._pendente = _mesh_to_buffer(mesh)
         self._n_vertices = len(mesh.positions)
-        centro_min, centro_max = mesh.bounds()
-        centro = tuple((lo + hi) / 2 for lo, hi in zip(centro_min, centro_max))
+        self.enquadrar()
+
+    def enquadrar(self) -> None:
+        """Recentraliza a câmera na malha carregada.
+
+        Roda ao carregar e no botão "Enquadrar" da janela (Fatia 90) — a
+        conta do centro e do raio vive AQUI e não nos dois lugares, senão
+        um enquadramento acaba divergindo do outro."""
+        if self._mesh is None:
+            return
+        canto_min, canto_max = self._mesh.bounds()
+        centro = tuple((lo + hi) / 2 for lo, hi in zip(canto_min, canto_max))
         raio = max(
-            ((hi - lo) / 2 for lo, hi in zip(centro_min, centro_max)), default=1.0
+            ((hi - lo) / 2 for lo, hi in zip(canto_min, canto_max)), default=1.0
         ) or 1.0
         self.camera.enquadrar(centro, raio, TAN_MEIO_FOV)
         self.update()
@@ -226,51 +241,12 @@ class ModelGLView(QOpenGLWidget):
         self.update()
 
 
-class ModelViewer(QDialog):
-    """Janela própria — superfície GL + status."""
+def iniciar_carga(sig: SinalCarga, path: Path,
+                  content_hash: str | None = None) -> None:
+    """Lê a geometria fora da thread da UI (um .blend passa pelo Blender
+    headless e demora segundos).
 
-    def __init__(self, parent=None) -> None:
-        super().__init__(parent)
-        self.setWindowFlag(Qt.WindowType.Window)
-        self.resize(900, 620)
-
-        self.view = ModelGLView()
-        self.status = QLabel("Carregando…")
-
-        topo = QHBoxLayout()
-        topo.addStretch()
-        topo.addWidget(self.status)
-
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(12, 12, 12, 12)
-        layout.setSpacing(8)
-        layout.addLayout(topo)
-        layout.addWidget(self.view, stretch=1)
-
-        self._sig = _Signaller()
-        self._sig.loaded.connect(self._on_loaded)
-        self._sig.failed.connect(self._on_failed)
-
-    def show_for(self, path: Path, content_hash: str | None = None) -> None:
-        """`content_hash` só é preciso pra `.blend` (cache da exportação
-        via Blender) — as outras extensões ignoram."""
-        self.setWindowTitle(f"Modelo — {path.name}")
-        self.status.setText("Carregando…" if path.suffix.lower() != ".blend"
-                            else "Lendo geometria do .blend (via Blender)…")
-        self.show()
-        self.raise_()
-        QThreadPool.globalInstance().start(_LoadJob(self._sig, path, content_hash))
-
-    def _on_loaded(self, mesh: Mesh) -> None:
-        self.view.set_mesh(mesh)
-        n_tris = len(mesh.positions) // 3
-        self.status.setText(f"{n_tris} triângulos  ·  arraste para orbitar, roda pra zoom")
-
-    def _on_failed(self, msg: str) -> None:
-        self.status.setText(f"Falhou: {msg}")
-
-    def keyPressEvent(self, event) -> None:  # noqa: N802
-        if event.key() == Qt.Key.Key_Escape:
-            self.close()
-        else:
-            super().keyPressEvent(event)
+    A JANELA mora em `ui/viewer_window.py` desde a Fatia 90 — este módulo
+    ficou com o que é do modelo: shader, VBO, câmera e esta carga.
+    """
+    QThreadPool.globalInstance().start(_LoadJob(sig, path, content_hash))
