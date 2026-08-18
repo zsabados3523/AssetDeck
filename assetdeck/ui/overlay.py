@@ -1,6 +1,6 @@
 """Painel-overlay embutido na janela principal (Fatia 65).
 
-Substitui o padrão anterior (`PreviewPopup`/`HdriViewer` em `QDialog` com
+Substitui o padrão anterior (`PreviewPopup` e visualizador de HDRI em `QDialog` com
 `setWindowFlag(Qt.WindowType.Window)`): o Rafael relatou que essas janelas
 "piscavam" ao abrir — o compositor remapeia a superfície nativa de uma
 janela de topo nova, ainda mais visível na do HDRI (contexto OpenGL

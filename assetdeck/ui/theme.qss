@@ -338,6 +338,14 @@ QLabel#title {
     font-weight: 600;
 }
 
+/* Dica de teclado do rodapé dos visualizadores 3D (Fatia 90). Mais apagada
+ * e menor que o status ao lado: é a mesma informação que o Esc já dá, só
+ * escrita — não pode competir com "4096 × 2048 px". */
+QLabel#visorDica {
+    color: $text_muted;
+    font-size: $font_size_small;
+}
+
 QLabel#muted, QLabel#previewInfo {
     color: $text_muted;
 }
