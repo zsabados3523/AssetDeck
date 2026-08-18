@@ -3077,3 +3077,48 @@ ele quiser depois.
 **Verificado com dados REAIS:** 40 pastas do Cosmos dele copiadas pra um
 banco isolado — **40 de 40 capas (100%)**, incluindo os de nome de hash.
 4 testes novos.
+
+### ☐ Fatia 85 — mover assets arrastando da grade pra uma pasta
+
+"Percebi que tem uma árvore na pasta de vasos, porém até eu mover no
+navegador de arquivos iria demorar demais… será que não teria a
+possibilidade de eu selecionar os assets no grid e arrastar pra pasta?"
+
+**Isto abre a regra de somente-leitura.** O `CLAUDE.md` foi atualizado: o
+app tem agora DUAS exceções, `batch_rename` (Fatia 23) e `mover` (esta),
+e nenhuma nova entra sem ele pedir. As duas seguem o mesmo padrão —
+planejar sem tocar em disco, confirmar mostrando o que vai acontecer,
+item problemático pulado e logado sem derrubar o lote.
+
+**O que se move é a PASTA do asset, não o arquivo.** No Cosmos o `.blend`
+tem `textures_cache/` e `previews/` embaixo; mover só o `.blend` entrega
+um asset quebrado. Um asset só é movível quando nenhum OUTRO modelo/cena
+mora na pasta dele — textura, imagem e preview viajam junto, porque a
+pasta É o asset. Quem divide pasta (Maxtree, 108 arquivos e dezenas de
+modelos juntos) é RECUSADO com motivo; o Rafael aceitou esse limite
+explicitamente ("já aceitei que os do maxtree ficarão onde estão").
+
+**Decisão de implementação registrada:** o bloqueio olha `asset_type IN
+(model, scene)`, NÃO `is_dependency`. Essa marca é calculada por
+`dependencies.detect()`, que roda na varredura — numa biblioteca
+recém-indexada ela ainda pode estar zerada, e o mover recusaria assets
+legítimos por um motivo que ele não teria como entender.
+
+**Salvaguardas:** nunca sobrescreve (colisão de nome vira recusa, não
+substituição); só move dentro da biblioteca; o padrão do diálogo é
+Cancelar; e o disco vem ANTES do banco — se o `shutil.move` falhar, o
+banco fica intocado e a biblioteca segue coerente (o contrário deixaria o
+banco apontando pra lugar nenhum).
+
+**Testes (8):** planejar não toca em disco; move a pasta inteira e
+reaponta TODOS os arquivos; o `asset_id` sobrevive (tags/notas/favorito
+moram nele); e as quatro recusas.
+
+**PENDENTE DE TESTE DELE — o gesto do arrasto.** O caminho completo foi
+provado 3 vezes com mouse REAL (XTEST), mas o harness é instável (~1 em
+3): o XTEST move o cursor de verdade, então briga com ele usando o
+computador, e depende de temporização de duplo-clique. Quando o drop
+chega, a cadeia inteira funciona (disco + banco + rodapé). Ele se
+ofereceu pra testar à mão, que vale mais — regra do projeto desde a
+Fatia 52: arrasto testado sem mouse real não prova nada, e aqui o mouse
+real não é confiável o bastante pra fechar a questão sozinho.
