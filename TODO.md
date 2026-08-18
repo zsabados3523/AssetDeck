@@ -3122,3 +3122,59 @@ chega, a cadeia inteira funciona (disco + banco + rodapé). Ele se
 ofereceu pra testar à mão, que vale mais — regra do projeto desde a
 Fatia 52: arrasto testado sem mouse real não prova nada, e aqui o mouse
 real não é confiável o bastante pra fechar a questão sozinho.
+
+### ☐ Fatia 86 — varredura 4× mais rápida (paralelizada)
+
+"~10 assets/segundo é o normal ou poderia ir mais rápido?" Medido antes
+de mexer em qualquer código, em 400 arquivos reais da biblioteca dele:
+
+| etapa | % do tempo |
+|---|---|
+| `stat()` | 3% |
+| impressão digital | 16% |
+| **abrir a imagem (phash + cor)** | **81%** |
+
+O gargalo era decodificar cada imagem em RESOLUÇÃO CHEIA pra calcular duas
+coisas minúsculas — o phash usa 9×8 pixels, a cor dominante usa 1×1. Uma
+textura 4K era decodificada inteira pra produzir 64 pixels.
+
+**Otimização DESCARTADA, e o porquê:** decodificar em resolução reduzida
+(o Pillow faz JPEG a 1/8 direto) daria ganho maior, mas MUDA o phash. E
+`find_duplicate_groups` agrupa por igualdade EXATA de phash, sem
+tolerância — arquivos indexados antes e depois parariam de casar entre si,
+silenciosamente, até alguém procurar duplicados. Só valeria com um
+recálculo de todos os phashes existentes, que é a operação cara, uma vez.
+
+**Feito:** o cálculo pesado (`fingerprint` + `image_meta`) vai pra um pool
+de processos, em blocos de 200. Mesma conta, só distribuída. Escritas no
+banco seguem em série na thread principal.
+
+**Medido na máquina dele** (pasta `03_TEXTURAS/Madeiras`, 275 texturas 4K):
+
+    série    : 50,5s =>  5,4 arq/s
+    4 proc.  : 12,7s => 21,6 arq/s   (4,0x)
+
+E o **banco sai bit a bit idêntico** — comparado linha a linha em
+`rel_path/size/content_hash/width/height/phash/dominant_color`.
+
+**Quatro processos por MEDIÇÃO, não por chute:** 8 processos deram 28
+arq/s, PIOR que os 40 de 4, porque a partir dali o disco externo vira o
+gargalo e os processos passam a disputar I/O em vez de somar CPU.
+
+**Duas armadilhas achadas no caminho:**
+1. **`fork()` numa thread pode travar.** A varredura roda numa thread do
+   Qt e o Python 3.12 avisa que forkar dali pode congelar o filho — sem
+   erro na tela. Trocado por `spawn` (~100ms a mais por processo, uma vez
+   por varredura). O `__main__.py` do app já tem a guarda
+   `if __name__ == "__main__"`, então os filhos não re-executam nada.
+2. **O "Parar" parou de responder.** A 1ª versão checava cancelamento só
+   por bloco de 200 — numa biblioteca menor que isso, não respondia nunca.
+   Pego pelo `test_parada_a_pedido_interrompe_sem_corromper`, que já
+   existia; a checagem voltou a ser por arquivo.
+
+Arquivo já indexado e intocado NÃO vai pro pool (`_precisa_calcular`) —
+numa reindexação é a maioria, e mandá-los junto desperdiçaria a
+paralelização onde não há trabalho.
+
+**Testes (2):** paralelo produz exatamente o mesmo banco que série, e
+arquivo intocado não entra no pool.
