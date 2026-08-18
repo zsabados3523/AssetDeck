@@ -3259,3 +3259,29 @@ fatia sem ele ver a anterior funcionando. Fica como próxima.
 **Contexto:** o problema GRAVE que ele relatou ("o programa nem abre") era
 outro e está na Fatia 87 — a contagem da lateral em O(n²) com 28 mil
 pastas. Esta fatia é o congelamento que sobrou depois daquilo.
+
+### ☐ Fatia 89 — mover disparava o pré-aquecimento da biblioteca à toa
+
+Pergunta dele: "toda vez que eu movo um asset para uma pasta precisa
+reindexar?" **Não precisa** — `mover.executar` já reaponta no banco os
+caminhos de TODOS os arquivos da pasta (modelo, texturas, previews,
+sidecars). Miniatura é indexada por `content_hash`, não por caminho, então
+continua valendo; tags, notas e favorito moram no `asset_id`, que não muda.
+
+**Mas a pergunta expôs um bug meu:** `_mover_assets` chamava
+`self._reload_all()` sem argumento, e o padrão é `warmup=True`. Cada
+arrasto pagava o pente-fino de ~127 mil itens da biblioteca real — 1,9s de
+UI congelada (medido na Fatia 88) pra não descobrir nada, porque mover não
+traz arquivo novo. A própria docstring de `_reload_all` já avisava contra
+isso ("nunca a cada mudancinha").
+
+**Teste:** `warmup_library` não pode ser chamado num mover. Confirmado que
+falha ao remover o `warmup=False`.
+
+**Ressalva registrada, não corrigida:** mover pode deixar levemente
+desatualizada a marca `is_dependency` de assets VIZINHOS — se a pasta de
+origem ficar sem nenhum modelo, texturas que sobraram lá seguem marcadas
+como dependência até a próxima reindexação. Não afeta o asset movido nem
+quebra nada; no máximo faz uma textura aparecer/sumir conforme o filtro
+"Mostrar dependências". Recalcular só as pastas afetadas é pequeno, se
+virar incômodo real.

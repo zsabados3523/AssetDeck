@@ -168,3 +168,59 @@ def test_falha_em_um_nao_derruba_o_lote(lib, monkeypatch):
     assert (movidos, falhas) == (0, 1)
     # e o banco NÃO foi mexido: o arquivo segue onde estava
     assert _id(conn, "VASOS/Chair_125_029/Chair_125_029.blend") == alvo
+
+
+# ------------------------------- custo do refresh (Fatia 89) --
+
+def test_mover_nao_dispara_o_pre_aquecimento_da_biblioteca(qapp, tmp_path,
+                                                            monkeypatch):
+    """Pergunta do Rafael: "toda vez que eu movo um asset precisa
+    reindexar?". Não precisa — e o app não deve agir como se precisasse.
+
+    Mover não traz arquivo novo: são os mesmos arquivos em outro lugar, e a
+    miniatura é indexada por `content_hash`, não por caminho. Mas
+    `_reload_all()` tem `warmup=True` por padrão, e sem passar `False` cada
+    arrasto pagava o pente-fino de ~127 mil itens da biblioteca real dele
+    (1,9s de UI congelada, medido na Fatia 88) pra não descobrir nada.
+    """
+    from PIL import Image
+    from PySide6.QtWidgets import QMessageBox
+
+    from assetdeck import config
+    from assetdeck.ui.main_window import MainWindow
+
+    monkeypatch.setenv("ASSETDECK_CONFIG_DIR", str(tmp_path / "cfg"))
+    monkeypatch.setenv("ASSETDECK_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("ASSETDECK_CACHE_DIR", str(tmp_path / "cache"))
+    config.ensure_dirs()
+    cfg = config.load_config()
+    cfg["bridge_port"] = 0
+    config.save_config(cfg)
+
+    root = tmp_path / "lib"
+    (root / "VASOS" / "Arvore").mkdir(parents=True)
+    (root / "VASOS" / "Arvore" / "Arvore.blend").write_bytes(b"b" * 40)
+    Image.new("RGB", (32, 32)).save(root / "VASOS" / "Arvore" / "capa.png")
+    (root / "ARVORES").mkdir()
+    Image.new("RGB", (32, 32)).save(root / "ARVORES" / "x.png")
+
+    conn = connect(config.db_path())
+    apply_migrations(conn)
+    lib_id = libraries_repo.get_or_create(conn, root)
+    scan_library(conn, lib_id, root)
+
+    win = MainWindow(conn, str(root), config.db_path(), config.thumbs_dir())
+    monkeypatch.setattr(QMessageBox, "question",
+                        staticmethod(lambda *a, **k: QMessageBox.StandardButton.Yes))
+
+    chamadas = []
+    monkeypatch.setattr(win.model, "warmup_library",
+                        lambda: chamadas.append(1))
+
+    alvo = _id(conn, "VASOS/Arvore/Arvore.blend")
+    win._mover_assets([alvo], "ARVORES")
+
+    assert chamadas == [], "mover disparou o pré-aquecimento da biblioteca inteira"
+    assert (root / "ARVORES" / "Arvore" / "Arvore.blend").is_file()
+    win.close()
+    conn.close()
