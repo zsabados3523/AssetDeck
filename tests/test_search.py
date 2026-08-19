@@ -294,3 +294,40 @@ def test_cinza_e_cor_nunca_se_misturam():
     # …mas os acromáticos ainda se distinguem ENTRE si por claro/escuro.
     assert _color_distance("#f5f5f5", "#1a1a1a") > COLOR_TOLERANCE
     assert _color_distance("#eeeeee", "#f5f5f5") <= COLOR_TOLERANCE
+
+
+def test_a_busca_por_substring_nao_vira_subconsulta_correlacionada(tmp_path):
+    """Regressão do travamento que o Rafael relatou (2026-08-19): "ao tentar
+    pesquisar 'armchair' o programa trava ao digitar 'ar...' e não responde".
+
+    Medido na biblioteca real dele (111 mil assets): **237 segundos** com a
+    UI congelada, enquanto os pedaços da consulta somavam 0,05s isolados.
+
+    Causa: o ramo do LIKE era
+    `a.id IN (SELECT id FROM assets WHERE a.name LIKE ?)` — e o `a.name` lá
+    dentro apontava pro asset de FORA. O SQLite tratava a subconsulta como
+    CORRELACIONADA e a reexecutava para CADA linha, varrendo a tabela
+    inteira toda vez. Depois da correção: 0,03s.
+
+    O teste lê o PLANO DE EXECUÇÃO, que é onde o defeito aparece — medir
+    tempo num banco de teste minúsculo não pegaria nada, porque o problema
+    só cresce com o tamanho da biblioteca.
+    """
+    from assetdeck.db.connection import connect
+    from assetdeck.db.migrate import apply_migrations
+    from assetdeck.db.repos import assets as repo
+
+    conn = connect(tmp_path / "t.db")
+    apply_migrations(conn)
+
+    where, params = repo._build_where(conn, search="ar", library_id=1)
+    sql = ("SELECT a.id FROM assets a"
+           " JOIN files f ON f.asset_id = a.id AND f.is_primary = 1"
+           " WHERE a.deleted_at IS NULL AND f.deleted_at IS NULL" + where)
+    plano = [r["detail"] for r in conn.execute("EXPLAIN QUERY PLAN " + sql, params)]
+
+    correlacionadas = [linha for linha in plano if "CORRELATED" in linha.upper()]
+    assert not correlacionadas, (
+        "a busca voltou a ter subconsulta correlacionada — ela roda uma vez "
+        f"POR ASSET: {correlacionadas}"
+    )
