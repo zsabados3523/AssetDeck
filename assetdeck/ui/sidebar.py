@@ -45,8 +45,8 @@ from assetdeck.ui import icons, theme
 
 log = logging.getLogger(__name__)
 
-LARGURA_RAIL = 38   # 44 antes (Fatia 95: "diminua o espaço lateral esquerdo")
-TAM_ICONE_RAIL = 18
+LARGURA_RAIL = 32   # 44 -> 38 (Fatia 95) -> 32 (Fatia 95b, "deixe eles mais apertados")
+TAM_ICONE_RAIL = 16   # 18 antes (Fatia 95b)
 TAM_CHEVRON = 10
 
 
@@ -239,8 +239,8 @@ class SidebarRail(QWidget):
         self.setFixedWidth(LARGURA_RAIL)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 8, 0, 8)
-        layout.setSpacing(4)
+        layout.setContentsMargins(0, 6, 0, 6)
+        layout.setSpacing(2)   # 4 antes — "mais apertados" (Fatia 95b)
         layout.setAlignment(Qt.AlignmentFlag.AlignHCenter)
 
         self.buttons: dict[str, QToolButton] = {}

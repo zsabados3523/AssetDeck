@@ -256,7 +256,7 @@ QToolButton#railButton {
     background: transparent;
     border: 1px solid transparent;
     border-radius: $radius_control;
-    padding: 6px;
+    padding: 4px;   /* 6 antes (Fatia 95b) — a pastilha do hover encolhe junto */
 }
 
 /* Borda junto do preenchimento (Fatia 76) — o rail é a "barra vertical

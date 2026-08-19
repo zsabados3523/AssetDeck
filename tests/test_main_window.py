@@ -1049,3 +1049,38 @@ def test_sem_maximizacao_gravada_o_showEvent_nao_mexe(janela, monkeypatch):
     janela.showEvent(QShowEvent())
 
     assert pedidos == []
+
+
+def test_o_seletor_de_biblioteca_boia_no_meio_da_faixa(janela, qapp):
+    """Pedido três vezes pelo Rafael, e as duas primeiras respostas minhas
+    não resolveram — vale um teste.
+
+    1ª (Fatia 78): pus `AlignVCenter` no layout. Não fez nada: o seletor
+       media 37px numa faixa de 37px, então não havia folga pra distribuir.
+    2ª (Fatia 95): encolhi o botão pra 29px. Continuou colado no topo, e a
+       medição mostrou por quê — o Qt encosta o widget do canto DIREITO da
+       barra de menus no alto (y=0, com os 13px sobrando embaixo), e como o
+       widget tinha a altura exata do botão, o alinhamento de dentro
+       continuava sem folga. O canto ESQUERDO, com a marca, o Qt centraliza
+       sozinho; as duas pontas não recebem o mesmo tratamento.
+
+    A correção é o widget do canto ter a altura da FAIXA. Este teste mede o
+    resultado — onde o botão cai — e não como ele foi obtido.
+    """
+    janela.show()
+    qapp.processEvents()
+
+    barra = janela.menuBar()
+    seletor = janela.library_switcher
+    topo = seletor.mapTo(janela, seletor.rect().topLeft()).y()
+    sobra_cima = topo
+    sobra_baixo = barra.height() - topo - seletor.height()
+
+    assert seletor.height() < barra.height(), (
+        f"o seletor ocupa a faixa inteira ({seletor.height()}px de "
+        f"{barra.height()}px) — não há o que centralizar"
+    )
+    assert abs(sobra_cima - sobra_baixo) <= 2, (
+        f"o seletor não está centralizado na faixa: {sobra_cima}px acima e "
+        f"{sobra_baixo}px abaixo"
+    )

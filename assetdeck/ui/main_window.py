@@ -64,6 +64,11 @@ from assetdeck.ui.category_bar import CategoryBar
 
 log = logging.getLogger(__name__)
 
+# Altura da faixa de cima (marca à esquerda, biblioteca e modo à direita).
+# É a faixa INTEIRA que aparece na tela: desde a Fatia 95 o layout central
+# não tem mais margem em cima, então não existe "meio espaço" fora dela.
+ALTURA_FAIXA_TOPO = 42
+
 # Paleta fixa do filtro de busca por cor (Fatia 39) — decisão do Rafael:
 # botões de cor pré-definidos em vez de um seletor livre. Um hex
 # representativo por balde; a tolerância de "quão perto conta" mora em
@@ -814,7 +819,7 @@ class MainWindow(QMainWindow):
         # layout central, então marca e seletor ficam no meio do espaço que
         # aparece na tela. 42 é MENOR que os 51 de antes (37 de barra + 14 de
         # margem) — o Rafael pediu pra diminuir o espaço superior.
-        barra.setFixedHeight(42)
+        barra.setFixedHeight(ALTURA_FAIXA_TOPO)
 
         marca = QWidget()
         marca_layout = QHBoxLayout(marca)
@@ -842,6 +847,16 @@ class MainWindow(QMainWindow):
         # contagem de assets, que o mockup punha aqui, já está no
         # cabeçalho da lista E no rodapé — um terceiro lugar seria ruído.
         contexto = QWidget()
+        # Altura da FAIXA INTEIRA, não a do botão (Fatia 95b). O Qt encosta o
+        # widget do canto DIREITO no topo da barra de menus — medido: ele
+        # ficava em y=0..29 numa faixa de 42, com 13px sobrando só embaixo. E
+        # como o widget tinha exatamente a altura do botão, o `AlignVCenter`
+        # de dentro não tinha folga nenhuma pra distribuir: centralizava o
+        # botão nele mesmo. Dando a altura da faixa ao widget, o alinhamento
+        # interno passa a ter o que centralizar. (O canto ESQUERDO, com a
+        # marca, o Qt já centraliza sozinho — as duas pontas não recebem o
+        # mesmo tratamento.)
+        contexto.setFixedHeight(ALTURA_FAIXA_TOPO)
         contexto_layout = QHBoxLayout(contexto)
         contexto_layout.setContentsMargins(0, 0, 12, 0)
         contexto_layout.setSpacing(2)
