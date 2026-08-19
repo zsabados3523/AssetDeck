@@ -135,3 +135,36 @@ def test_origem_do_preview_grava_o_valor_interno_nao_o_rotulo(janela):
     sw = janela.settings_window
     sw.hide_preview_source.setCurrentText(_ORIGEM_LABEL["always"])
     assert config.load_config()["hide_preview_source"] == "always"
+
+
+# ---- varredura automática na abertura (Fatia 92) ----
+
+def test_varredura_na_abertura_vem_desligada():
+    """Rafael, 2026-08-19: "tira a varredura automática da abertura".
+
+    O app varria a biblioteca inteira em TODA abertura — 102 mil assets,
+    minutos de CPU sem ninguém ter pedido. O padrão passou a ser não
+    varrer; quem manda é o botão "Reindexar".
+    """
+    from assetdeck.app import varrer_na_abertura
+
+    assert varrer_na_abertura({}) is False
+
+
+def test_varredura_na_abertura_pode_ser_religada():
+    """Não é remoção, é chave: quem quiser a sincronia automática liga em
+    Configurações › Manutenção e ela volta a valer."""
+    from assetdeck.app import varrer_na_abertura
+
+    assert varrer_na_abertura({"scan_on_startup": True}) is True
+
+
+def test_o_interruptor_da_varredura_grava_no_config(janela):
+    """O controle existe na janela e aplica na hora (a janela é não-modal,
+    não tem OK/Cancelar)."""
+    sw = janela.settings_window
+    sw.scan_on_startup.setChecked(True)
+    assert config.load_config().get("scan_on_startup") is True
+
+    sw.scan_on_startup.setChecked(False)
+    assert config.load_config().get("scan_on_startup") is False

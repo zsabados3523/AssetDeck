@@ -3360,3 +3360,25 @@ correção (`assert 16 == 1`).
 **Não é isto que causa o "duplo clique não abre nada"** — esse é o pool
 de threads compartilhado entre miniaturas e visualizador, corrigido em
 paralelo noutra sessão (`ui/pools.py`).
+
+### ☐ Fatia 92 — varredura automática na abertura, desligada
+
+Pedido do Rafael (2026-08-19): "tira a varredura automática da abertura".
+
+O app chamava `win.start_scan()` em TODA abertura. Na biblioteca real são
+102 mil assets: alguns minutos de 4 processos moendo hash e metadados sem
+ninguém ter pedido, logo depois de abrir — justamente quando ele quer usar
+o programa. Mesmo com a varredura comportada (Fatia 91), gastar a máquina
+sem ordem não se justifica: quem sabe que copiou arquivos novos é ele, e o
+botão "Reindexar" está na barra de cima.
+
+**Não é remoção, é chave.** `scan_on_startup` no config, padrão `False`,
+com linha própria em Configurações › Manutenção › Varredura. Quem quiser a
+sincronia automática de volta liga ali, sem depender de mim.
+
+**Testes:** o padrão é não varrer; a chave ligada volta a valer; o
+interruptor grava no config na hora. `tests/test_settings_window.py`: 13
+passados. `test_app.py`/`test_config.py`: 8 passados.
+
+**Consequência que o Rafael precisa saber:** arquivos novos copiados pra
+biblioteca só aparecem depois do "Reindexar". Antes apareciam sozinhos.
