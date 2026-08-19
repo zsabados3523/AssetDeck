@@ -3331,3 +3331,32 @@ com OpenGL por software, HDRI no escuro e modelo no claro.
 modelo usa como raio a MAIOR meia-dimensão da caixa, não o raio da esfera
 que envolve a malha — num objeto alto e estreito a margem sai justa. Vem
 da Fase 6, só foi movido de lugar aqui.
+
+### ☐ Fatia 91 — a varredura afogava a máquina
+
+Relato do Rafael (2026-08-19): "meu PC fica com 100% de uso de CPU e está
+começando a dar erros". Confirmado no `ps`: quatro processos da varredura
+a ~130% de CPU cada.
+
+**Causa.** O OpenCV abre uma thread POR NÚCLEO em cada processo — 16 na
+máquina dele. Com os 4 processos da varredura paralela (Fatia 86), até
+**64 threads disputando 16 núcleos**. Não indexa mais rápido: o
+paralelismo útil já está no nível de PROCESSO (4 medidos contra 8, que
+piorava por I/O). Só afoga o resto do computador — e a varredura roda
+sozinha na abertura do app, sem ninguém pedir.
+
+**Correção.** Cada processo da varredura agora sobe com uma thread só
+(`cv2.setNumThreads(1)` no `initializer` do pool, e `OMP/OPENBLAS/MKL/
+NUMEXPR_NUM_THREADS=1` no ambiente, que as bibliotecas numéricas leem no
+import — por isso vão no ambiente do PAI antes do `spawn`, não no
+initializer, que roda tarde demais pra elas) e com `nice 10`: a varredura
+cede passagem pro que o Rafael estiver fazendo.
+
+**Teste:** passa por um pool DE VERDADE e pergunta ao processo filho
+quantas threads de OpenCV ele tem e com que prioridade roda — não confere
+que o código foi escrito de um certo jeito. Confirmado que falha sem a
+correção (`assert 16 == 1`).
+
+**Não é isto que causa o "duplo clique não abre nada"** — esse é o pool
+de threads compartilhado entre miniaturas e visualizador, corrigido em
+paralelo noutra sessão (`ui/pools.py`).
