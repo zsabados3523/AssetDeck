@@ -8,6 +8,7 @@ import os
 import time
 from pathlib import Path
 
+import cv2
 import pytest
 
 from assetdeck.db.connection import connect
@@ -263,3 +264,37 @@ def test_arquivo_intocado_nao_vai_pro_pool(tmp_path):
     img.write_bytes(img.read_bytes() + b"\x00")   # mudou de tamanho
     assert _precisa_calcular(raiz, img, known) is True
     conn.close()
+
+
+# ---- os processos da varredura não podem afogar a máquina ----
+
+def test_worker_da_varredura_usa_uma_thread_e_prioridade_baixa():
+    """Rafael, 2026-08-19: "meu PC fica com 100% de uso de CPU e está
+    começando a dar erros".
+
+    O OpenCV abre uma thread POR NÚCLEO em cada processo (16 na máquina
+    dele). Com 4 processos de varredura são até 64 threads disputando 16
+    núcleos — o trabalho não anda mais rápido (o paralelismo útil já está
+    no nível de processo, medido em 4), só deixa o computador inutilizável
+    enquanto indexa.
+
+    O teste passa por um pool DE VERDADE e pergunta ao processo filho, em
+    vez de conferir que o código foi escrito de um certo jeito: é o filho
+    que precisa estar com uma thread só e baixa prioridade.
+    """
+    from assetdeck.indexer import scanner
+
+    pool = scanner._abrir_pool(2)
+    if pool is None:
+        pytest.skip("pool de processos indisponível nesta máquina")
+    try:
+        prioridade = pool.submit(os.getpriority, os.PRIO_PROCESS, 0).result(timeout=120)
+        threads = pool.submit(cv2.getNumThreads).result(timeout=120)
+    finally:
+        pool.shutdown(wait=True, cancel_futures=True)
+
+    assert threads == 1, f"worker abriu {threads} threads de OpenCV, devia ser 1"
+    assert prioridade >= 10, (
+        f"worker rodando com prioridade {prioridade} — devia ceder passagem "
+        "pro que o Rafael estiver fazendo"
+    )

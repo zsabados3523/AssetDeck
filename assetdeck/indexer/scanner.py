@@ -176,6 +176,45 @@ def calcular_pesado(path: Path) -> tuple:
     return fingerprint(path), image_meta(path)
 
 
+def _preparar_worker() -> None:
+    """Roda UMA vez em cada processo filho, antes da primeira tarefa.
+
+    **Por que existe** (Rafael, 2026-08-19: "meu PC fica com 100% de uso de
+    CPU e está começando a dar erros"): o OpenCV abre, POR PROCESSO, uma
+    thread por núcleo — 16 nesta máquina. Com 4 processos de varredura são
+    até 64 threads disputando 16 núcleos. O trabalho não anda mais rápido
+    (o paralelismo útil já está no nível de PROCESSO, medido em 4), só
+    afoga o resto do computador.
+
+    Uma thread por processo, e um `nice` que põe a varredura atrás de tudo
+    que o Rafael estiver fazendo: ela roda em segundo plano, não tem
+    pressa, e não pode deixar a máquina inutilizável enquanto roda.
+    """
+    try:
+        import cv2
+
+        cv2.setNumThreads(1)
+    except Exception:
+        log.warning("Não consegui limitar as threads do OpenCV no worker.",
+                    exc_info=True)
+    try:
+        os.nice(10)
+    except OSError:
+        log.warning("Não consegui baixar a prioridade do worker.", exc_info=True)
+
+
+# Bibliotecas numéricas leem estas variáveis NA HORA DO IMPORT — por isso
+# são postas no ambiente do PAI antes de subir o pool (`spawn` copia o
+# ambiente pro filho), e não dentro de `_preparar_worker`, que roda tarde
+# demais pra elas. No pai não mudam nada: numpy/cv2 já foram importados.
+_AMBIENTE_1_THREAD = {
+    "OMP_NUM_THREADS": "1",
+    "OPENBLAS_NUM_THREADS": "1",
+    "MKL_NUM_THREADS": "1",
+    "NUMEXPR_NUM_THREADS": "1",
+}
+
+
 def _abrir_pool(workers: int):
     """Pool de processos pra varredura, ou `None` pra ir em série.
 
@@ -197,8 +236,10 @@ def _abrir_pool(workers: int):
         import multiprocessing
         from concurrent.futures import ProcessPoolExecutor
 
+        os.environ.update(_AMBIENTE_1_THREAD)
         return ProcessPoolExecutor(
-            max_workers=workers, mp_context=multiprocessing.get_context("spawn"))
+            max_workers=workers, mp_context=multiprocessing.get_context("spawn"),
+            initializer=_preparar_worker)
     except Exception:
         log.warning("Pool de processos indisponível — varrendo em série.",
                     exc_info=True)
