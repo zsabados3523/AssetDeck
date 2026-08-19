@@ -3382,3 +3382,45 @@ passados. `test_app.py`/`test_config.py`: 8 passados.
 
 **Consequência que o Rafael precisa saber:** arquivos novos copiados pra
 biblioteca só aparecem depois do "Reindexar". Antes apareciam sozinhos.
+
+### ☐ Fatia 93 — o visualizador abria MINIMIZADO
+
+Relato do Rafael: "não consigo abrir a visualização de modelos 3d nem de
+hdris com o duplo clique". O log dizia que estava tudo certo — "HDRI
+pronto na tela", "Modelo pronto na tela (120078 vértices)" — e estava
+mesmo: a janela existia, carregava, e ia **direto pro dock**. Da cadeira
+dele, o duplo clique não fazia nada.
+
+**Como foi achado.** Meus testes rodam em display virtual, onde não há
+gerenciador de janelas — por isso passavam. Rodando o mesmo caminho no
+display DELE, o Qt respondeu na hora: `isVisible=True`,
+`isMinimized=True`. O `wmctrl` confirmou a janela registrada e
+iconificada.
+
+**Causa.** O `prewarm_gl_viewers` fazia `show()` + `hide()` na janela do
+visualizador. Desmapear uma janela no X a marca como iconificada — é o
+que `hide()` faz — e o gerenciador reaplica esse estado toda vez que ela
+reaparece. Medido nos dois sentidos: **com** pré-aquecimento nascia
+minimizada, **sem** ele nascia normal. E não era por estar fora da tela:
+a variante invisível por opacidade, na posição normal, minimizava igual.
+Era o par mapear/desmapear.
+
+**Correção.** `WA_DontShowOnScreen` no pré-aquecimento: o Qt monta a
+janela e pinta o frame — que é o que dispara a troca de composição, o
+motivo do pré-aquecimento existir — sem nunca passar pelo gerenciador.
+
+Mais o caso irmão, que era real e independente: se ele minimizasse o
+visualizador e desse duplo clique noutro asset, `show()` sozinho não
+desminimiza. `_preparar` agora limpa o bit de minimizada antes de
+mostrar (só esse bit — quem maximizou a janela continua com ela
+maximizada). Esse remendo NÃO resolvia o caso do pré-aquecimento: ali o
+gerenciador reaplica o estado DEPOIS do `show()`, medido.
+
+**Verificado na tela do Rafael**, com o código real: `isMinimized=False`,
+janela ativa, centralizada em (460, 227) dentro da principal maximizada,
+modelo desenhado. `pytest tests/test_main_window.py
+tests/test_viewer_window.py`: 61 passados.
+
+**O que o pytest NÃO cobre:** o efeito só existe com gerenciador de
+janelas e OpenGL de verdade. O teste guarda a forma (`WA_DontShowOnScreen`
+presente, `visor.move(` ausente); a prova está no parágrafo acima.
