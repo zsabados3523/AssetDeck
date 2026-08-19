@@ -3557,3 +3557,39 @@ abaixo".
 18 → 16, espaçamento entre botões 4 → 2, padding do botão 6 → 4.
 
 **Testado:** 130 passados (janela principal, sidebar, tema).
+
+### ☐ Fatia 96 — a busca travava o programa (237s numa consulta)
+
+Relato: "ao tentar pesquisar 'armchair' o programa trava ao digitar 'ar...'
+e não responde". Reproduzido na biblioteca real dele: buscar `ar` dentro de
+uma pasta levava **237 segundos** com a UI congelada. Não era o debounce
+(existe, 250ms) nem o volume: os pedaços da consulta, medidos isolados,
+somavam **0,05s**.
+
+**Causa.** O ramo de substring da busca era
+
+```sql
+a.id IN (SELECT id FROM assets WHERE a.name LIKE ?)
+```
+
+e o `a.name` lá dentro apontava pro asset de **fora**, não pra tabela do
+subselect. O SQLite então trata a subconsulta como CORRELACIONADA e a
+reexecuta **para cada linha** da consulta externa — varrendo os 111 mil
+assets toda vez. O `EXPLAIN QUERY PLAN` dizia isso em voz alta:
+`CORRELATED LIST SUBQUERY 5 / SCAN assets`.
+
+Funcionava por acidente: "se o nome da linha de fora casa, devolve todos os
+ids, e o IN dá verdadeiro". O mesmo resultado sai de comparar direto.
+
+**Correção:** `(a.name LIKE ?)`, sem subconsulta. Medido depois: `ar` em
+**0,03s** — de 237s. Mesmos resultados: comparei os conjuntos de ids da
+forma antiga e da nova em 19 termos (incluindo conectores E/OU/NÃO,
+acentos, `%` e `_`), todos idênticos.
+
+**Teste:** lê o PLANO DE EXECUÇÃO e recusa qualquer `CORRELATED` na busca.
+Medir tempo num banco de teste minúsculo não pegaria nada — o defeito só
+cresce com a biblioteca. Conferido com controle negativo: com o código
+antigo o teste falha apontando `CORRELATED LIST SUBQUERY 2`.
+
+**Também:** ícones do rail encostados na borda esquerda (margem 3 à
+esquerda, 9 à direita) — "os ícones poderiam ir um pouco para o lado".

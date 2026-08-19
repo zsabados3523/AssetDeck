@@ -239,9 +239,14 @@ class SidebarRail(QWidget):
         self.setFixedWidth(LARGURA_RAIL)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 6, 0, 6)
+        # Encostados na borda ESQUERDA da janela, não centrados no rail
+        # (Fatia 96, "os ícones poderiam ir um pouco para o lado"): a margem
+        # de 3px à esquerda contra 9 à direita afasta os ícones do painel de
+        # pastas que vem logo depois, em vez de deixá-los boiando no meio de
+        # uma coluna estreita.
+        layout.setContentsMargins(3, 6, 9, 6)
         layout.setSpacing(2)   # 4 antes — "mais apertados" (Fatia 95b)
-        layout.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
 
         self.buttons: dict[str, QToolButton] = {}
         self._icones: dict[str, str] = {}
@@ -253,7 +258,7 @@ class SidebarRail(QWidget):
             b.setIconSize(QSize(TAM_ICONE_RAIL, TAM_ICONE_RAIL))
             b.setToolTip(dica)
             b.toggled.connect(lambda visivel, k=chave: self.section_toggled.emit(k, visivel))
-            layout.addWidget(b, alignment=Qt.AlignmentFlag.AlignHCenter)
+            layout.addWidget(b, alignment=Qt.AlignmentFlag.AlignLeft)
             self.buttons[chave] = b
             self._icones[chave] = nome_icone
         layout.addStretch(1)
@@ -266,7 +271,7 @@ class SidebarRail(QWidget):
         self.settings_btn.setIconSize(QSize(TAM_ICONE_RAIL, TAM_ICONE_RAIL))
         self.settings_btn.setToolTip("Configurações")
         self.settings_btn.clicked.connect(self.settings_clicked.emit)
-        layout.addWidget(self.settings_btn, alignment=Qt.AlignmentFlag.AlignHCenter)
+        layout.addWidget(self.settings_btn, alignment=Qt.AlignmentFlag.AlignLeft)
 
         self.refresh_theme()
 
