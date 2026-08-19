@@ -970,3 +970,70 @@ def test_prewarm_nao_entrega_a_janela_ao_gerenciador(janela):
         "voltou o show()/hide() fora da tela — é ele que deixa o "
         "visualizador abrindo minimizado pro resto da sessão"
     )
+
+
+# ---- maximização: guardar e repor (Fatia 94) ----
+
+def test_maximizada_faz_ida_e_volta_pelo_config(janela):
+    """Rafael: "a janela não vem maximizada (parece que não guarda o estado
+    anterior da sessão)".
+
+    O `saveGeometry` do Qt até carrega essa informação, mas depende de
+    `windowState()` valer no instante do fechamento — e dentro do
+    `closeEvent` o estado já se foi (medido: a janela estava maximizada um
+    instante antes e o config saía com `false`). Por isso a bandeira é
+    gravada à parte, a partir do último valor visto ao vivo.
+    """
+    from assetdeck import config
+
+    janela._maximizada = True
+    janela._save_ui_state()
+    assert config.load_config()["ui_state"]["window_maximized"] is True
+
+    janela._maximizada_desejada = False
+    janela._restore_ui_state()
+    assert janela._maximizada_desejada is True
+
+
+def test_a_intencao_do_config_nao_e_apagada_pelo_estado_atual(janela):
+    """São DUAS variáveis de propósito. Com uma só, o "não maximizada" que o
+    gerenciador manda assim que a janela aparece apagava a intenção lida do
+    config antes dela ser aplicada — e a janela abria normal (medido)."""
+    janela._maximizada_desejada = True
+    janela._maximizada = False  # o que o gerenciador diz agora
+
+    assert janela._maximizada_desejada is True, (
+        "a intenção vinda do config não pode depender do estado do momento"
+    )
+
+
+def test_showEvent_pede_a_maximizacao_uma_vez_so(janela, monkeypatch):
+    """`showEvent` dispara toda vez que a janela reaparece; repor a
+    maximização em todas seria passar por cima do Rafael, que pode ter
+    deixado a janela normal de propósito."""
+    from PySide6.QtGui import QShowEvent
+
+    pedidos = []
+    monkeypatch.setattr(janela, "_repor_maximizada",
+                        lambda *a, **k: pedidos.append(1))
+    janela._maximizada_desejada = True
+    janela._maximizada_reposta = False
+
+    janela.showEvent(QShowEvent())
+    janela.showEvent(QShowEvent())
+
+    assert pedidos == [1]
+
+
+def test_sem_maximizacao_gravada_o_showEvent_nao_mexe(janela, monkeypatch):
+    from PySide6.QtGui import QShowEvent
+
+    pedidos = []
+    monkeypatch.setattr(janela, "_repor_maximizada",
+                        lambda *a, **k: pedidos.append(1))
+    janela._maximizada_desejada = False
+    janela._maximizada_reposta = False
+
+    janela.showEvent(QShowEvent())
+
+    assert pedidos == []

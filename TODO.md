@@ -3424,3 +3424,53 @@ tests/test_viewer_window.py`: 61 passados.
 **O que o pytest NÃO cobre:** o efeito só existe com gerenciador de
 janelas e OpenGL de verdade. O teste guarda a forma (`WA_DontShowOnScreen`
 presente, `visor.move(` ausente); a prova está no parágrafo acima.
+
+### ☐ Fatia 94 — cinco ajustes depois do primeiro uso de verdade
+
+Rafael, depois de usar o visualizador na tela dele. A piscada NÃO voltou
+com a correção da Fatia 93 — confirmado por ele.
+
+**1. A janela principal não voltava maximizada.** Duas causas, as duas
+medidas no display dele (GNOME Shell):
+
+- *Ao salvar:* dentro do `closeEvent` o `isMaximized()` já é `false` — a
+  janela estava maximizada um instante antes e o config saía com `false`.
+  O que o `saveGeometry` grava depende desse mesmo estado, então também
+  saía errado. Agora a maximização é anotada ao vivo (`changeEvent`,
+  ignorando minimizações) e gravada como bandeira própria.
+- *Ao restaurar:* no GNOME o pedido de maximizar só vale DEPOIS que a
+  janela é mapeada — feito antes, é descartado sem aviso
+  (`showMaximized()` junto do `show()` deixa a janela em 800x500; 50ms
+  depois funciona). Pior: o que o `restoreGeometry` marca antes do mapa
+  faz o Qt dizer `isMaximized() == True` na hora do `showEvent`, e o
+  gerenciador desfaz logo depois — uma verificação única cai nessa e
+  desiste. Agora se pede e se CONFERE, até duas leituras seguidas
+  confirmarem, no máximo ~1,5s.
+
+São DUAS variáveis (`_maximizada` ao vivo, `_maximizada_desejada` do
+config) porque com uma só o "não maximizada" que o gerenciador manda na
+abertura apagava a intenção antes dela ser aplicada.
+
+**2. Fora o ✕ redundante** do cabeçalho: a janela já tem
+minimizar/maximizar/fechar do sistema logo acima. O Esc continua, dito no
+rodapé.
+
+**3. e 4. Pastilhas menores** — botões de modo/Enquadrar e a pastilha de
+extensão. Entraram como `#pillMini`/`#chipMini`, herdando os estados do
+`#pill`, e não como mudança no `#pill`: aquele é o botão da barra de
+categorias e dos filtros, que ele não pediu pra mudar.
+
+**5. Janela menos estreita:** 1000×660 → 1240×720.
+
+**Rede de segurança nova:** em 1 de 3 aberturas seguidas o gerenciador
+minimizava o visualizador logo depois de ele aparecer — provavelmente
+porque a janela principal ainda estava assentando a própria maximização,
+e o visualizador é janela filha dela. Intermitente é pior que sempre
+quebrado, então `changeEvent` desfaz uma minimização que chegue nos 2s
+seguintes ao pedido de abrir. Depois disso, minimizar é vontade dele.
+Cinco aberturas seguidas sem falha depois da correção.
+
+**Testado:** 133 passados (`test_main_window`, `test_viewer_window`,
+`test_theme`, `test_settings_window`), mais 4 testes novos da persistência
+da maximização. O resto foi medido na tela dele — gerenciador de janelas
+não existe no pytest.

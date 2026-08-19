@@ -30,14 +30,13 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from PySide6.QtCore import QEvent, QPoint, QRect, QRectF, QSize, Qt
+from PySide6.QtCore import QEvent, QPoint, QRect, QRectF, QSize, Qt, QTimer
 from PySide6.QtGui import QColor, QFontMetrics, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import (
     QButtonGroup,
     QDialog,
     QHBoxLayout,
     QLabel,
-    QPushButton,
     QStackedWidget,
     QToolButton,
     QVBoxLayout,
@@ -127,25 +126,23 @@ class VisualizadorWindow(QDialog):
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self.setWindowFlag(Qt.WindowType.Window)
-        self.resize(1000, 660)
+        self.resize(1240, 720)
 
         # ---- cabeçalho ----
         self.titulo = QLabel("—")
         self.titulo.setObjectName("title")  # mesmo estilo do título do preview
         self.chip = QLabel()
-        self.chip.setObjectName("chipForte")  # mesma pastilha do painel de detalhes
-        self.btn_fechar = QPushButton()
-        self.btn_fechar.setObjectName("ghost")
-        self.btn_fechar.setToolTip("Fechar (Esc)")
-        self.btn_fechar.setFixedWidth(38)
-        self.btn_fechar.clicked.connect(self.close)
-
+        self.chip.setObjectName("chipMini")
+        # Sem ✕ próprio (Fatia 94, Rafael: "tem o botão de fechar porém ainda
+        # sim tem os botões de qualquer janela, então fica meio redundante").
+        # Esta é uma janela normal do sistema: minimizar/maximizar/fechar já
+        # vêm na barra de título, e um segundo ✕ logo abaixo do primeiro só
+        # confunde. Quem quiser teclado tem o Esc, dito no rodapé.
         cabecalho = QHBoxLayout()
         cabecalho.setSpacing(8)
         cabecalho.addWidget(self.titulo)
         cabecalho.addWidget(self.chip)
         cabecalho.addStretch(1)
-        cabecalho.addWidget(self.btn_fechar)
 
         # ---- controles (o que aparece depende da página) ----
         self.btn_ambiente = QToolButton()
@@ -156,14 +153,14 @@ class VisualizadorWindow(QDialog):
         self._modos.setExclusive(True)
         for indice, botao in ((hdri_viewer.MODO_AMBIENTE, self.btn_ambiente),
                               (hdri_viewer.MODO_ESFERA, self.btn_esfera)):
-            botao.setObjectName("pill")
+            botao.setObjectName("pillMini")
             botao.setCheckable(True)
             self._modos.addButton(botao, indice)
             botao.clicked.connect(lambda _c=False, m=indice: self.hdri.set_modo(m))
         self.btn_ambiente.setChecked(True)
 
         self.btn_enquadrar = QToolButton()
-        self.btn_enquadrar.setObjectName("pill")
+        self.btn_enquadrar.setObjectName("pillMini")
         self.btn_enquadrar.setText("Enquadrar")
         self.btn_enquadrar.setToolButtonStyle(
             Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
@@ -212,6 +209,7 @@ class VisualizadorWindow(QDialog):
         # Um emissor POR TIPO, criado uma vez: a carga roda em thread e
         # precisa de um dono vivo do outro lado do sinal.
         self._alvo: Path | None = None
+        self._abrindo = False
         self._sig_hdri = hdri_viewer.SinalCarga()
         self._sig_hdri.loaded.connect(self._hdri_carregado)
         self._sig_hdri.failed.connect(self._falhou)
@@ -265,9 +263,36 @@ class VisualizadorWindow(QDialog):
         # Só o bit de minimizada, em vez de `showNormal()`: quem maximizou a
         # janela continua com ela maximizada no próximo asset.
         self.setWindowState(self.windowState() & ~Qt.WindowState.WindowMinimized)
+        self._abrindo = True
+        QTimer.singleShot(2000, self._desistir_de_insistir)
         self.show()
         self.raise_()
         self.activateWindow()
+
+    def changeEvent(self, event) -> None:  # noqa: N802
+        """Desfaz uma minimização que NÃO foi o Rafael que pediu.
+
+        Medido: em 1 de 3 aberturas seguidas o gerenciador minimizava esta
+        janela logo depois de ela aparecer — provavelmente porque a janela
+        principal ainda estava assentando a própria maximização (a janela do
+        visualizador é filha dela). Intermitente é pior que sempre quebrado:
+        some quando se vai investigar e volta na hora que ele usa.
+
+        A rede vale só nos 2s seguintes ao pedido de abrir. Depois disso,
+        minimizar é vontade dele e não se discute.
+        """
+        if (event.type() == QEvent.Type.WindowStateChange
+                and self._abrindo and self.isMinimized()):
+            log.info("O gerenciador minimizou o visualizador na abertura — "
+                     "desfazendo.")
+            self.setWindowState(
+                self.windowState() & ~Qt.WindowState.WindowMinimized)
+            self.raise_()
+            self.activateWindow()
+        super().changeEvent(event)
+
+    def _desistir_de_insistir(self) -> None:
+        self._abrindo = False
 
     def centralizar_no_app(self) -> None:
         """Abre no centro da JANELA PRINCIPAL (pedido do Rafael), presa à
@@ -322,7 +347,6 @@ class VisualizadorWindow(QDialog):
         que são pintados com a cor de fundo do tema — mesmo padrão do
         seletor de biblioteca e das seções do painel de detalhes."""
         cores = theme.current_colors()
-        self.btn_fechar.setIcon(icons.icon("x", cores["text_muted"], 16))
         self.btn_enquadrar.setIcon(icons.icon("enquadrar", cores["text"], 16))
         self._cantos.update()
 
