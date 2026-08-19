@@ -1430,12 +1430,16 @@ class MainWindow(QMainWindow):
         caminho = Path(self._library_root) / row["rel_path"]
         if can_hdr(caminho):
             # HDRI achatado num QLabel não deixa avaliar a luz (Fatia 34).
+            log.info("Duplo clique: abrindo o visualizador de HDRI para %s",
+                     caminho.name)
             self._visualizador().abrir_hdri(caminho)
             return
         if caminho.suffix.lower() in model3d_loader.EXTENSOES_SUPORTADAS:
             # Fase 6: modelo com câmera orbitando em vez do preview
             # achatado. content_hash só é usado pelo loader de .blend
             # (cache da exportação via Blender) — o resto ignora.
+            log.info("Duplo clique: abrindo o visualizador de modelo para %s",
+                     caminho.name)
             self._visualizador().abrir_modelo(caminho, row["content_hash"])
             return
         maps = None
@@ -1490,13 +1494,24 @@ class MainWindow(QMainWindow):
         # `QStackedWidget` dela). A transição de composição é por JANELA DE
         # TOPO, então juntar as duas cortou metade deste custo — que é o
         # trecho mais caro da abertura depois da árvore de pastas.
+        # `WA_DontShowOnScreen` (Fatia 93): o Qt monta a janela e PINTA um
+        # frame — que é o que dispara a troca de composição, o motivo deste
+        # método existir — sem nunca entregá-la ao gerenciador de janelas.
+        #
+        # Antes daqui saía um `move(-10000, -10000)` + `show()` + `hide()`.
+        # Isso deixava o visualizador ABRINDO MINIMIZADO pro resto da sessão:
+        # desmapear uma janela no X a marca como "iconificada" (é o que
+        # `hide()` faz), e o gerenciador reaplica esse estado toda vez que ela
+        # reaparece. Medido nos dois sentidos na tela do Rafael: com este
+        # pré-aquecimento nascia minimizada, sem ele nascia normal — e não era
+        # por estar fora da tela (a versão invisível por opacidade, na mesma
+        # posição, minimizava igual). Era o par mapear/desmapear.
         visor = self._visualizador()
-        pos_original = visor.pos()
-        visor.move(-10000, -10000)
+        visor.setAttribute(Qt.WidgetAttribute.WA_DontShowOnScreen, True)
         visor.show()
         QApplication.processEvents()
         visor.hide()
-        visor.move(pos_original)
+        visor.setAttribute(Qt.WidgetAttribute.WA_DontShowOnScreen, False)
 
         if self.windowState() != estado_antes:
             self.setWindowState(estado_antes)

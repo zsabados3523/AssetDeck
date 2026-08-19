@@ -882,8 +882,6 @@ def _visor_dublado(monkeypatch):
     aconteceu com ela. Instanciar a de verdade monta dois `QOpenGLWidget`,
     que derrubam o processo no modo offscreen do pytest (fronteira já
     registrada em `test_hdri_viewer.py`)."""
-    from PySide6.QtCore import QPoint
-
     from assetdeck.ui import viewer_window
 
     criadas = []
@@ -894,10 +892,7 @@ def _visor_dublado(monkeypatch):
             self.escondida = 0
             criadas.append(self)
 
-        def pos(self):
-            return QPoint(0, 0)
-
-        def move(self, *a):
+        def setAttribute(self, *a):
             pass
 
         def show(self):
@@ -937,3 +932,41 @@ def test_prewarm_aquece_uma_janela_so(janela, monkeypatch):
     assert len(criadas) == 1, "o pré-aquecimento voltou a abrir mais de uma janela"
     assert criadas[0].mostrada == 1
     assert criadas[0].escondida == 1
+
+
+def test_prewarm_nao_entrega_a_janela_ao_gerenciador(janela):
+    """Regressão do "não consigo abrir a visualização de modelos 3d nem de
+    hdris com o duplo clique" (Rafael, 2026-08-19).
+
+    O visualizador ABRIA MINIMIZADO — ia direto pro dock, e da cadeira dele
+    parecia que o duplo clique não fazia nada. O log mostrava tudo certo
+    ("HDRI pronto na tela", "Modelo pronto na tela"), porque estava mesmo:
+    a janela existia, carregava e ficava iconificada.
+
+    Causa: o pré-aquecimento fazia `show()` + `hide()` na janela. Desmapear
+    uma janela no X a marca como iconificada, e o gerenciador reaplica esse
+    estado toda vez que ela reaparece. Medido na tela do Rafael nos dois
+    sentidos: com pré-aquecimento nascia minimizada, sem ele nascia normal.
+    Não era por estar fora da tela — a variante invisível por opacidade, na
+    posição normal, minimizava igual. Era o par mapear/desmapear.
+
+    `WA_DontShowOnScreen` monta a janela e pinta o frame (que é o que
+    dispara a troca de composição, o motivo do pré-aquecimento existir) sem
+    nunca passar pelo gerenciador.
+
+    O teste lê o código porque o efeito só existe com gerenciador de
+    janelas e OpenGL de verdade — nenhum dos dois roda no pytest (mesma
+    fronteira de `test_hdri_viewer.py`). A verificação de verdade foi na
+    tela dele, e está registrada no TODO.
+    """
+    import inspect
+
+    fonte = inspect.getsource(janela.prewarm_gl_viewers)
+    assert "WA_DontShowOnScreen" in fonte, (
+        "o pré-aquecimento precisa montar a janela SEM entregá-la ao "
+        "gerenciador de janelas"
+    )
+    assert "visor.move(" not in fonte, (
+        "voltou o show()/hide() fora da tela — é ele que deixa o "
+        "visualizador abrindo minimizado pro resto da sessão"
+    )

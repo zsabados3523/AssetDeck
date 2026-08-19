@@ -211,6 +211,7 @@ class VisualizadorWindow(QDialog):
 
         # Um emissor POR TIPO, criado uma vez: a carga roda em thread e
         # precisa de um dono vivo do outro lado do sinal.
+        self._alvo: Path | None = None
         self._sig_hdri = hdri_viewer.SinalCarga()
         self._sig_hdri.loaded.connect(self._hdri_carregado)
         self._sig_hdri.failed.connect(self._falhou)
@@ -236,6 +237,7 @@ class VisualizadorWindow(QDialog):
         model_viewer.iniciar_carga(self._sig_modelo, path, content_hash)
 
     def _preparar(self, path: Path, pagina: int, recado: str) -> None:
+        self._alvo = path
         rotulo = "HDRI" if pagina == PAGINA_HDRI else "Modelo"
         self.setWindowTitle(f"{rotulo} — {path.name}")
         metricas = QFontMetrics(self.titulo.font())
@@ -249,6 +251,20 @@ class VisualizadorWindow(QDialog):
         self.btn_enquadrar.setVisible(pagina == PAGINA_MODELO)
         self.status.setText(recado)
         self.centralizar_no_app()
+        # Tirar o "minimizada" antes de mostrar (Fatia 93): se o Rafael
+        # minimizar o visualizador e der duplo clique noutro asset, `show()`
+        # sozinho NÃO desminimiza — a janela carregaria o novo asset ainda no
+        # dock, parecendo que o clique não fez nada.
+        #
+        # Isto cobre só esse caso. O outro caminho pro mesmo sintoma — o
+        # pré-aquecimento deixando a janela iconificada no gerenciador — NÃO
+        # se conserta daqui: o gerenciador reaplica o estado dele DEPOIS do
+        # `show()`, então mexer no estado antes não adianta (medido). Aquele
+        # está resolvido na origem, em `prewarm_gl_viewers`.
+        #
+        # Só o bit de minimizada, em vez de `showNormal()`: quem maximizou a
+        # janela continua com ela maximizada no próximo asset.
+        self.setWindowState(self.windowState() & ~Qt.WindowState.WindowMinimized)
         self.show()
         self.raise_()
         self.activateWindow()
@@ -276,18 +292,24 @@ class VisualizadorWindow(QDialog):
     # ---- resultado das cargas ----
 
     def _hdri_carregado(self, imagem) -> None:
+        log.info("HDRI pronto na tela: %s (%d × %d)",
+                 getattr(self._alvo, "name", "?"), imagem.width(), imagem.height())
         self.hdri.set_image(imagem)
         self.status.setText(
             f"{imagem.width()} × {imagem.height()} px  ·  "
             "arraste para girar, duplo clique centraliza")
 
     def _modelo_carregado(self, malha) -> None:
+        log.info("Modelo pronto na tela: %s (%d vértices)",
+                 getattr(self._alvo, "name", "?"), len(malha.positions))
         self.modelo.set_mesh(malha)
         n_tris = len(malha.positions) // 3
         self.status.setText(
             f"{n_tris:n} triângulos  ·  arraste para orbitar, roda pra zoom")
 
     def _falhou(self, mensagem: str) -> None:
+        log.error("Visualizador não conseguiu abrir %s: %s",
+                  getattr(self._alvo, "name", "?"), mensagem)
         self.status.setText(f"Não consegui abrir: {mensagem}")
 
     def _enquadrar(self) -> None:
