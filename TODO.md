@@ -3474,3 +3474,56 @@ Cinco aberturas seguidas sem falha depois da correção.
 `test_theme`, `test_settings_window`), mais 4 testes novos da persistência
 da maximização. O resto foi medido na tela dele — gerenciador de janelas
 não existe no pytest.
+
+### ☐ Fatia 95 — cinco ajustes visuais na janela principal
+
+Todos medidos na tela antes de mexer, porque três deles pareciam já estar
+resolvidos no código e não estavam.
+
+**1. e 2. Seletor de biblioteca e rodapé "centralizados verticalmente".**
+Já pedido na Fatia 78, e eu tinha respondido com `AlignVCenter` — que não
+resolvia nada, e a medição mostrou por quê:
+
+- O seletor media **37px numa faixa de 37px**: ocupava a faixa inteira, e
+  centralizar algo que preenche tudo não muda nada. Agora tem padding
+  menor (4px), mede 29px, e sobra folga dos dois lados.
+- O rodapé estava centralizado na BARRA (32px), mas o espaço que o Rafael
+  enxerga vai da borda de baixo dos painéis até o fim da janela (46px):
+  14px eram margem do layout central e 32 eram a barra. O texto caía 7px
+  abaixo do meio. Agora a margem saiu do layout e entrou na altura da
+  barra — o espaço é o mesmo, mas pertence todo a ela, e o texto cai no
+  meio. Medido: sobrava 9px abaixo do texto, agora sobram 16 (metade dos
+  32 de banda útil).
+
+Mesma correção na faixa de cima, que tinha o mesmo defeito.
+
+**3. Fundo branco no modo claro.** `BG` era `#F6F6F9`. O Rafael: "as
+janelas já têm sombra e linha, tem contraste". O modo escuro não mudou.
+
+**4. Rail lateral** 44px → 38px.
+
+**5. Faixa superior** 51px (37 de barra + 14 de margem) → 42px, e o nome
+"AssetDeck" de 13px → 15px.
+
+**Três testes tiveram de mudar, e vale registrar por quê:**
+
+- O teste do raio das pastilhas conferia TODOS os botões contra
+  `$radius_pill`. O seletor encolheu e passou a precisar de raio próprio
+  (18px não cabe na metade de 26px — o Qt descarta o arredondamento
+  inteiro). Virou token (`radius_pill_small`), como manda a regra do
+  projeto, e o teste agora confere cada botão contra o token QUE ELE USA.
+- `test_o_fundo_e_a_superficie_sao_cores_diferentes` exigia tons
+  diferentes. Com o fundo branco eles são iguais no modo claro. Reescrito
+  para a exigência real, que não mudou: **ou o tom separa, ou o contorno
+  separa** — nunca nenhum dos dois.
+- O teste da quina arredondada do card provava curvatura comparando a
+  quina com `$bg`; com fundo e painel do mesmo branco isso não distingue
+  mais nada (o próprio teste já avisava disso num comentário). Agora
+  compara a quina com o MEIO DA ARESTA: num card quadrado a quina cai em
+  cima do contorno e fica mais escura. **Conferido com controle
+  negativo** — com `radius_panel: 0px` o teste falha, com o raio real
+  passa. A primeira versão que escrevi NÃO pegava o card quadrado
+  (amostrava 1px pra dentro da borda); só descobri porque fui conferir.
+
+**Testado:** 171 passados (tema, sidebar, janela principal, visualizador,
+configurações, painel de detalhes).

@@ -410,7 +410,13 @@ class MainWindow(QMainWindow):
         central.setObjectName("appSurface")
         central.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         layout = QVBoxLayout(central)
-        layout.setContentsMargins(14, 14, 14, 14)
+        # Sem margem em cima nem embaixo (Fatia 95): quem dá o respiro ali
+        # agora é a altura da barra de menus e a do rodapé. Antes a folga era
+        # metade margem, metade barra — e o conteúdo das duas barras ficava
+        # centralizado só na METADE que é a barra, aparecendo acima do meio
+        # do espaço que o Rafael enxerga. Foi o que ele descreveu duas vezes:
+        # "deixe centralizado verticalmente no espaço em que está".
+        layout.setContentsMargins(14, 0, 14, 0)
         layout.setSpacing(12)
         layout.addWidget(splitter)
         self.setCentralWidget(central)
@@ -465,7 +471,11 @@ class MainWindow(QMainWindow):
         # encolhia a barra até o texto encostar em cima e embaixo; com altura
         # fixa sobra folga, e o respiro lateral vem do `padding` do
         # `QStatusBar` no QSS. Continua enxuto — só não espremido.
-        self.statusBar().setFixedHeight(32)
+        # 46 = os 32 de antes + os 14 de margem que saíram do layout central
+        # (ver `setContentsMargins` acima). O espaço embaixo é o mesmo de
+        # sempre; a diferença é que agora ele pertence todo à barra, e o texto
+        # cai no meio dele.
+        self.statusBar().setFixedHeight(46)
         self.statusBar().setSizeGripEnabled(False)  # o canto pontilhado comia a margem direita
         # Margem lateral do rodapé (Fatia 78, "colocar margens maiores das
         # bordas"). Vale para os widgets permanentes da direita — contagem,
@@ -800,6 +810,11 @@ class MainWindow(QMainWindow):
         from PySide6.QtWidgets import QHBoxLayout
 
         barra = self.menuBar()
+        # Mesma ideia do rodapé (Fatia 95): a faixa engole a margem que era do
+        # layout central, então marca e seletor ficam no meio do espaço que
+        # aparece na tela. 42 é MENOR que os 51 de antes (37 de barra + 14 de
+        # margem) — o Rafael pediu pra diminuir o espaço superior.
+        barra.setFixedHeight(42)
 
         marca = QWidget()
         marca_layout = QHBoxLayout(marca)

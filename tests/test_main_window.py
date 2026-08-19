@@ -126,21 +126,33 @@ def test_tema_pinta_a_janela_e_os_cards_ficam_arredondados(qapp, janela):
             return abs(ra - rb) + abs(ga - gb) + abs(ba - bb)
 
         quina = grid_card.mapTo(janela, grid_card.rect().topLeft())
-        cor_quina = px(quina.x() + 1, quina.y() + 1)
+        # EXATAMENTE a quina, não 1px pra dentro: num card quadrado é ali
+        # que as duas linhas de contorno se encontram. Amostrar deslocado
+        # cai dentro do card e lê a superfície nos dois casos — foi assim
+        # que a primeira versão deste teste passou com o card quadrado.
+        cor_quina = px(quina.x(), quina.y())
+        # Meio da aresta de cima: ali passa a LINHA de contorno do card.
+        meio_aresta = px(quina.x() + grid_card.width() // 2, quina.y())
 
-        # A prova fina de curvatura (comparar quina x meio da aresta) já está
-        # em test_theme.py numa sonda isolada, onde a geometria é controlada.
-        # Aqui, na janela REAL, o que importa é que a quina do card mostra o
-        # FUNDO e não o painel — se alguém voltar a arredondar a QListView
-        # direto (sem o QFrame#card em volta), o viewport pinta retângulo, a
-        # quina passa a ser a superfície, e isto quebra.
+        # A prova de curvatura mudou de forma na Fatia 95, quando o fundo do
+        # modo claro virou branco a pedido do Rafael. Antes bastava ler a cor
+        # da quina e ver que era o `$bg` e não a `$surface`; com os dois
+        # brancos, essa leitura não distingue mais nada — o próprio teste já
+        # avisava que comparar branco com branco passaria até com o card
+        # quadrado.
         #
-        # Não dá pra exigir igualdade exata com `$bg`: a sombra do card
-        # escurece alguns pontos ao redor da quina (~2 níveis por canal). Ela
-        # só passou a aparecer na Fatia 44, quando o fundo deixou de ser
-        # branco puro — antes a sombra caía sobre branco e sumia.
-        assert distancia(cor_quina, theme.BG) < distancia(cor_quina, theme.SURFACE), \
-            f"a quina do card da grade não é curva (leu {cor_quina})"
+        # O que ainda distingue: a quina de um card QUADRADO cai em cima do
+        # contorno (duas linhas se encontrando ali), e a de um card CURVO cai
+        # fora dele, no fundo limpo. Então a quina tem de ser mais CLARA que o
+        # meio da aresta, onde o contorno passa.
+        def brilho(cor: str) -> int:
+            return sum(theme.hex_to_rgb(cor))
+
+        assert brilho(cor_quina) > brilho(meio_aresta), (
+            f"a quina do card da grade não é curva: leu {cor_quina} na quina "
+            f"e {meio_aresta} no meio da aresta — se a quina não é mais clara "
+            f"que a linha de contorno, ela está EM CIMA do contorno"
+        )
 
         # E a superfície do card aparece de verdade — prova que os dois tons
         # diferem na tela, não só na paleta.

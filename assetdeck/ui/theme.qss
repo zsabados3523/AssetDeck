@@ -524,15 +524,15 @@ QToolButton#pill:checked, QToolButton#pillMini:checked {
 QToolButton#pillMini {
     padding: 4px 10px;
     font-size: $font_size_small;
-    border-radius: 13px;
+    border-radius: $radius_pill_small;
 }
 
 QToolButton#pillMini:hover, QToolButton#pillMini:checked {
-    border-radius: 13px;
+    border-radius: $radius_pill_small;
 }
 
 QToolButton#pillMini:pressed {
-    border-radius: 13px;
+    border-radius: $radius_pill_small;
     padding-top: 5px;
     padding-bottom: 3px;
 }
@@ -543,7 +543,7 @@ QToolButton#pillMini:pressed {
 QLabel#chipMini {
     background-color: $surface_raised;
     border: 1px solid $border;
-    border-radius: 9px;
+    border-radius: $radius_chip_small;
     padding: 1px 7px;
     color: $text_muted;
     font-size: 11px;
@@ -600,8 +600,14 @@ QToolButton#pill::menu-indicator {
 QToolButton#libSwitch {
     background: transparent;
     border: 1px solid $border;
-    border-radius: $radius_pill;
-    padding: 8px 12px;
+    /* Raio 13 e não $radius_pill (18): com o padding menor a pastilha tem 26px
+     * de altura, e o Qt DESCARTA um raio maior que a metade da altura — o
+     * botão voltaria a ter canto reto (já aconteceu, Fatia 79b). */
+    border-radius: $radius_pill_small;
+    /* 8px antes. Encolher é o que faz o seletor BOIAR na faixa em vez de
+     * ocupá-la inteira: media 37px numa faixa de 37px, então o AlignVCenter
+     * que já estava lá não tinha o que centralizar. */
+    padding: 4px 12px;
     color: $text_muted;
     font-weight: 600;
 }
@@ -615,8 +621,10 @@ QToolButton#libSwitch:hover {
 QToolButton#libSwitch:pressed {
     background-color: $surface_sunken;
     border: 1px solid $border;
-    padding-top: 9px;
-    padding-bottom: 7px;
+    /* Afunda 1px sem mudar a ALTURA (a soma continua 8): altura maior aqui
+     * estouraria o raio de 13 e o canto ficaria reto só enquanto clicado. */
+    padding-top: 5px;
+    padding-bottom: 3px;
 }
 
 /* Mesma correção da pastilha de filtro: a seta é desenhada no canto
@@ -947,7 +955,7 @@ QFrame#brandDot {
 
 QLabel#brandName {
     color: $title;
-    font-size: $font_size;
+    font-size: $font_size_title;   /* 13px antes (Fatia 95: "um pouquinho maior") */
     font-weight: 700;
 }
 

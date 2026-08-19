@@ -45,7 +45,7 @@ from assetdeck.ui import icons, theme
 
 log = logging.getLogger(__name__)
 
-LARGURA_RAIL = 44
+LARGURA_RAIL = 38   # 44 antes (Fatia 95: "diminua o espaço lateral esquerdo")
 TAM_ICONE_RAIL = 18
 TAM_CHEVRON = 10
 
