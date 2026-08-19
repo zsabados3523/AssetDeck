@@ -107,6 +107,20 @@ class MainWindow(QMainWindow):
         self._scan = ScanController(db_path, self._library_root, parent=self)
         self._pipeline = ThumbnailPipeline(thumbs_dir, parent=self)
 
+        # Maximização (Fatia 94). `_maximizada_desejada` é o que veio do
+        # config e vale só na primeira aparição; `_maximizada_reposta` faz a
+        # reposição acontecer uma vez só, porque `showEvent` dispara toda vez
+        # que a janela reaparece e depois da abertura quem manda é o Rafael.
+        # `_maximizada` é o último valor VISTO ao vivo (o que se grava);
+        # `_maximizada_desejada` é o que veio do config e vale só na primeira
+        # aparição. Duas variáveis, e não uma, porque o gerenciador manda um
+        # "não maximizada" logo que a janela aparece — com uma só, esse
+        # evento apagava a intenção antes dela ser aplicada (medido).
+        self._maximizada = False
+        self._maximizada_desejada = False
+        self._maximizada_reposta = False
+        self._maximizacoes_confirmadas = 0
+
         self.setWindowTitle("AssetDeck")
         self.resize(1280, 800)
 
@@ -2011,6 +2025,76 @@ class MainWindow(QMainWindow):
         é seção (não tem chave própria no Sidebar)."""
         return [chave for chave, _r in self._secoes_do_menu] + ["detalhes"]
 
+    # ---- maximização: guardar e repor (Fatia 94) ----
+
+    def changeEvent(self, event) -> None:  # noqa: N802
+        """Anota a maximização enquanto ela ainda é verdade.
+
+        Ler `isMaximized()` na hora de salvar NÃO funciona: dentro do
+        `closeEvent` o estado já se foi — medido, a janela estava maximizada
+        um instante antes e o config saía com `false`. Aqui o valor é anotado
+        toda vez que MUDA, com a janela visível, que é quando ele vale.
+
+        Minimizar não conta: quem minimiza uma janela maximizada quer ela
+        maximizada de volta, não "normal".
+        """
+        from PySide6.QtCore import QEvent
+
+        if (event.type() == QEvent.Type.WindowStateChange
+                and self.isVisible() and not self.isMinimized()):
+            self._maximizada = self.isMaximized()
+        super().changeEvent(event)
+
+    def showEvent(self, event) -> None:  # noqa: N802
+        """Repõe a maximização depois que a janela aparece.
+
+        Não dá pra fazer isso no construtor junto com o `restoreGeometry`:
+        no GNOME Shell o pedido de maximizar só vale DEPOIS que a janela foi
+        mapeada — feito antes, é descartado sem aviso nenhum. Medido na tela
+        do Rafael: `showMaximized()` junto do `show()` deixa a janela em
+        800x500; 50ms depois, funciona.
+        """
+        super().showEvent(event)
+        if self._maximizada_desejada and not self._maximizada_reposta:
+            self._maximizada_reposta = True
+            self._repor_maximizada()
+
+    def _repor_maximizada(self, tentativa: int = 0) -> None:
+        """Insiste na maximização até ela PEGAR, por cerca de 1,5s.
+
+        Duas coisas medidas na tela do Rafael (GNOME Shell) explicam esta
+        forma:
+
+        1. O pedido feito antes da janela ser mapeada é descartado sem aviso
+           — `showMaximized()` junto do `show()` deixa a janela em 800x500,
+           50ms depois funciona. Por isso a reposição começa no `showEvent`.
+        2. Pior: o que o `restoreGeometry` marca ANTES do mapa faz o Qt dizer
+           `isMaximized() == True` na hora do `showEvent`, e o gerenciador
+           desfaz logo depois. Uma verificação única cai nessa: ela vê
+           "já está maximizada", desiste, e a janela abre normal.
+
+        Daí conferir repetidamente por um intervalo, reafirmando sempre que
+        não estiver maximizada, em vez de apostar num instante certo.
+        """
+        from PySide6.QtCore import QTimer
+
+        if self.isMaximized():
+            # Duas leituras seguidas: uma só não basta — o que o
+            # `restoreGeometry` marca antes do mapa faz o Qt dizer "sim" e o
+            # gerenciador desfazer logo em seguida (medido).
+            self._maximizacoes_confirmadas += 1
+            if self._maximizacoes_confirmadas >= 2:
+                return
+        else:
+            self._maximizacoes_confirmadas = 0
+            self.showMaximized()
+        if tentativa >= 10:
+            if not self.isMaximized():
+                log.warning("O gerenciador de janelas não aceitou maximizar "
+                            "a janela — ela abre em tamanho normal.")
+            return
+        QTimer.singleShot(150, lambda: self._repor_maximizada(tentativa + 1))
+
     def _save_ui_state(self) -> None:
         """Grava geometria, painéis, splitters, tamanho do slider, tags
         expandidas e filtros ativos — tudo que o Rafael deixou arrumado
@@ -2022,6 +2106,14 @@ class MainWindow(QMainWindow):
         cfg = config.load_config()
         cfg["ui_state"] = {
             "window_geometry_b64": b64encode(bytes(self.saveGeometry())).decode("ascii"),
+            # Bandeira PRÓPRIA, além do que o `saveGeometry` carrega (Fatia
+            # 94). O Rafael: "a janela não vem maximizada (parece que não
+            # guarda o estado anterior da sessão)". O que o `saveGeometry`
+            # grava depende de `windowState()` valer no instante do
+            # fechamento — e no GNOME esse estado some antes. Guardar à parte
+            # o último valor VISTO durante a sessão (ver `changeEvent`) não
+            # depende de quando o app é fechado.
+            "window_maximized": self._maximizada,
             "left_splitter_sizes": self._left_splitter.sizes(),
             "main_splitter_sizes": self._main_splitter.sizes(),
             "panels_visible": dict(zip(
@@ -2053,6 +2145,11 @@ class MainWindow(QMainWindow):
         geo_b64 = estado.get("window_geometry_b64")
         if geo_b64:
             self.restoreGeometry(b64decode(geo_b64))
+        # Aplicado só depois que a janela aparece — ver `showEvent`. Pedir
+        # maximização aqui, com a janela ainda não mapeada, é descartado em
+        # silêncio pelo GNOME (medido: `showMaximized()` antes do mapa deixa
+        # a janela em 800x500; 50ms depois, funciona).
+        self._maximizada_desejada = bool(estado.get("window_maximized"))
 
         paineis = estado.get("panels_visible") or {}
         for chave, acao in zip(self._chaves_dos_paineis(), self._window_menu_actions):

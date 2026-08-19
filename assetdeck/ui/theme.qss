@@ -489,18 +489,18 @@ QPushButton#primary:disabled {
  * regras genéricas — sem isso o botão voltaria a ser quadrado justamente ao
  * passar o mouse (a mesma armadilha do `#primary:disabled`, Fatia 74, agora
  * coberta por teste). */
-QToolButton#pill {
+QToolButton#pill, QToolButton#pillMini {
     border-radius: $radius_pill;
     padding: $pad_m $pad_l;
 }
 
-QToolButton#pill:hover {
+QToolButton#pill:hover, QToolButton#pillMini:hover {
     background-color: $surface_raised;
     border: 1px solid $border;
     border-radius: $radius_pill;
 }
 
-QToolButton#pill:pressed {
+QToolButton#pill:pressed, QToolButton#pillMini:pressed {
     background-color: $surface_sunken;
     border: 1px solid $border;
     border-radius: $radius_pill;
@@ -508,11 +508,45 @@ QToolButton#pill:pressed {
     padding-bottom: 7px;
 }
 
-QToolButton#pill:checked {
+QToolButton#pill:checked, QToolButton#pillMini:checked {
     background-color: $accent_soft;
     border: 1px solid transparent;
     border-radius: $radius_pill;
     color: $accent;
+    font-weight: 600;
+}
+
+
+/* Pastilha MENOR, do visualizador 3D (Fatia 94, pedido do Rafael: "os botões
+ * poderiam ser menores"). Herda tudo do #pill acima — só encolhe. Existe como
+ * nome próprio, e não como mudança no #pill, porque o #pill original é o botão
+ * da barra de categorias e dos filtros, que o Rafael NÃO pediu pra mudar. */
+QToolButton#pillMini {
+    padding: 4px 10px;
+    font-size: $font_size_small;
+    border-radius: 13px;
+}
+
+QToolButton#pillMini:hover, QToolButton#pillMini:checked {
+    border-radius: 13px;
+}
+
+QToolButton#pillMini:pressed {
+    border-radius: 13px;
+    padding-top: 5px;
+    padding-bottom: 3px;
+}
+
+/* Pastilha de EXTENSÃO do visualizador (.HDR, .BLEND). Mesma ideia: o
+ * #chipForte continua valendo pro painel de detalhes, onde o formato é a
+ * informação que ele procura; aqui é só um rótulo ao lado do nome. */
+QLabel#chipMini {
+    background-color: $surface_raised;
+    border: 1px solid $border;
+    border-radius: 9px;
+    padding: 1px 7px;
+    color: $text_muted;
+    font-size: 11px;
     font-weight: 600;
 }
 
