@@ -3593,3 +3593,17 @@ antigo o teste falha apontando `CORRELATED LIST SUBQUERY 2`.
 
 **Também:** ícones do rail encostados na borda esquerda (margem 3 à
 esquerda, 9 à direita) — "os ícones poderiam ir um pouco para o lado".
+
+### ☐ Fatia 96b — ícones do rail: tamanho de volta, centralizados
+
+"os ícones estão muito pequenos... não poderia aumentá-los como estava antes
+e simplesmente deixar eles centralizados horizontalmente nesse espaço?"
+
+Eu tinha lido "poderiam ir um pouco para o lado" (Fatia 96) como *afastar do
+painel de pastas* e encostado os ícones à esquerda com margens desiguais.
+Era outra coisa: o incômodo estava no TAMANHO, que eu tinha reduzido de 18
+para 16 na Fatia 95b junto com o aperto do rail.
+
+Voltaram aos 18px e ficam no meio da coluna, com folga igual dos dois lados.
+O rail segue com 32px e o espaçamento apertado de 2px entre botões — essas
+duas partes ele aprovou.
