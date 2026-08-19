@@ -165,6 +165,23 @@ def _confirmar_biblioteca(conn, cfg: dict, silencioso: bool) -> str:
     return str(novo)
 
 
+def varrer_na_abertura(cfg: dict) -> bool:
+    """A biblioteca deve ser varrida sozinha ao abrir o app?
+
+    **Desligado por padrão** desde 2026-08-19, a pedido do Rafael. Antes o
+    app varria a biblioteca inteira em TODA abertura — 102 mil assets,
+    alguns minutos de 4 processos moendo hash e metadados sem ninguém ter
+    pedido. Mesmo com a varredura já comportada (uma thread por processo e
+    `nice`, Fatia 91), gastar a máquina dele sem ordem não se justifica:
+    quem sabe que copiou arquivos novos pra biblioteca é ele, e o botão
+    "Reindexar" está na barra de cima.
+
+    Continua sendo uma CHAVE, não uma remoção: quem quiser a sincronia
+    automática liga em Configurações › Manutenção.
+    """
+    return bool(cfg.get("scan_on_startup", False))
+
+
 def run(argv: list[str]) -> int:
     args = parse_args(argv)
 
@@ -226,7 +243,11 @@ def run(argv: list[str]) -> int:
         # Fora do modo --screenshot: evita a janelinha de pré-aquecimento
         # (mesmo que fora da tela) interferir na captura determinística.
         win.prewarm_gl_viewers()
-    win.start_scan()  # indexação em background a cada abertura (idempotente)
+    if varrer_na_abertura(cfg):
+        win.start_scan()
+    else:
+        log.info("Varredura automática desligada — a biblioteca só é varrida "
+                 "quando o Rafael pedir (botão Reindexar).")
 
     _schedule_screenshot(app, win, args)
 
