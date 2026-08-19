@@ -3527,3 +3527,33 @@ janelas já têm sombra e linha, tem contraste". O modo escuro não mudou.
 
 **Testado:** 171 passados (tema, sidebar, janela principal, visualizador,
 configurações, painel de detalhes).
+
+### ☐ Fatia 95b — o seletor de biblioteca, na terceira tentativa
+
+Ele pediu de novo: "o botão da biblioteca ainda não está centralizado
+verticalmente". As duas respostas anteriores minhas não resolveram, e o
+motivo só apareceu medindo:
+
+1. **Fatia 78:** pus `AlignVCenter` no layout. Não fez nada — o botão media
+   37px numa faixa de 37px, e centralizar o que preenche tudo não muda nada.
+2. **Fatia 95:** encolhi o botão pra 29px. Continuou colado no topo, porque
+   o Qt **encosta o widget do canto DIREITO da barra de menus no alto**
+   (medido: y=0..29 numa faixa de 42, com os 13px sobrando só embaixo). E o
+   widget do canto tinha a altura exata do botão, então o `AlignVCenter` de
+   dentro seguia sem folga pra distribuir. O canto ESQUERDO, com a marca, o
+   Qt centraliza sozinho — as duas pontas não recebem o mesmo tratamento.
+
+**Correção:** o widget do canto recebe a altura da FAIXA
+(`ALTURA_FAIXA_TOPO`), e aí o alinhamento interno tem o que centralizar.
+Resultado medido: 6px acima, 7 abaixo.
+
+**Teste** (`test_o_seletor_de_biblioteca_boia_no_meio_da_faixa`) mede ONDE o
+botão cai, não como isso foi obtido — as duas correções anteriores teriam
+passado num teste que só procurasse `AlignVCenter` no código. Conferido com
+controle negativo: sem a altura da faixa, falha com "0px acima e 20px
+abaixo".
+
+**Rail lateral mais apertado** (mesmo pedido): 38 → 32px de largura, ícone
+18 → 16, espaçamento entre botões 4 → 2, padding do botão 6 → 4.
+
+**Testado:** 130 passados (janela principal, sidebar, tema).
