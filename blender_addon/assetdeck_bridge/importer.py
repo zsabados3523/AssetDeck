@@ -4,7 +4,9 @@ Soltar um .blend vindo do AssetDeck importa DIRETO, sem menu, sem
 perguntar nada (Fatia 68): olha o conteúdo do arquivo e escolhe sozinho
 Objects/Materials/Collections (o que existir), sempre em modo **Link**
 (não Append — biblioteca grande, escolha do Rafael: o .blend final não
-pode inchar copiando tudo pra dentro) e "& Place", que deixa o que veio
+pode inchar copiando tudo pra dentro), com **Library Override** por cima
+dos objetos, que é o que faz a posição sobreviver ao salvar/reabrir sem
+copiar a malha pra dentro do arquivo e "& Place", que deixa o que veio
 grudado no mouse para você posicionar com um clique. Segurar Shift ao
 soltar abre o menu antigo (Append/Link × Objects/Materials/Collections)
 pra quem quiser escolher na mão.
@@ -131,20 +133,37 @@ class ASSETDECK_OT_import_blend(Operator):
         quantidade = len(novos)
         alvos = novos
         if self.datablock == "objects" and self.link:
-            # Objeto LINKADO não deixa mover/girar pela interface (G/R/S)
-            # sem virar "Library Override" — o Blender bloqueia isso no
-            # próprio operador de transformar, mesmo já tendo dado pra
-            # setar a posição inicial por código aqui embaixo. Embrulha
-            # num Empty local (sempre 100% editável) e é ELE quem recebe
-            # posição/seleção/"& Place"; o(s) linkado(s) seguem grudados
-            # nele por parentesco — mover o Empty move tudo.
-            nome_empty = os.path.splitext(os.path.basename(self.filepath))[0]
-            empty = bpy.data.objects.new(nome_empty, None)
-            colecao.objects.link(empty)
+            # Objeto LINKADO é somente-leitura: o Blender bloqueia G/R/S
+            # nele. O embrulho num Empty local (que era o jeito daqui até
+            # a Fatia 96) parecia resolver, mas gravava `obj.parent` no
+            # datablock LINKADO — que pertence ao arquivo da biblioteca e
+            # não tem como ser salvo no arquivo do usuário. Ao reabrir, o
+            # parentesco sumia e o objeto voltava pro centro da cena.
+            #
+            # Library Override cria uma cópia local só do que dá pra
+            # editar (transformação, modificadores) e deixa a MALHA na
+            # biblioteca: a posição é salva e o .blend não incha — 0,11 MB
+            # contra 0,34 MB do Append, no sofá de teste.
+            alvos = []
             for obj in novos:
-                obj.parent = empty
-                obj.matrix_parent_inverse = empty.matrix_world.inverted()
-            alvos = [empty]
+                try:
+                    override = obj.override_create(remap_local_usages=True)
+                except Exception as exc:
+                    log_falha = f"Library Override falhou em '{obj.name}': {exc}"
+                    self.report({"WARNING"}, log_falha)
+                    override = None
+                if override is None:
+                    # Sem override o objeto entra somente-leitura: avisa,
+                    # não finge que deu certo.
+                    alvos.append(obj)
+                    continue
+                if override.name not in colecao.objects:
+                    colecao.objects.link(override)
+                # Compara por identidade: o override costuma herdar o
+                # mesmo nome do linkado, então comparar por nome erra.
+                if any(x is obj for x in colecao.objects):
+                    colecao.objects.unlink(obj)
+                alvos.append(override)
 
         ponto = getattr(self, "_ponto", None)
         bpy.ops.object.select_all(action="DESELECT")
