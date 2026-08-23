@@ -3607,3 +3607,46 @@ para 16 na Fatia 95b junto com o aperto do rail.
 Voltaram aos 18px e ficam no meio da coluna, com folga igual dos dois lados.
 O rail segue com 32px e o espaçamento apertado de 2px entre botões — essas
 duas partes ele aprovou.
+
+### ☐ Fatia 97 — a maximização parou de voltar (regressão minha da 94)
+
+"o programa voltou a não iniciar maximizado".
+
+Na Fatia 94 eu acrescentei uma saída antecipada em `_repor_maximizada`:
+"duas leituras seguidas dizendo maximizada, pode parar". Isso reintroduziu
+o defeito que o laço existe justamente pra atravessar — o Qt responde "sim,
+maximizada" logo depois do `restoreGeometry`, ANTES de o gerenciador
+confirmar, e o gerenciador desfaz em seguida. Duas leituras desse falso
+positivo bastavam pra desistir, e a janela abria em tamanho normal.
+
+**Como eu deixei passar:** pus a saída antecipada DEPOIS de rodar o teste de
+ida e volta que provava a correção, e não repeti o teste. O teste
+automatizado que existia (`showEvent` chama a reposição uma vez só) não
+cobre o miolo do laço.
+
+**Correção:** insistir pelo intervalo inteiro (~1,5s), sem sair mais cedo.
+Custa ~10 verificações de nada; não vale economizar isso.
+
+**Testes:** um novo roteiriza a sequência mentirosa (dois "sim" seguidos de
+um "não") e exige que o laço volte a pedir — conferido com controle
+negativo, falha com o código da 94. E a ida e volta real na tela: fecha
+maximizado, reabre maximizado (`0, 34, 1920, 1046`).
+
+### ☐ EM ABERTO — o programa fecha sozinho ao mexer em tags
+
+Relato: criar tag, assinalar ícone ou cor fecha o programa. **Não
+diagnosticado ainda.**
+
+O que já foi descartado, com evidência:
+- **Não é exceção do Python:** o log e o stderr capturado não têm traceback
+  nenhum na hora da queda.
+- **Não é falta de memória:** as únicas duas mortes por OOM do dia foram a
+  VM do Windows (16 GB) e um script meu de reprodução (12 GB); o AssetDeck
+  não aparece. Ele usa ~0,5 GB.
+- **Não é o `rebuild_fts`** (0,23s numa cópia do banco real, sem erro), nem
+  ícone de tag faltando (os 19 usados existem todos).
+- **A tag chega a ser criada** — o log registra "Tag criada" e o app ainda
+  vive alguns segundos depois. O trabalho dele não se perde.
+
+Estado: rodando com `-X faulthandler` e saída capturada, esperando a próxima
+queda pra ter a pilha. Não reproduziu nas tentativas dele com essa instância.
