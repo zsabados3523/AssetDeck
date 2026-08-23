@@ -124,7 +124,6 @@ class MainWindow(QMainWindow):
         self._maximizada = False
         self._maximizada_desejada = False
         self._maximizada_reposta = False
-        self._maximizacoes_confirmadas = 0
 
         self.setWindowTitle("AssetDeck")
         self.resize(1280, 800)
@@ -2108,15 +2107,21 @@ class MainWindow(QMainWindow):
         """
         from PySide6.QtCore import QTimer
 
-        if self.isMaximized():
-            # Duas leituras seguidas: uma só não basta — o que o
-            # `restoreGeometry` marca antes do mapa faz o Qt dizer "sim" e o
-            # gerenciador desfazer logo em seguida (medido).
-            self._maximizacoes_confirmadas += 1
-            if self._maximizacoes_confirmadas >= 2:
-                return
-        else:
-            self._maximizacoes_confirmadas = 0
+        # Insiste pelo INTERVALO INTEIRO, sem sair mais cedo (Fatia 97).
+        #
+        # A Fatia 94 tinha posto aqui uma saída antecipada: "duas leituras
+        # seguidas dizendo maximizada, pode parar". Isso reintroduziu o
+        # próprio defeito que este laço existe pra atravessar — o Qt responde
+        # "sim, maximizada" logo depois do `restoreGeometry`, ANTES de o
+        # gerenciador confirmar, e o gerenciador desfaz depois. Duas leituras
+        # desse falso positivo bastavam pra desistir, e a janela abria em
+        # tamanho normal. O Rafael relatou: "o programa voltou a não iniciar
+        # maximizado".
+        #
+        # Pior: pus a saída antecipada DEPOIS de rodar o teste de ida e volta
+        # que provava a correção, e não repeti o teste. Custa ~10 verificações
+        # de nada em 1,5s; não vale economizar isso.
+        if not self.isMaximized():
             self.showMaximized()
         if tentativa >= 10:
             if not self.isMaximized():

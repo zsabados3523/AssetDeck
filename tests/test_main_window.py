@@ -1084,3 +1084,40 @@ def test_o_seletor_de_biblioteca_boia_no_meio_da_faixa(janela, qapp):
         f"o seletor não está centralizado na faixa: {sobra_cima}px acima e "
         f"{sobra_baixo}px abaixo"
     )
+
+
+def test_a_reposicao_da_maximizacao_nao_desiste_no_falso_positivo(janela, monkeypatch):
+    """Regressão da Fatia 94 → 97: "o programa voltou a não iniciar
+    maximizado".
+
+    A Fatia 94 pôs uma saída antecipada em `_repor_maximizada` — "duas
+    leituras seguidas dizendo maximizada, pode parar". Isso reintroduziu
+    exatamente o que o laço existe pra atravessar: o Qt responde "sim,
+    maximizada" logo depois do `restoreGeometry`, ANTES de o gerenciador
+    confirmar, e o gerenciador desfaz em seguida. Duas leituras desse falso
+    positivo bastavam pra desistir.
+
+    O teste roteiriza essa sequência — dois "sim" mentirosos seguidos de um
+    "não" — e exige que o laço volte a pedir. É a parte verificável sem
+    gerenciador de janelas; a prova de ponta a ponta foi na tela do Rafael
+    (fecha maximizado, reabre maximizado) e está registrada no TODO.
+    """
+    respostas = iter([True, True, False, False, True])
+    pedidos = []
+    monkeypatch.setattr(janela, "isMaximized", lambda: next(respostas, True))
+    monkeypatch.setattr(janela, "showMaximized", lambda: pedidos.append(1))
+    # O relógio é dublado: o teste dispara as tentativas na mão, sem esperar.
+    agendados = []
+    monkeypatch.setattr("PySide6.QtCore.QTimer.singleShot",
+                        staticmethod(lambda ms, fn: agendados.append(fn)))
+
+    janela._repor_maximizada(0)      # 1ª leitura: "sim" (mentira)
+    assert agendados, "o laço parou na primeira leitura"
+    agendados.pop()()                # 2ª leitura: "sim" (mentira de novo)
+    assert agendados, "o laço desistiu depois de dois 'sim' seguidos"
+    agendados.pop()()                # 3ª leitura: "não" — tem de reagir
+
+    assert pedidos, (
+        "o gerenciador desfez a maximização e o laço não pediu de novo — "
+        "é assim que a janela volta a abrir em tamanho normal"
+    )
