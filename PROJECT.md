@@ -101,8 +101,11 @@ tests/                   # 163 testes
 - O **indexer** e o **pipeline de thumbs** rodam em threads/pool e escrevem no
   banco por uma fila única (um escritor por vez — SQLite gosta assim).
 - Sinais Qt avisam a UI quando há dados novos; a grid atualiza sem travar.
-- A biblioteca do usuário é sempre somente-leitura (exceção única: criar
-  sidecars `.json`).
+- A biblioteca do usuário é somente-leitura por padrão. Três exceções, todas
+  pedidas explicitamente pelo Rafael e todas iniciadas por ele: criar
+  sidecars `.json`, `batch_rename` (Fatia 23) e `mover` (Fatia 85). As duas
+  últimas planejam sem tocar no disco, confirmam mostrando o que vai
+  acontecer, e pulam item problemático sem derrubar o lote.
 
 ## Descobertas do F2 (verificadas na máquina, não presumidas)
 - **Sandbox do Flatpak**: `shared=network` (socket localhost funciona) e
