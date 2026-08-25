@@ -5,11 +5,15 @@ materiais PBR, LUTs, perfis de luz IES, vetores — com integração direta ao
 Blender. Feito para uso pessoal: **100% offline**, sem conta, sem nuvem, sem
 telemetria.
 
-A biblioteca de arquivos é **somente-leitura**: o AssetDeck nunca move,
-renomeia ou apaga nada dentro dela. Os metadados (tags, notas, favoritos,
-avaliações) ficam num banco SQLite local, com um espelho em `.json` ao lado
-de cada asset — se o banco se perder, os metadados voltam sozinhos na
-próxima indexação.
+A biblioteca de arquivos é **somente-leitura por padrão**: o AssetDeck não
+mexe em nada dentro dela por conta própria. Existem duas ações que escrevem
+no disco, e as duas só acontecem quando você pede explicitamente —
+**renomear em lote** e **mover assets** (arrastando um card da grade para
+uma pasta). As duas mostram antes o que vai acontecer, e nunca apagam nada.
+
+Os metadados (tags, notas, favoritos, avaliações) ficam num banco SQLite
+local, com um espelho em `.json` ao lado de cada asset — se o banco se
+perder, os metadados voltam sozinhos na próxima indexação.
 
 <p align="center">
   <img src="docs/screenshots/biblioteca-escuro.png" alt="AssetDeck em modo escuro, com um HDRI selecionado" width="860">
@@ -37,10 +41,22 @@ jeito — e agrupa automaticamente os arquivos de um mesmo material PBR
   cena: HDRI vira World, um set PBR vira material com node group pronto,
   modelos entram por Append/Link. Também gera capas em lote renderizando
   dentro do Blender, headless.
+- **Abre HDRI e modelo 3D de verdade, sem sair do app.** Duplo clique num
+  `.hdr`/`.exr` abre um visualizador com a imagem projetada em volta da
+  câmera (e um modo "esfera de reflexo", pra julgar a luz); num
+  `.blend`/`.fbx`/`.obj`, o modelo aparece com câmera orbitando. Miniatura
+  achatada não deixa avaliar nem luz nem forma.
+- **Arruma a biblioteca sem sair do programa.** Arrastar assets da grade
+  para uma pasta da árvore MOVE os arquivos no disco (com confirmação, e
+  levando junto texturas, previews e sidecars do asset). É a saída pra
+  aquele modelo que foi parar na pasta errada há dois anos.
+- **Casa preview com modelo automaticamente.** `Cadeira.blend` +
+  `Cadeira.jpg` viram um card só, com a imagem de capa — inclusive quando o
+  pack traz vários previews numerados (`_001`, `_002`), como o Chaos Cosmos.
 - **Resolve manutenção chata de biblioteca grande:** renomear em lote com
   padrão de texto, religar texturas que sumiram do caminho original de um
   `.blend`, e apontar para mais de uma pasta-raiz (trocando qual está ativa
-  pelo menu Arquivo).
+  pelo seletor no canto superior direito).
 
 ## Screenshots
 
@@ -55,13 +71,26 @@ miniatura, ficha técnica, avaliação, galeria de previews e tags do asset
 selecionado. O rodapé mostra se a ponte com o Blender está conectada e o
 tamanho total da biblioteca.
 
+### Visualizador de HDRI e de modelo 3D
+
+<p align="center">
+  <img src="docs/screenshots/visualizador-hdri.png" alt="Visualizador de HDRI, com a imagem projetada em volta da câmera" width="860">
+</p>
+
+Duplo clique num `.hdr`/`.exr` abre o HDRI projetado em volta da câmera —
+arrastar gira a vista, e o modo **esfera de reflexo** põe uma esfera
+espelhada no meio da cena pra julgar a luz. O mesmo visualizador atende
+`.blend`, `.fbx` e `.obj`, aí com câmera orbitando e um botão para
+reenquadrar o modelo.
+
 ## Requisitos
 
 - Linux (desenvolvido e testado no Zorin OS)
 - Python 3.12
-- [Blender](https://www.blender.org/) 5.2, opcional — só necessário se você
-  quiser usar a ponte com o Blender (arrastar assets direto pra cena). O
-  projeto assume a versão via Flatpak:
+- [Blender](https://www.blender.org/) 5.2, opcional — necessário para a
+  ponte (arrastar assets direto pra cena), para gerar capas de modelos e
+  para abrir `.blend` no visualizador 3D. O app aceita o Blender instalado
+  via Flatpak **ou** um binário `blender` no `PATH`, nessa ordem:
   ```bash
   flatpak install flathub org.blender.Blender
   ```
@@ -99,10 +128,24 @@ apontar pra uma biblioteca sua, edite a chave `"library_root"` nesse
 arquivo com o caminho absoluto da pasta que você quer indexar (o app só
 lê essa pasta — nunca escreve nela).
 
+### Indexar a biblioteca
+
+O AssetDeck **não varre a biblioteca sozinho ao abrir** — numa biblioteca
+grande isso são vários minutos de disco e CPU sem ninguém ter pedido. Quem
+manda é o botão **Reindexar**, na barra de cima: clique nele depois de
+copiar arquivos novos para a pasta.
+
+Se você preferir o comportamento antigo, ligue **Configurações →
+Manutenção → Varrer a biblioteca ao abrir**.
+
 Dados do app ficam em (padrão XDG, não versionado no git):
 - Config: `~/.config/assetdeck/config.json`
 - Banco + backups + logs: `~/.local/share/assetdeck/`
 - Cache de miniaturas: `~/.cache/assetdeck/`
+
+Se o programa fechar sozinho alguma vez, `~/.local/share/assetdeck/logs/`
+guarda dois arquivos úteis: `assetdeck.log` (o que ele estava fazendo) e
+`quedas.txt` (onde ele estava no instante da queda).
 
 ### Ponte com o Blender (opcional)
 
@@ -130,12 +173,14 @@ pytest -q
 ## Estrutura do projeto
 
 - `assetdeck/` — código do app
-  - `ui/` — interface em PySide6/Qt (janela, tema, grade, painéis, diálogos)
+  - `ui/` — interface em PySide6/Qt (janela, tema, grade, painéis, diálogos,
+    visualizador 3D)
   - `db/` — SQLite (conexão, migrations, repositórios)
   - `indexer/` — varredura de disco, agrupamento PBR, dependências
   - `thumbs/` — geração e cache de miniaturas (raster e HDR/EXR)
   - `bridge/` — servidor da ponte com o Blender (protocolo próprio via socket)
   - `blender/` — chamadas headless ao Blender (render de capas)
+  - `mover.py` — mover assets entre pastas (planeja, confirma, executa)
 - `blender_addon/` — add-on do Blender (a ponte: recebe o que o AssetDeck
   arrasta e aciona o menu nativo do Blender)
 - `tests/` — suíte de testes (`pytest`)
