@@ -3285,3 +3285,417 @@ como dependência até a próxima reindexação. Não afeta o asset movido nem
 quebra nada; no máximo faz uma textura aparecer/sumir conforme o filtro
 "Mostrar dependências". Recalcular só as pastas afetadas é pequeno, se
 virar incômodo real.
+
+### ☐ Fatia 90 — visualizadores 3D (Fase 7, Etapa 3)
+
+Mockup aprovado pelo Rafael. Os dois visualizadores (HDRI e modelo)
+eram duas `QDialog` montadas à mão, com layouts levemente diferentes sem
+motivo: nome do asset só na barra de título do sistema, status espremido
+no canto de cima, botões quadrados onde o resto do app já usa pastilha, e
+nenhum jeito de fechar sem ser Esc ou o ✕ do gerenciador.
+
+**Agora é UMA janela** (`ui/viewer_window.py`, `VisualizadorWindow`) com
+as duas superfícies de OpenGL num `QStackedWidget`:
+
+- Cabeçalho com o nome do asset + pastilha da extensão + botão de fechar.
+- Pastilhas (`#pill`) nos modos do HDRI; botão "Enquadrar" no de modelo
+  (recentraliza a câmera — o HDRI já fazia isso com duplo clique).
+- Palco do OpenGL com cantos arredondados e contorno.
+- Rodapé: status à esquerda, "Esc fecha" à direita.
+- **Abre centralizada na janela principal** (pedido explícito), presa à
+  área útil do monitor pra nunca nascer meio pra fora da tela.
+
+**Ganho de abertura:** a transição de modo de composição que o
+`prewarm_gl_viewers` paga é por JANELA DE TOPO. Com duas janelas ela
+acontecia duas vezes; agora, uma. Corta ~metade dos ~2,2s do
+pré-aquecimento — travado pelo teste `test_prewarm_aquece_uma_janela_so`.
+
+**Por que NÃO virou overlay embutido, como o Rafael tinha pedido:** já foi
+tentado e revertido no mesmo dia (Fatia 65). Um `QOpenGLWidget` em
+qualquer lugar da árvore de um top-level muda o modo de composição da
+JANELA INTEIRA — dentro da `MainWindow`, era o app todo que piscava. O
+`PreviewPopup` pode ser embutido porque não usa OpenGL.
+
+**Detalhe técnico que vale lembrar:** `border-radius` do QSS não alcança
+um `QOpenGLWidget` (ele pinta pelo GL, não pelo estilo) e `setMask()`
+recorta serrilhado. Os cantos são um widget POR CIMA do palco
+(`_CantosDoPalco`) que pinta só o que sobra fora do retângulo
+arredondado, com antialiasing.
+
+**Testado:** 8 testes novos do módulo (centralização como função pura +
+pintura dos cantos), 2 na `MainWindow` (janela criada uma vez só;
+pré-aquecimento abre uma janela só). Render conferido em display virtual
+com OpenGL por software, HDRI no escuro e modelo no claro.
+
+**Fica pendente (não é regressão da fatia):** o enquadramento inicial do
+modelo usa como raio a MAIOR meia-dimensão da caixa, não o raio da esfera
+que envolve a malha — num objeto alto e estreito a margem sai justa. Vem
+da Fase 6, só foi movido de lugar aqui.
+
+### ☐ Fatia 91 — a varredura afogava a máquina
+
+Relato do Rafael (2026-08-19): "meu PC fica com 100% de uso de CPU e está
+começando a dar erros". Confirmado no `ps`: quatro processos da varredura
+a ~130% de CPU cada.
+
+**Causa.** O OpenCV abre uma thread POR NÚCLEO em cada processo — 16 na
+máquina dele. Com os 4 processos da varredura paralela (Fatia 86), até
+**64 threads disputando 16 núcleos**. Não indexa mais rápido: o
+paralelismo útil já está no nível de PROCESSO (4 medidos contra 8, que
+piorava por I/O). Só afoga o resto do computador — e a varredura roda
+sozinha na abertura do app, sem ninguém pedir.
+
+**Correção.** Cada processo da varredura agora sobe com uma thread só
+(`cv2.setNumThreads(1)` no `initializer` do pool, e `OMP/OPENBLAS/MKL/
+NUMEXPR_NUM_THREADS=1` no ambiente, que as bibliotecas numéricas leem no
+import — por isso vão no ambiente do PAI antes do `spawn`, não no
+initializer, que roda tarde demais pra elas) e com `nice 10`: a varredura
+cede passagem pro que o Rafael estiver fazendo.
+
+**Teste:** passa por um pool DE VERDADE e pergunta ao processo filho
+quantas threads de OpenCV ele tem e com que prioridade roda — não confere
+que o código foi escrito de um certo jeito. Confirmado que falha sem a
+correção (`assert 16 == 1`).
+
+**Não é isto que causa o "duplo clique não abre nada"** — esse é o pool
+de threads compartilhado entre miniaturas e visualizador, corrigido em
+paralelo noutra sessão (`ui/pools.py`).
+
+### ☐ Fatia 92 — varredura automática na abertura, desligada
+
+Pedido do Rafael (2026-08-19): "tira a varredura automática da abertura".
+
+O app chamava `win.start_scan()` em TODA abertura. Na biblioteca real são
+102 mil assets: alguns minutos de 4 processos moendo hash e metadados sem
+ninguém ter pedido, logo depois de abrir — justamente quando ele quer usar
+o programa. Mesmo com a varredura comportada (Fatia 91), gastar a máquina
+sem ordem não se justifica: quem sabe que copiou arquivos novos é ele, e o
+botão "Reindexar" está na barra de cima.
+
+**Não é remoção, é chave.** `scan_on_startup` no config, padrão `False`,
+com linha própria em Configurações › Manutenção › Varredura. Quem quiser a
+sincronia automática de volta liga ali, sem depender de mim.
+
+**Testes:** o padrão é não varrer; a chave ligada volta a valer; o
+interruptor grava no config na hora. `tests/test_settings_window.py`: 13
+passados. `test_app.py`/`test_config.py`: 8 passados.
+
+**Consequência que o Rafael precisa saber:** arquivos novos copiados pra
+biblioteca só aparecem depois do "Reindexar". Antes apareciam sozinhos.
+
+### ☐ Fatia 93 — o visualizador abria MINIMIZADO
+
+Relato do Rafael: "não consigo abrir a visualização de modelos 3d nem de
+hdris com o duplo clique". O log dizia que estava tudo certo — "HDRI
+pronto na tela", "Modelo pronto na tela (120078 vértices)" — e estava
+mesmo: a janela existia, carregava, e ia **direto pro dock**. Da cadeira
+dele, o duplo clique não fazia nada.
+
+**Como foi achado.** Meus testes rodam em display virtual, onde não há
+gerenciador de janelas — por isso passavam. Rodando o mesmo caminho no
+display DELE, o Qt respondeu na hora: `isVisible=True`,
+`isMinimized=True`. O `wmctrl` confirmou a janela registrada e
+iconificada.
+
+**Causa.** O `prewarm_gl_viewers` fazia `show()` + `hide()` na janela do
+visualizador. Desmapear uma janela no X a marca como iconificada — é o
+que `hide()` faz — e o gerenciador reaplica esse estado toda vez que ela
+reaparece. Medido nos dois sentidos: **com** pré-aquecimento nascia
+minimizada, **sem** ele nascia normal. E não era por estar fora da tela:
+a variante invisível por opacidade, na posição normal, minimizava igual.
+Era o par mapear/desmapear.
+
+**Correção.** `WA_DontShowOnScreen` no pré-aquecimento: o Qt monta a
+janela e pinta o frame — que é o que dispara a troca de composição, o
+motivo do pré-aquecimento existir — sem nunca passar pelo gerenciador.
+
+Mais o caso irmão, que era real e independente: se ele minimizasse o
+visualizador e desse duplo clique noutro asset, `show()` sozinho não
+desminimiza. `_preparar` agora limpa o bit de minimizada antes de
+mostrar (só esse bit — quem maximizou a janela continua com ela
+maximizada). Esse remendo NÃO resolvia o caso do pré-aquecimento: ali o
+gerenciador reaplica o estado DEPOIS do `show()`, medido.
+
+**Verificado na tela do Rafael**, com o código real: `isMinimized=False`,
+janela ativa, centralizada em (460, 227) dentro da principal maximizada,
+modelo desenhado. `pytest tests/test_main_window.py
+tests/test_viewer_window.py`: 61 passados.
+
+**O que o pytest NÃO cobre:** o efeito só existe com gerenciador de
+janelas e OpenGL de verdade. O teste guarda a forma (`WA_DontShowOnScreen`
+presente, `visor.move(` ausente); a prova está no parágrafo acima.
+
+### ☐ Fatia 94 — cinco ajustes depois do primeiro uso de verdade
+
+Rafael, depois de usar o visualizador na tela dele. A piscada NÃO voltou
+com a correção da Fatia 93 — confirmado por ele.
+
+**1. A janela principal não voltava maximizada.** Duas causas, as duas
+medidas no display dele (GNOME Shell):
+
+- *Ao salvar:* dentro do `closeEvent` o `isMaximized()` já é `false` — a
+  janela estava maximizada um instante antes e o config saía com `false`.
+  O que o `saveGeometry` grava depende desse mesmo estado, então também
+  saía errado. Agora a maximização é anotada ao vivo (`changeEvent`,
+  ignorando minimizações) e gravada como bandeira própria.
+- *Ao restaurar:* no GNOME o pedido de maximizar só vale DEPOIS que a
+  janela é mapeada — feito antes, é descartado sem aviso
+  (`showMaximized()` junto do `show()` deixa a janela em 800x500; 50ms
+  depois funciona). Pior: o que o `restoreGeometry` marca antes do mapa
+  faz o Qt dizer `isMaximized() == True` na hora do `showEvent`, e o
+  gerenciador desfaz logo depois — uma verificação única cai nessa e
+  desiste. Agora se pede e se CONFERE, até duas leituras seguidas
+  confirmarem, no máximo ~1,5s.
+
+São DUAS variáveis (`_maximizada` ao vivo, `_maximizada_desejada` do
+config) porque com uma só o "não maximizada" que o gerenciador manda na
+abertura apagava a intenção antes dela ser aplicada.
+
+**2. Fora o ✕ redundante** do cabeçalho: a janela já tem
+minimizar/maximizar/fechar do sistema logo acima. O Esc continua, dito no
+rodapé.
+
+**3. e 4. Pastilhas menores** — botões de modo/Enquadrar e a pastilha de
+extensão. Entraram como `#pillMini`/`#chipMini`, herdando os estados do
+`#pill`, e não como mudança no `#pill`: aquele é o botão da barra de
+categorias e dos filtros, que ele não pediu pra mudar.
+
+**5. Janela menos estreita:** 1000×660 → 1240×720.
+
+**Rede de segurança nova:** em 1 de 3 aberturas seguidas o gerenciador
+minimizava o visualizador logo depois de ele aparecer — provavelmente
+porque a janela principal ainda estava assentando a própria maximização,
+e o visualizador é janela filha dela. Intermitente é pior que sempre
+quebrado, então `changeEvent` desfaz uma minimização que chegue nos 2s
+seguintes ao pedido de abrir. Depois disso, minimizar é vontade dele.
+Cinco aberturas seguidas sem falha depois da correção.
+
+**Testado:** 133 passados (`test_main_window`, `test_viewer_window`,
+`test_theme`, `test_settings_window`), mais 4 testes novos da persistência
+da maximização. O resto foi medido na tela dele — gerenciador de janelas
+não existe no pytest.
+
+### ☐ Fatia 95 — cinco ajustes visuais na janela principal
+
+Todos medidos na tela antes de mexer, porque três deles pareciam já estar
+resolvidos no código e não estavam.
+
+**1. e 2. Seletor de biblioteca e rodapé "centralizados verticalmente".**
+Já pedido na Fatia 78, e eu tinha respondido com `AlignVCenter` — que não
+resolvia nada, e a medição mostrou por quê:
+
+- O seletor media **37px numa faixa de 37px**: ocupava a faixa inteira, e
+  centralizar algo que preenche tudo não muda nada. Agora tem padding
+  menor (4px), mede 29px, e sobra folga dos dois lados.
+- O rodapé estava centralizado na BARRA (32px), mas o espaço que o Rafael
+  enxerga vai da borda de baixo dos painéis até o fim da janela (46px):
+  14px eram margem do layout central e 32 eram a barra. O texto caía 7px
+  abaixo do meio. Agora a margem saiu do layout e entrou na altura da
+  barra — o espaço é o mesmo, mas pertence todo a ela, e o texto cai no
+  meio. Medido: sobrava 9px abaixo do texto, agora sobram 16 (metade dos
+  32 de banda útil).
+
+Mesma correção na faixa de cima, que tinha o mesmo defeito.
+
+**3. Fundo branco no modo claro.** `BG` era `#F6F6F9`. O Rafael: "as
+janelas já têm sombra e linha, tem contraste". O modo escuro não mudou.
+
+**4. Rail lateral** 44px → 38px.
+
+**5. Faixa superior** 51px (37 de barra + 14 de margem) → 42px, e o nome
+"AssetDeck" de 13px → 15px.
+
+**Três testes tiveram de mudar, e vale registrar por quê:**
+
+- O teste do raio das pastilhas conferia TODOS os botões contra
+  `$radius_pill`. O seletor encolheu e passou a precisar de raio próprio
+  (18px não cabe na metade de 26px — o Qt descarta o arredondamento
+  inteiro). Virou token (`radius_pill_small`), como manda a regra do
+  projeto, e o teste agora confere cada botão contra o token QUE ELE USA.
+- `test_o_fundo_e_a_superficie_sao_cores_diferentes` exigia tons
+  diferentes. Com o fundo branco eles são iguais no modo claro. Reescrito
+  para a exigência real, que não mudou: **ou o tom separa, ou o contorno
+  separa** — nunca nenhum dos dois.
+- O teste da quina arredondada do card provava curvatura comparando a
+  quina com `$bg`; com fundo e painel do mesmo branco isso não distingue
+  mais nada (o próprio teste já avisava disso num comentário). Agora
+  compara a quina com o MEIO DA ARESTA: num card quadrado a quina cai em
+  cima do contorno e fica mais escura. **Conferido com controle
+  negativo** — com `radius_panel: 0px` o teste falha, com o raio real
+  passa. A primeira versão que escrevi NÃO pegava o card quadrado
+  (amostrava 1px pra dentro da borda); só descobri porque fui conferir.
+
+**Testado:** 171 passados (tema, sidebar, janela principal, visualizador,
+configurações, painel de detalhes).
+
+### ☐ Fatia 95b — o seletor de biblioteca, na terceira tentativa
+
+Ele pediu de novo: "o botão da biblioteca ainda não está centralizado
+verticalmente". As duas respostas anteriores minhas não resolveram, e o
+motivo só apareceu medindo:
+
+1. **Fatia 78:** pus `AlignVCenter` no layout. Não fez nada — o botão media
+   37px numa faixa de 37px, e centralizar o que preenche tudo não muda nada.
+2. **Fatia 95:** encolhi o botão pra 29px. Continuou colado no topo, porque
+   o Qt **encosta o widget do canto DIREITO da barra de menus no alto**
+   (medido: y=0..29 numa faixa de 42, com os 13px sobrando só embaixo). E o
+   widget do canto tinha a altura exata do botão, então o `AlignVCenter` de
+   dentro seguia sem folga pra distribuir. O canto ESQUERDO, com a marca, o
+   Qt centraliza sozinho — as duas pontas não recebem o mesmo tratamento.
+
+**Correção:** o widget do canto recebe a altura da FAIXA
+(`ALTURA_FAIXA_TOPO`), e aí o alinhamento interno tem o que centralizar.
+Resultado medido: 6px acima, 7 abaixo.
+
+**Teste** (`test_o_seletor_de_biblioteca_boia_no_meio_da_faixa`) mede ONDE o
+botão cai, não como isso foi obtido — as duas correções anteriores teriam
+passado num teste que só procurasse `AlignVCenter` no código. Conferido com
+controle negativo: sem a altura da faixa, falha com "0px acima e 20px
+abaixo".
+
+**Rail lateral mais apertado** (mesmo pedido): 38 → 32px de largura, ícone
+18 → 16, espaçamento entre botões 4 → 2, padding do botão 6 → 4.
+
+**Testado:** 130 passados (janela principal, sidebar, tema).
+
+### ☐ Fatia 96 — a busca travava o programa (237s numa consulta)
+
+Relato: "ao tentar pesquisar 'armchair' o programa trava ao digitar 'ar...'
+e não responde". Reproduzido na biblioteca real dele: buscar `ar` dentro de
+uma pasta levava **237 segundos** com a UI congelada. Não era o debounce
+(existe, 250ms) nem o volume: os pedaços da consulta, medidos isolados,
+somavam **0,05s**.
+
+**Causa.** O ramo de substring da busca era
+
+```sql
+a.id IN (SELECT id FROM assets WHERE a.name LIKE ?)
+```
+
+e o `a.name` lá dentro apontava pro asset de **fora**, não pra tabela do
+subselect. O SQLite então trata a subconsulta como CORRELACIONADA e a
+reexecuta **para cada linha** da consulta externa — varrendo os 111 mil
+assets toda vez. O `EXPLAIN QUERY PLAN` dizia isso em voz alta:
+`CORRELATED LIST SUBQUERY 5 / SCAN assets`.
+
+Funcionava por acidente: "se o nome da linha de fora casa, devolve todos os
+ids, e o IN dá verdadeiro". O mesmo resultado sai de comparar direto.
+
+**Correção:** `(a.name LIKE ?)`, sem subconsulta. Medido depois: `ar` em
+**0,03s** — de 237s. Mesmos resultados: comparei os conjuntos de ids da
+forma antiga e da nova em 19 termos (incluindo conectores E/OU/NÃO,
+acentos, `%` e `_`), todos idênticos.
+
+**Teste:** lê o PLANO DE EXECUÇÃO e recusa qualquer `CORRELATED` na busca.
+Medir tempo num banco de teste minúsculo não pegaria nada — o defeito só
+cresce com a biblioteca. Conferido com controle negativo: com o código
+antigo o teste falha apontando `CORRELATED LIST SUBQUERY 2`.
+
+**Também:** ícones do rail encostados na borda esquerda (margem 3 à
+esquerda, 9 à direita) — "os ícones poderiam ir um pouco para o lado".
+
+### ☐ Fatia 96b — ícones do rail: tamanho de volta, centralizados
+
+"os ícones estão muito pequenos... não poderia aumentá-los como estava antes
+e simplesmente deixar eles centralizados horizontalmente nesse espaço?"
+
+Eu tinha lido "poderiam ir um pouco para o lado" (Fatia 96) como *afastar do
+painel de pastas* e encostado os ícones à esquerda com margens desiguais.
+Era outra coisa: o incômodo estava no TAMANHO, que eu tinha reduzido de 18
+para 16 na Fatia 95b junto com o aperto do rail.
+
+Voltaram aos 18px e ficam no meio da coluna, com folga igual dos dois lados.
+O rail segue com 32px e o espaçamento apertado de 2px entre botões — essas
+duas partes ele aprovou.
+
+### ☐ Fatia 97 — a maximização parou de voltar (regressão minha da 94)
+
+"o programa voltou a não iniciar maximizado".
+
+Na Fatia 94 eu acrescentei uma saída antecipada em `_repor_maximizada`:
+"duas leituras seguidas dizendo maximizada, pode parar". Isso reintroduziu
+o defeito que o laço existe justamente pra atravessar — o Qt responde "sim,
+maximizada" logo depois do `restoreGeometry`, ANTES de o gerenciador
+confirmar, e o gerenciador desfaz em seguida. Duas leituras desse falso
+positivo bastavam pra desistir, e a janela abria em tamanho normal.
+
+**Como eu deixei passar:** pus a saída antecipada DEPOIS de rodar o teste de
+ida e volta que provava a correção, e não repeti o teste. O teste
+automatizado que existia (`showEvent` chama a reposição uma vez só) não
+cobre o miolo do laço.
+
+**Correção:** insistir pelo intervalo inteiro (~1,5s), sem sair mais cedo.
+Custa ~10 verificações de nada; não vale economizar isso.
+
+**Testes:** um novo roteiriza a sequência mentirosa (dois "sim" seguidos de
+um "não") e exige que o laço volte a pedir — conferido com controle
+negativo, falha com o código da 94. E a ida e volta real na tela: fecha
+maximizado, reabre maximizado (`0, 34, 1920, 1046`).
+
+### ☐ EM ABERTO — o programa fecha sozinho ao mexer em tags
+
+Relato: criar tag, assinalar ícone ou cor fecha o programa. **Não
+diagnosticado ainda.**
+
+O que já foi descartado, com evidência:
+- **Não é exceção do Python:** o log e o stderr capturado não têm traceback
+  nenhum na hora da queda.
+- **Não é falta de memória:** as únicas duas mortes por OOM do dia foram a
+  VM do Windows (16 GB) e um script meu de reprodução (12 GB); o AssetDeck
+  não aparece. Ele usa ~0,5 GB.
+- **Não é o `rebuild_fts`** (0,23s numa cópia do banco real, sem erro), nem
+  ícone de tag faltando (os 19 usados existem todos).
+- **A tag chega a ser criada** — o log registra "Tag criada" e o app ainda
+  vive alguns segundos depois. O trabalho dele não se perde.
+
+Estado: rodando com `-X faulthandler` e saída capturada, esperando a próxima
+queda pra ter a pilha. Não reproduziu nas tentativas dele com essa instância.
+
+### ☐ Fatia 98 — filas separadas: o que se espera na tela x o trabalho de fundo
+
+**Feita por uma sessão paralela do Claude Code em 2026-08-19**, que
+encerrou antes de commitar. Revisada e commitada depois, com os testes
+dela verdes (8 novos).
+
+**Motivo.** Tudo usava o MESMO `QThreadPool.globalInstance()`: as
+miniaturas da grade E a carga do visualizador 3D. Numa biblioteca de 111
+mil assets a abertura agenda centenas de miniaturas de uma vez (564 na
+sessão do Rafael, cada HDRI 4K levando ~0,76s), e a carga do visualizador
+entrava no fim dessa fila — a janela abria em "Carregando…" e podia ficar
+dezenas de segundos assim. Foi metade do relato "cliquei duas vezes num
+.blend e num .hdr e não abre nada" (a outra metade era a janela nascer
+minimizada, Fatia 93).
+
+Pior: `ThumbnailPipeline.shutdown()` chamava `clear()` no pool GLOBAL,
+descartando de quebra o que o visualizador tivesse pendente.
+
+**Regra que fica:** nada que o usuário está esperando na tela divide fila
+com trabalho de fundo.
+
+- `ui/pools.py`: pool interativo de 2 threads (visualizador e prévia).
+- `ThumbnailPipeline`: pool próprio, metade dos núcleos, e cada thread
+  rebaixada uma vez com `nice +5` — mesmo remédio dos processos da
+  varredura (Fatia 91).
+
+### ☐ Fatia 99 — rastreador de quedas permanente
+
+O AssetDeck fecha sozinho ao mexer em tags (relato de 2026-08-23) e o
+defeito segue **sem diagnóstico**, porque não sobra nada pra investigar:
+não é exceção do Python (nenhum traceback no log), não é falta de memória
+(conferido no kernel), e numa queda de nível C++ o Qt derruba o processo
+em silêncio.
+
+Na primeira tentativa eu subi o app instrumentado à mão, com a saída num
+arquivo em `/tmp` — e a limpeza do sistema apagou o arquivo antes de eu
+ler. Perdi uma reprodução que o Rafael já tinha feito.
+
+Agora o `faulthandler` é armado pela própria abertura do app
+(`logging_setup.armar_rastreador_de_quedas`), gravando em
+`~/.local/share/assetdeck/logs/quedas.txt`, em modo de APÊNDICE. Qualquer
+queda futura deixa a pilha do Python do instante da falha, não importa
+como o programa foi aberto e sem depender de alguém estar por perto.
+
+**Testes:** três, e o que importa **derruba um processo de verdade**
+(`faulthandler._sigsegv()` num subprocesso) e exige que o arquivo tenha a
+pilha COM o nome da função onde caiu — conferir que uma função foi chamada
+não provaria nada aqui.

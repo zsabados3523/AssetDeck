@@ -120,8 +120,19 @@ def _build_where(
             ramos.append("a.id IN (SELECT rowid FROM assets_fts WHERE assets_fts MATCH ?)")
             params.append(match)
         if substr_tokens:
-            sub_sql = " AND ".join("a.name LIKE ? ESCAPE '\\'" for _ in substr_tokens)
-            ramos.append(f"a.id IN (SELECT id FROM assets WHERE {sub_sql})")
+            # Comparação DIRETA, sem subconsulta (Fatia 96). Isto era
+            # `a.id IN (SELECT id FROM assets WHERE a.name LIKE ?)` — e o
+            # `a.name` lá dentro apontava pro asset de FORA, não pra tabela do
+            # subselect. O SQLite então tratava a subconsulta como
+            # CORRELACIONADA e a reexecutava PARA CADA linha da consulta
+            # externa, varrendo os 111 mil assets toda vez. Medido na
+            # biblioteca do Rafael: buscar "ar" dentro de uma pasta levava
+            # 237 SEGUNDOS com a UI travada; os pedaços isolados somavam
+            # 0,05s. O resultado é o mesmo — "o nome da linha de fora casa" —,
+            # só que agora sem o laço.
+            ramos.append(
+                "(" + " AND ".join("a.name LIKE ? ESCAPE '\\'"
+                                   for _ in substr_tokens) + ")")
             params.extend(f"%{_like_escape(t)}%" for t in substr_tokens)
         sql += " AND (" + " OR ".join(ramos) + ")"
     if asset_types:

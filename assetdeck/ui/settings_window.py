@@ -188,6 +188,14 @@ class SettingsWindow(QDialog):
             "Manutenção", "Operações que varrem a biblioteca inteira.")
         mw = self._mw
 
+        from assetdeck import config
+
+        cfg = config.load_config()
+        self.scan_on_startup = QCheckBox()
+        self.scan_on_startup.setChecked(bool(cfg.get("scan_on_startup", False)))
+        self.scan_on_startup.toggled.connect(
+            lambda v: self._salvar("scan_on_startup", v))
+
         mw.relocate_action = QPushButton("Abrir…")
         mw.relocate_action.clicked.connect(mw._relocate_lost_assets)
         mw.duplicates_action = QPushButton("Procurar…")
@@ -198,6 +206,14 @@ class SettingsWindow(QDialog):
         btn_previews.clicked.connect(mw._assinalar_previews_automaticamente)
         btn_props = QPushButton("Gerenciar…")
         btn_props.clicked.connect(mw._manage_properties)
+
+        lay.addWidget(_grupo("Varredura"))
+        lay.addWidget(_linha(
+            "Varrer a biblioteca ao abrir",
+            "Desligado, a biblioteca só é lida quando você clicar em "
+            "Reindexar. Ligado, o app varre tudo a cada abertura — numa "
+            "biblioteca grande isso ocupa a máquina por alguns minutos.",
+            self.scan_on_startup))
 
         lay.addWidget(_grupo("Arquivos"))
         lay.addWidget(_linha(

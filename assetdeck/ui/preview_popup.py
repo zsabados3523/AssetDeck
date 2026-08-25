@@ -28,7 +28,7 @@ from PySide6.QtWidgets import (
 
 from assetdeck.indexer.grouper import PRIMARY_ORDER
 from assetdeck.thumbs.preview import can_preview, load_full_image
-from assetdeck.ui import theme
+from assetdeck.ui import pools, theme
 from assetdeck.ui.overlay import OverlayPanel
 
 log = logging.getLogger(__name__)
@@ -167,7 +167,9 @@ class PreviewPopup(OverlayPanel):
         self._loading_for = path
         if can_preview(path) and path.exists():
             self.info_label.setText("Carregando resolução completa…")
-            QThreadPool.globalInstance().start(_LoadJob(self._sig, path))
+            # Pool interativo, não o global: a prévia não pode ficar atrás
+            # da fila de miniaturas (ver `ui/pools.py`).
+            pools.interativo().start(_LoadJob(self._sig, path))
         else:
             self.info_label.setText(
                 "Preview em resolução completa disponível só para imagens "

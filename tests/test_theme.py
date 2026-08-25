@@ -161,14 +161,32 @@ def test_a_pastilha_suave_se_distingue_da_superficie():
         assert razao >= DEGRAU_MINIMO, f"{soft} não se destaca de {superficie} ({razao:.3f})"
 
 
-def test_o_fundo_e_a_superficie_sao_cores_diferentes():
-    """Fatia 44: painel e janela deixaram de ser a mesma cor. Se alguém
-    reunificar os dois, a hierarquia da tela volta a depender só da linha de
-    contorno — que era exatamente a tela chapada que o Rafael reprovou."""
-    for bg, superficie in ((theme.BG, theme.SURFACE), (theme.BG_DARK, theme.SURFACE_DARK)):
-        assert bg != superficie
-        razao = theme.contrast_ratio(bg, superficie)
-        assert razao >= DEGRAU_MINIMO, f"{bg} e {superficie} são degraus fracos ({razao:.3f})"
+def test_o_painel_se_separa_do_fundo_por_tom_ou_por_contorno():
+    """A hierarquia da tela tem de vir de ALGUM lugar.
+
+    A Fatia 44 separou painel e janela por TOM, e este teste exigia que as
+    duas cores fossem diferentes. Na Fatia 95 o Rafael pediu fundo branco no
+    modo claro — "as janelas já têm sombra e linha, tem contraste" —, e no
+    claro os dois passaram a ser o mesmo branco. A exigência antiga não vale
+    mais como está escrita, mas o que ela protegia continua valendo: se o tom
+    não separa, o contorno tem de separar. Sem nenhum dos dois, volta a tela
+    chapada que ele reprovou.
+
+    No escuro os tons continuam diferentes — o pedido era só pro claro.
+    """
+    for modo, bg, superficie in (("claro", theme.BG, theme.SURFACE),
+                                 ("escuro", theme.BG_DARK, theme.SURFACE_DARK)):
+        if bg != superficie:
+            razao = theme.contrast_ratio(bg, superficie)
+            assert razao >= DEGRAU_MINIMO, (
+                f"[{modo}] {bg} e {superficie} são degraus fracos ({razao:.3f})")
+            continue
+        # Mesmo tom: o contorno do card é o único separador que sobra, então
+        # ele NÃO pode ser transparente.
+        alfa = theme._paleta(modo)["border"][3]
+        assert alfa > 0, (
+            f"[{modo}] fundo e painel são a mesma cor ({bg}) e o contorno do "
+            f"card é transparente — a tela fica chapada")
 
 
 def test_o_campo_se_distingue_do_painel_nos_dois_modos():
@@ -695,7 +713,10 @@ def test_o_raio_da_pastilha_cabe_na_altura_do_botao(qapp, fonte, tmp_path):
     from assetdeck.ui.main_window import PALETA_CORES
 
     theme.apply_theme(qapp, theme.Variant(font=fonte))
-    raio = int(theme.build_tokens(theme.Variant(font=fonte))["radius_pill"].removesuffix("px"))
+    tokens = theme.build_tokens(theme.Variant(font=fonte))
+
+    def raio_de(token: str) -> int:
+        return int(tokens[token].removesuffix("px"))
 
     from pathlib import Path
 
@@ -703,22 +724,30 @@ def test_o_raio_da_pastilha_cabe_na_altura_do_botao(qapp, fonte, tmp_path):
     apply_migrations(conn)
 
     botoes = [
-        ("CategoryButton", CategoryButton(CATEGORIES[0])),
-        ("FilterButton", FilterButton("palette", PALETA_CORES, swatch=True)),
+        ("CategoryButton", CategoryButton(CATEGORIES[0]), "radius_pill"),
+        ("FilterButton", FilterButton("palette", PALETA_CORES, swatch=True), "radius_pill"),
         # O seletor de biblioteca entrou aqui DEPOIS de escapar: ele usa o
         # mesmo `$radius_pill`, mas tinha padding próprio e menor, então
         # media 31px — abaixo do dobro do raio. O Qt descartou o
         # arredondamento em silêncio e o botão ficou quadrado na tela até o
         # Rafael reclamar. Um teste que cobre só dois dos três usuários do
         # token não protege o token.
-        ("LibrarySwitcher", LibrarySwitcher(conn, 1)),
+        # O seletor encolheu na Fatia 95 (pedido do Rafael: ele ocupava a
+        # faixa inteira e não tinha como parecer centralizado), então passou a
+        # usar um token de raio PRÓPRIO — 18px não caberia mais nos 26px de
+        # altura. Cada botão é conferido contra o token QUE ELE USA: um teste
+        # que cobrisse todos contra o mesmo token voltaria a mentir na
+        # primeira vez que um deles mudasse de tamanho.
+        ("LibrarySwitcher", LibrarySwitcher(conn, 1), "radius_pill_small"),
     ]
-    for nome, b in botoes:
+    for nome, b, token in botoes:
         b.show()
         qapp.processEvents()
         altura = b.sizeHint().height()
+        raio = raio_de(token)
         assert raio <= altura / 2, (
             f"{nome} (fonte {fonte}) tem {altura}px de altura; um raio de "
-            f"{raio}px passa da metade e o Qt descarta o arredondamento"
+            f"{raio}px (${token}) passa da metade e o Qt descarta o "
+            f"arredondamento"
         )
         b.close()

@@ -1,5 +1,5 @@
-"""Duplo clique: HDRI abre o visualizador novo, o resto segue no popup
-de sempre (Fatia 34).
+"""Duplo clique: HDRI abre o visualizador 3D, o resto segue no popup
+de sempre (Fatia 34; janela unificada na Fatia 90).
 
 Arquivo próprio porque precisa de uma biblioteca COM um .hdr de verdade —
 o fixture `janela` de test_main_window.py é só .jpg + .blend, e outros
@@ -55,10 +55,13 @@ def espiao(janela, monkeypatch):
     abertos = []
 
     class _ViewerFalso:
-        def show_for(self, path):
+        def abrir_hdri(self, path):
             abertos.append(("hdri", path.name))
 
-    monkeypatch.setattr(janela, "_hdri_viewer", lambda: _ViewerFalso())
+        def abrir_modelo(self, path, content_hash=None):
+            abertos.append(("modelo", path.name))
+
+    monkeypatch.setattr(janela, "_visualizador", lambda: _ViewerFalso())
     monkeypatch.setattr(janela.preview_popup, "show_for",
                         lambda row, *a, **k: abertos.append(("popup", row["name"])))
     return abertos
@@ -83,5 +86,6 @@ def test_imagem_comum_continua_no_popup(janela, espiao):
 
 
 def test_o_visualizador_so_e_criado_quando_ha_hdri(janela):
-    """Quem nunca abre um HDRI não paga o custo do contexto OpenGL."""
-    assert getattr(janela, "_hdri_win", None) is None
+    """Quem nunca abre um HDRI ou modelo não paga o custo do contexto
+    OpenGL. Desde a Fatia 90 é UMA janela pros dois (`_visor_win`)."""
+    assert getattr(janela, "_visor_win", None) is None

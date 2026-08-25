@@ -126,21 +126,33 @@ def test_tema_pinta_a_janela_e_os_cards_ficam_arredondados(qapp, janela):
             return abs(ra - rb) + abs(ga - gb) + abs(ba - bb)
 
         quina = grid_card.mapTo(janela, grid_card.rect().topLeft())
-        cor_quina = px(quina.x() + 1, quina.y() + 1)
+        # EXATAMENTE a quina, não 1px pra dentro: num card quadrado é ali
+        # que as duas linhas de contorno se encontram. Amostrar deslocado
+        # cai dentro do card e lê a superfície nos dois casos — foi assim
+        # que a primeira versão deste teste passou com o card quadrado.
+        cor_quina = px(quina.x(), quina.y())
+        # Meio da aresta de cima: ali passa a LINHA de contorno do card.
+        meio_aresta = px(quina.x() + grid_card.width() // 2, quina.y())
 
-        # A prova fina de curvatura (comparar quina x meio da aresta) já está
-        # em test_theme.py numa sonda isolada, onde a geometria é controlada.
-        # Aqui, na janela REAL, o que importa é que a quina do card mostra o
-        # FUNDO e não o painel — se alguém voltar a arredondar a QListView
-        # direto (sem o QFrame#card em volta), o viewport pinta retângulo, a
-        # quina passa a ser a superfície, e isto quebra.
+        # A prova de curvatura mudou de forma na Fatia 95, quando o fundo do
+        # modo claro virou branco a pedido do Rafael. Antes bastava ler a cor
+        # da quina e ver que era o `$bg` e não a `$surface`; com os dois
+        # brancos, essa leitura não distingue mais nada — o próprio teste já
+        # avisava que comparar branco com branco passaria até com o card
+        # quadrado.
         #
-        # Não dá pra exigir igualdade exata com `$bg`: a sombra do card
-        # escurece alguns pontos ao redor da quina (~2 níveis por canal). Ela
-        # só passou a aparecer na Fatia 44, quando o fundo deixou de ser
-        # branco puro — antes a sombra caía sobre branco e sumia.
-        assert distancia(cor_quina, theme.BG) < distancia(cor_quina, theme.SURFACE), \
-            f"a quina do card da grade não é curva (leu {cor_quina})"
+        # O que ainda distingue: a quina de um card QUADRADO cai em cima do
+        # contorno (duas linhas se encontrando ali), e a de um card CURVO cai
+        # fora dele, no fundo limpo. Então a quina tem de ser mais CLARA que o
+        # meio da aresta, onde o contorno passa.
+        def brilho(cor: str) -> int:
+            return sum(theme.hex_to_rgb(cor))
+
+        assert brilho(cor_quina) > brilho(meio_aresta), (
+            f"a quina do card da grade não é curva: leu {cor_quina} na quina "
+            f"e {meio_aresta} no meio da aresta — se a quina não é mais clara "
+            f"que a linha de contorno, ela está EM CIMA do contorno"
+        )
 
         # E a superfície do card aparece de verdade — prova que os dois tons
         # diferem na tela, não só na paleta.
@@ -783,17 +795,17 @@ def test_on_finished_nada_mudou_nao_chama_reload_all(janela, monkeypatch):
 @pytest.mark.parametrize("nome_arquivo", ["modelo.obj", "modelo.fbx", "modelo.blend"])
 def test_open_preview_roteia_formato_3d_pro_visualizador_de_modelo(
     janela, monkeypatch, nome_arquivo):
-    """Fase 6: duplo clique num .obj/.fbx/.blend abre o ModelViewer em vez
-    do PreviewPopup achatado — mesmo padrão do .hdr/.exr (Fatia 34). Não
-    instancia o ModelViewer de verdade: QOpenGLWidget não roda no modo
-    offscreen do pytest."""
+    """Fase 6: duplo clique num .obj/.fbx/.blend abre o visualizador 3D em
+    vez do PreviewPopup achatado — mesmo padrão do .hdr/.exr (Fatia 34). Não
+    instancia a janela de verdade: QOpenGLWidget não roda no modo offscreen
+    do pytest."""
     chamadas = []
 
     class _FakeViewer:
-        def show_for(self, caminho, content_hash=None):
+        def abrir_modelo(self, caminho, content_hash=None):
             chamadas.append((caminho, content_hash))
 
-    monkeypatch.setattr(janela, "_model_viewer", lambda: _FakeViewer())
+    monkeypatch.setattr(janela, "_visualizador", lambda: _FakeViewer())
     monkeypatch.setattr(janela.model, "row_at", lambda idx: {
         "rel_path": nome_arquivo, "asset_type": "model", "id": 999,
         "content_hash": "hash-de-teste",
@@ -811,8 +823,9 @@ def test_open_preview_nao_roteia_textura_pro_visualizador_de_modelo(janela, monk
     """Extensão fora da lista suportada (Fase 6) continua no PreviewPopup
     de sempre — o roteamento é por extensão, não vira o padrão pra tudo."""
     chamadas = []
-    monkeypatch.setattr(janela, "_model_viewer",
-                        lambda: pytest.fail("não devia chamar o ModelViewer pra textura"))
+    monkeypatch.setattr(
+        janela, "_visualizador",
+        lambda: pytest.fail("não devia abrir o visualizador 3D pra textura"))
     monkeypatch.setattr(janela, "preview_popup",
                         type("Fake", (), {"show_for": lambda *a, **k: chamadas.append(1)})())
     monkeypatch.setattr(janela.model, "row_at", lambda idx: {
@@ -874,3 +887,237 @@ def test_prewarm_preserva_o_estado_da_janela(janela):
     janela.setWindowState(Qt.WindowState.WindowNoState)
     janela.setWindowState(guardado)
     assert janela.windowState() == guardado
+
+
+def _visor_dublado(monkeypatch):
+    """Substitui a janela do visualizador por um dublê que registra o que
+    aconteceu com ela. Instanciar a de verdade monta dois `QOpenGLWidget`,
+    que derrubam o processo no modo offscreen do pytest (fronteira já
+    registrada em `test_hdri_viewer.py`)."""
+    from assetdeck.ui import viewer_window
+
+    criadas = []
+
+    class _Dublê:
+        def __init__(self, parent=None):
+            self.mostrada = 0
+            self.escondida = 0
+            criadas.append(self)
+
+        def setAttribute(self, *a):
+            pass
+
+        def show(self):
+            self.mostrada += 1
+
+        def hide(self):
+            self.escondida += 1
+
+    monkeypatch.setattr(viewer_window, "VisualizadorWindow", _Dublê)
+    return criadas
+
+
+def test_visualizador_e_criado_uma_vez_so(janela, monkeypatch):
+    """Cada abertura de HDRI/modelo reusa a MESMA janela: montar contexto
+    de OpenGL de novo a cada duplo clique custa caro e é o que fazia o
+    'piscar' voltar."""
+    criadas = _visor_dublado(monkeypatch)
+
+    primeiro = janela._visualizador()
+    segundo = janela._visualizador()
+
+    assert primeiro is segundo
+    assert len(criadas) == 1
+
+
+def test_prewarm_aquece_uma_janela_so(janela, monkeypatch):
+    """Fatia 90: os dois visualizadores passaram a dividir UMA janela.
+
+    A transição de modo de composição que o pré-aquecimento paga é por
+    JANELA DE TOPO — com duas janelas ela acontecia duas vezes na abertura
+    do app. Se alguém voltar a criar uma janela por tipo, este teste cai.
+    """
+    criadas = _visor_dublado(monkeypatch)
+
+    janela.prewarm_gl_viewers()
+
+    assert len(criadas) == 1, "o pré-aquecimento voltou a abrir mais de uma janela"
+    assert criadas[0].mostrada == 1
+    assert criadas[0].escondida == 1
+
+
+def test_prewarm_nao_entrega_a_janela_ao_gerenciador(janela):
+    """Regressão do "não consigo abrir a visualização de modelos 3d nem de
+    hdris com o duplo clique" (Rafael, 2026-08-19).
+
+    O visualizador ABRIA MINIMIZADO — ia direto pro dock, e da cadeira dele
+    parecia que o duplo clique não fazia nada. O log mostrava tudo certo
+    ("HDRI pronto na tela", "Modelo pronto na tela"), porque estava mesmo:
+    a janela existia, carregava e ficava iconificada.
+
+    Causa: o pré-aquecimento fazia `show()` + `hide()` na janela. Desmapear
+    uma janela no X a marca como iconificada, e o gerenciador reaplica esse
+    estado toda vez que ela reaparece. Medido na tela do Rafael nos dois
+    sentidos: com pré-aquecimento nascia minimizada, sem ele nascia normal.
+    Não era por estar fora da tela — a variante invisível por opacidade, na
+    posição normal, minimizava igual. Era o par mapear/desmapear.
+
+    `WA_DontShowOnScreen` monta a janela e pinta o frame (que é o que
+    dispara a troca de composição, o motivo do pré-aquecimento existir) sem
+    nunca passar pelo gerenciador.
+
+    O teste lê o código porque o efeito só existe com gerenciador de
+    janelas e OpenGL de verdade — nenhum dos dois roda no pytest (mesma
+    fronteira de `test_hdri_viewer.py`). A verificação de verdade foi na
+    tela dele, e está registrada no TODO.
+    """
+    import inspect
+
+    fonte = inspect.getsource(janela.prewarm_gl_viewers)
+    assert "WA_DontShowOnScreen" in fonte, (
+        "o pré-aquecimento precisa montar a janela SEM entregá-la ao "
+        "gerenciador de janelas"
+    )
+    assert "visor.move(" not in fonte, (
+        "voltou o show()/hide() fora da tela — é ele que deixa o "
+        "visualizador abrindo minimizado pro resto da sessão"
+    )
+
+
+# ---- maximização: guardar e repor (Fatia 94) ----
+
+def test_maximizada_faz_ida_e_volta_pelo_config(janela):
+    """Rafael: "a janela não vem maximizada (parece que não guarda o estado
+    anterior da sessão)".
+
+    O `saveGeometry` do Qt até carrega essa informação, mas depende de
+    `windowState()` valer no instante do fechamento — e dentro do
+    `closeEvent` o estado já se foi (medido: a janela estava maximizada um
+    instante antes e o config saía com `false`). Por isso a bandeira é
+    gravada à parte, a partir do último valor visto ao vivo.
+    """
+    from assetdeck import config
+
+    janela._maximizada = True
+    janela._save_ui_state()
+    assert config.load_config()["ui_state"]["window_maximized"] is True
+
+    janela._maximizada_desejada = False
+    janela._restore_ui_state()
+    assert janela._maximizada_desejada is True
+
+
+def test_a_intencao_do_config_nao_e_apagada_pelo_estado_atual(janela):
+    """São DUAS variáveis de propósito. Com uma só, o "não maximizada" que o
+    gerenciador manda assim que a janela aparece apagava a intenção lida do
+    config antes dela ser aplicada — e a janela abria normal (medido)."""
+    janela._maximizada_desejada = True
+    janela._maximizada = False  # o que o gerenciador diz agora
+
+    assert janela._maximizada_desejada is True, (
+        "a intenção vinda do config não pode depender do estado do momento"
+    )
+
+
+def test_showEvent_pede_a_maximizacao_uma_vez_so(janela, monkeypatch):
+    """`showEvent` dispara toda vez que a janela reaparece; repor a
+    maximização em todas seria passar por cima do Rafael, que pode ter
+    deixado a janela normal de propósito."""
+    from PySide6.QtGui import QShowEvent
+
+    pedidos = []
+    monkeypatch.setattr(janela, "_repor_maximizada",
+                        lambda *a, **k: pedidos.append(1))
+    janela._maximizada_desejada = True
+    janela._maximizada_reposta = False
+
+    janela.showEvent(QShowEvent())
+    janela.showEvent(QShowEvent())
+
+    assert pedidos == [1]
+
+
+def test_sem_maximizacao_gravada_o_showEvent_nao_mexe(janela, monkeypatch):
+    from PySide6.QtGui import QShowEvent
+
+    pedidos = []
+    monkeypatch.setattr(janela, "_repor_maximizada",
+                        lambda *a, **k: pedidos.append(1))
+    janela._maximizada_desejada = False
+    janela._maximizada_reposta = False
+
+    janela.showEvent(QShowEvent())
+
+    assert pedidos == []
+
+
+def test_o_seletor_de_biblioteca_boia_no_meio_da_faixa(janela, qapp):
+    """Pedido três vezes pelo Rafael, e as duas primeiras respostas minhas
+    não resolveram — vale um teste.
+
+    1ª (Fatia 78): pus `AlignVCenter` no layout. Não fez nada: o seletor
+       media 37px numa faixa de 37px, então não havia folga pra distribuir.
+    2ª (Fatia 95): encolhi o botão pra 29px. Continuou colado no topo, e a
+       medição mostrou por quê — o Qt encosta o widget do canto DIREITO da
+       barra de menus no alto (y=0, com os 13px sobrando embaixo), e como o
+       widget tinha a altura exata do botão, o alinhamento de dentro
+       continuava sem folga. O canto ESQUERDO, com a marca, o Qt centraliza
+       sozinho; as duas pontas não recebem o mesmo tratamento.
+
+    A correção é o widget do canto ter a altura da FAIXA. Este teste mede o
+    resultado — onde o botão cai — e não como ele foi obtido.
+    """
+    janela.show()
+    qapp.processEvents()
+
+    barra = janela.menuBar()
+    seletor = janela.library_switcher
+    topo = seletor.mapTo(janela, seletor.rect().topLeft()).y()
+    sobra_cima = topo
+    sobra_baixo = barra.height() - topo - seletor.height()
+
+    assert seletor.height() < barra.height(), (
+        f"o seletor ocupa a faixa inteira ({seletor.height()}px de "
+        f"{barra.height()}px) — não há o que centralizar"
+    )
+    assert abs(sobra_cima - sobra_baixo) <= 2, (
+        f"o seletor não está centralizado na faixa: {sobra_cima}px acima e "
+        f"{sobra_baixo}px abaixo"
+    )
+
+
+def test_a_reposicao_da_maximizacao_nao_desiste_no_falso_positivo(janela, monkeypatch):
+    """Regressão da Fatia 94 → 97: "o programa voltou a não iniciar
+    maximizado".
+
+    A Fatia 94 pôs uma saída antecipada em `_repor_maximizada` — "duas
+    leituras seguidas dizendo maximizada, pode parar". Isso reintroduziu
+    exatamente o que o laço existe pra atravessar: o Qt responde "sim,
+    maximizada" logo depois do `restoreGeometry`, ANTES de o gerenciador
+    confirmar, e o gerenciador desfaz em seguida. Duas leituras desse falso
+    positivo bastavam pra desistir.
+
+    O teste roteiriza essa sequência — dois "sim" mentirosos seguidos de um
+    "não" — e exige que o laço volte a pedir. É a parte verificável sem
+    gerenciador de janelas; a prova de ponta a ponta foi na tela do Rafael
+    (fecha maximizado, reabre maximizado) e está registrada no TODO.
+    """
+    respostas = iter([True, True, False, False, True])
+    pedidos = []
+    monkeypatch.setattr(janela, "isMaximized", lambda: next(respostas, True))
+    monkeypatch.setattr(janela, "showMaximized", lambda: pedidos.append(1))
+    # O relógio é dublado: o teste dispara as tentativas na mão, sem esperar.
+    agendados = []
+    monkeypatch.setattr("PySide6.QtCore.QTimer.singleShot",
+                        staticmethod(lambda ms, fn: agendados.append(fn)))
+
+    janela._repor_maximizada(0)      # 1ª leitura: "sim" (mentira)
+    assert agendados, "o laço parou na primeira leitura"
+    agendados.pop()()                # 2ª leitura: "sim" (mentira de novo)
+    assert agendados, "o laço desistiu depois de dois 'sim' seguidos"
+    agendados.pop()()                # 3ª leitura: "não" — tem de reagir
+
+    assert pedidos, (
+        "o gerenciador desfez a maximização e o laço não pediu de novo — "
+        "é assim que a janela volta a abrir em tamanho normal"
+    )
