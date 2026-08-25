@@ -35,6 +35,7 @@ from PySide6.QtOpenGL import (
 )
 from PySide6.QtOpenGLWidgets import QOpenGLWidget
 from assetdeck.thumbs.hdr import load_tonemapped
+from assetdeck.ui import pools
 from assetdeck.ui.hdri_camera import HdriCamera
 
 log = logging.getLogger(__name__)
@@ -293,7 +294,7 @@ def iniciar_carga(sig: SinalCarga, path: Path) -> None:
     A JANELA mora em `ui/viewer_window.py` desde a Fatia 90 — este módulo
     ficou com o que é do HDRI: shader, textura, câmera e esta carga.
     """
-    QThreadPool.globalInstance().start(_LoadJob(sig, path))
+    pools.interativo().start(_LoadJob(sig, path))
 
 
 def ensure_gl_format() -> None:
