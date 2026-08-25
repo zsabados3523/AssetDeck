@@ -3676,3 +3676,26 @@ com trabalho de fundo.
 - `ThumbnailPipeline`: pool próprio, metade dos núcleos, e cada thread
   rebaixada uma vez com `nice +5` — mesmo remédio dos processos da
   varredura (Fatia 91).
+
+### ☐ Fatia 99 — rastreador de quedas permanente
+
+O AssetDeck fecha sozinho ao mexer em tags (relato de 2026-08-23) e o
+defeito segue **sem diagnóstico**, porque não sobra nada pra investigar:
+não é exceção do Python (nenhum traceback no log), não é falta de memória
+(conferido no kernel), e numa queda de nível C++ o Qt derruba o processo
+em silêncio.
+
+Na primeira tentativa eu subi o app instrumentado à mão, com a saída num
+arquivo em `/tmp` — e a limpeza do sistema apagou o arquivo antes de eu
+ler. Perdi uma reprodução que o Rafael já tinha feito.
+
+Agora o `faulthandler` é armado pela própria abertura do app
+(`logging_setup.armar_rastreador_de_quedas`), gravando em
+`~/.local/share/assetdeck/logs/quedas.txt`, em modo de APÊNDICE. Qualquer
+queda futura deixa a pilha do Python do instante da falha, não importa
+como o programa foi aberto e sem depender de alguém estar por perto.
+
+**Testes:** três, e o que importa **derruba um processo de verdade**
+(`faulthandler._sigsegv()` num subprocesso) e exige que o arquivo tenha a
+pilha COM o nome da função onde caiu — conferir que uma função foi chamada
+não provaria nada aqui.
