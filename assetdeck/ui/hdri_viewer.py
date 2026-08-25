@@ -34,16 +34,8 @@ from PySide6.QtOpenGL import (
     QOpenGLVertexArrayObject,
 )
 from PySide6.QtOpenGLWidgets import QOpenGLWidget
-from PySide6.QtWidgets import (
-    QButtonGroup,
-    QDialog,
-    QHBoxLayout,
-    QLabel,
-    QPushButton,
-    QVBoxLayout,
-)
-
 from assetdeck.thumbs.hdr import load_tonemapped
+from assetdeck.ui import pools
 from assetdeck.ui.hdri_camera import HdriCamera
 
 log = logging.getLogger(__name__)
@@ -138,7 +130,10 @@ def image_to_qimage(img) -> QImage:
                   QImage.Format.Format_RGBA8888).copy()
 
 
-class _Signaller(QObject):
+class SinalCarga(QObject):
+    """Emissor da carga em thread. Público porque quem escuta é a
+    `VisualizadorWindow`, noutro módulo (Fatia 90)."""
+
     loaded = Signal(QImage)
     failed = Signal(str)
 
@@ -146,7 +141,7 @@ class _Signaller(QObject):
 class _LoadJob(QRunnable):
     """Carrega e tonemapa fora da thread da UI (0,76s num HDRI 4K)."""
 
-    def __init__(self, sig: _Signaller, path: Path) -> None:
+    def __init__(self, sig: SinalCarga, path: Path) -> None:
         super().__init__()
         self._sig = sig
         self._path = path
@@ -293,80 +288,13 @@ class HdriGLView(QOpenGLWidget):
             self.doneCurrent()
 
 
-class HdriViewer(QDialog):
-    """Janela própria — superfície GL + alternador de modo.
+def iniciar_carga(sig: SinalCarga, path: Path) -> None:
+    """Lê e tonemapa o HDRI fora da thread da UI (0,76s num 4K).
 
-    Fatia 65 tinha tentado virar `OverlayPanel` (embutido na janela
-    principal, como o `PreviewPopup`) — revertido no mesmo dia: Rafael
-    relatou que o "piscar" piorou, o APP INTEIRO parecia fechar e abrir,
-    não só uma janelinha pequena. Causa real (achada revisando depois do
-    relato): um `QOpenGLWidget` em QUALQUER lugar da árvore de widgets de
-    um top-level muda o modo de composição da JANELA INTEIRA daquele
-    top-level (Qt reflui todo o conteúdo por uma textura em vez do caminho
-    raster normal) — isso só acontece na primeira vez que aparece na tela.
-    Com o GL dentro da MainWindow, era a janela inteira do AssetDeck que
-    sofria essa transição; como janela PRÓPRIA (aqui), só ela.
-    `PreviewPopup` continua `OverlayPanel` — não usa OpenGL, não tem esse
-    problema."""
-
-    def __init__(self, parent=None) -> None:
-        super().__init__(parent)
-        self.setWindowFlag(Qt.WindowType.Window)
-        self.resize(1000, 620)
-
-        self.view = HdriGLView()
-        self.status = QLabel("Carregando…")
-
-        self.btn_ambiente = QPushButton("Ambiente")
-        self.btn_esfera = QPushButton("Esfera de reflexo")
-        self._grupo = QButtonGroup(self)
-        for i, b in ((MODO_AMBIENTE, self.btn_ambiente), (MODO_ESFERA, self.btn_esfera)):
-            b.setCheckable(True)
-            self._grupo.addButton(b, i)
-            b.clicked.connect(lambda _c=False, m=i: self.view.set_modo(m))
-        self.btn_ambiente.setChecked(True)
-
-        topo = QHBoxLayout()
-        topo.addWidget(self.btn_ambiente)
-        topo.addWidget(self.btn_esfera)
-        topo.addStretch()
-        topo.addWidget(self.status)
-
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(12, 12, 12, 12)
-        layout.setSpacing(8)
-        layout.addLayout(topo)
-        layout.addWidget(self.view, stretch=1)
-
-        self._sig = _Signaller()
-        self._sig.loaded.connect(self._on_loaded)
-        self._sig.failed.connect(self._on_failed)
-
-    def show_for(self, path: Path) -> None:
-        self.setWindowTitle(f"HDRI — {path.name}")
-        self.status.setText("Carregando…")
-        self.view.camera.reset()
-        self.show()
-        self.raise_()
-        QThreadPool.globalInstance().start(_LoadJob(self._sig, path))
-
-    def _on_loaded(self, img: QImage) -> None:
-        self.view.set_image(img)
-        self.status.setText(
-            f"{img.width()}×{img.height()}  ·  arraste para girar, duplo clique centraliza")
-
-    def _on_failed(self, msg: str) -> None:
-        self.status.setText(f"Falhou: {msg}")
-
-    def keyPressEvent(self, event) -> None:  # noqa: N802
-        if event.key() == Qt.Key.Key_Escape:
-            self.close()
-        else:
-            super().keyPressEvent(event)
-
-    def closeEvent(self, event) -> None:  # noqa: N802
-        self.view.cleanup()  # libera a textura na GPU (32MB num HDRI 4K)
-        super().closeEvent(event)
+    A JANELA mora em `ui/viewer_window.py` desde a Fatia 90 — este módulo
+    ficou com o que é do HDRI: shader, textura, câmera e esta carga.
+    """
+    pools.interativo().start(_LoadJob(sig, path))
 
 
 def ensure_gl_format() -> None:

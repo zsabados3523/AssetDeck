@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import logging
+import os
+import threading
 from pathlib import Path
 
 from PySide6.QtCore import QObject, QRunnable, QThreadPool, Signal
@@ -18,6 +20,34 @@ class _Signaller(QObject):
     failed = Signal(int)        # asset_id
 
 
+_rebaixada = threading.local()
+
+
+def rebaixar_esta_thread() -> None:
+    """Põe a thread ATUAL em segundo plano (`nice +5`), uma vez só.
+
+    Gerar miniatura é trabalho de fundo: pode demorar, ninguém está olhando.
+    Sem isto, as threads do pool disputam núcleo de igual pra igual com o
+    que o Rafael estiver fazendo — e a abertura do app, que agenda centenas
+    de miniaturas de uma vez, deixava a máquina pesada (relato de
+    2026-08-19). Mesmo remédio que os processos da varredura já usam
+    (`indexer/scanner.py::_preparar_worker`).
+
+    No Linux `nice()` vale pra THREAD que chama, não pro processo — a UI
+    não é afetada. A trava por thread existe porque `nice` é cumulativo: a
+    thread do pool atende muitos jobs, e sem ela cada job rebaixaria mais um
+    degrau até o fundo do poço.
+    """
+    if getattr(_rebaixada, "feito", False):
+        return
+    _rebaixada.feito = True
+    try:
+        os.nice(5)
+    except OSError:
+        log.warning("Não consegui baixar a prioridade da thread de miniaturas.",
+                    exc_info=True)
+
+
 class _ThumbJob(QRunnable):
     def __init__(self, signaller: _Signaller, asset_id: int, src: Path, dest: Path) -> None:
         super().__init__()
@@ -27,6 +57,7 @@ class _ThumbJob(QRunnable):
         self._dest = dest
 
     def run(self) -> None:
+        rebaixar_esta_thread()
         try:
             make_any_thumbnail(self._src, self._dest)
             self._sig.ready.emit(self._asset_id, str(self._dest))
@@ -44,7 +75,18 @@ class ThumbnailPipeline(QObject):
     def __init__(self, thumbs_dir: Path, parent: QObject | None = None) -> None:
         super().__init__(parent)
         self._thumbs_dir = thumbs_dir
-        self._pool = QThreadPool.globalInstance()
+        # Pool PRÓPRIO e limitado, não o global (achado em 2026-08-19).
+        # Dois motivos:
+        #
+        # 1. O global tem uma thread por núcleo (16 na máquina do Rafael).
+        #    Na abertura, com a varredura rodando em mais 4 processos, as
+        #    miniaturas tomavam a máquina inteira — é o "uso de CPU sobe
+        #    bastante" que ele relatou. Metade dos núcleos mantém a fila
+        #    andando e deixa respiro pro resto (varredura, UI, visualizador).
+        # 2. `shutdown()` chama `clear()`: no pool global isso descartava
+        #    também o que o visualizador e a prévia tivessem pendente.
+        self._pool = QThreadPool(self)
+        self._pool.setMaxThreadCount(max(2, (os.cpu_count() or 4) // 2))
         self._sig = _Signaller()
         self._sig.ready.connect(self._on_ready)
         self._sig.failed.connect(self._on_failed)

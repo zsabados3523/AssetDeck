@@ -256,7 +256,7 @@ QToolButton#railButton {
     background: transparent;
     border: 1px solid transparent;
     border-radius: $radius_control;
-    padding: 6px;
+    padding: 4px;   /* 6 antes (Fatia 95b) — a pastilha do hover encolhe junto */
 }
 
 /* Borda junto do preenchimento (Fatia 76) — o rail é a "barra vertical
@@ -336,6 +336,14 @@ QLabel#title {
     color: $title;
     font-size: $font_size_title;
     font-weight: 600;
+}
+
+/* Dica de teclado do rodapé dos visualizadores 3D (Fatia 90). Mais apagada
+ * e menor que o status ao lado: é a mesma informação que o Esc já dá, só
+ * escrita — não pode competir com "4096 × 2048 px". */
+QLabel#visorDica {
+    color: $text_muted;
+    font-size: $font_size_small;
 }
 
 QLabel#muted, QLabel#previewInfo {
@@ -481,18 +489,18 @@ QPushButton#primary:disabled {
  * regras genéricas — sem isso o botão voltaria a ser quadrado justamente ao
  * passar o mouse (a mesma armadilha do `#primary:disabled`, Fatia 74, agora
  * coberta por teste). */
-QToolButton#pill {
+QToolButton#pill, QToolButton#pillMini {
     border-radius: $radius_pill;
     padding: $pad_m $pad_l;
 }
 
-QToolButton#pill:hover {
+QToolButton#pill:hover, QToolButton#pillMini:hover {
     background-color: $surface_raised;
     border: 1px solid $border;
     border-radius: $radius_pill;
 }
 
-QToolButton#pill:pressed {
+QToolButton#pill:pressed, QToolButton#pillMini:pressed {
     background-color: $surface_sunken;
     border: 1px solid $border;
     border-radius: $radius_pill;
@@ -500,11 +508,45 @@ QToolButton#pill:pressed {
     padding-bottom: 7px;
 }
 
-QToolButton#pill:checked {
+QToolButton#pill:checked, QToolButton#pillMini:checked {
     background-color: $accent_soft;
     border: 1px solid transparent;
     border-radius: $radius_pill;
     color: $accent;
+    font-weight: 600;
+}
+
+
+/* Pastilha MENOR, do visualizador 3D (Fatia 94, pedido do Rafael: "os botões
+ * poderiam ser menores"). Herda tudo do #pill acima — só encolhe. Existe como
+ * nome próprio, e não como mudança no #pill, porque o #pill original é o botão
+ * da barra de categorias e dos filtros, que o Rafael NÃO pediu pra mudar. */
+QToolButton#pillMini {
+    padding: 4px 10px;
+    font-size: $font_size_small;
+    border-radius: $radius_pill_small;
+}
+
+QToolButton#pillMini:hover, QToolButton#pillMini:checked {
+    border-radius: $radius_pill_small;
+}
+
+QToolButton#pillMini:pressed {
+    border-radius: $radius_pill_small;
+    padding-top: 5px;
+    padding-bottom: 3px;
+}
+
+/* Pastilha de EXTENSÃO do visualizador (.HDR, .BLEND). Mesma ideia: o
+ * #chipForte continua valendo pro painel de detalhes, onde o formato é a
+ * informação que ele procura; aqui é só um rótulo ao lado do nome. */
+QLabel#chipMini {
+    background-color: $surface_raised;
+    border: 1px solid $border;
+    border-radius: $radius_chip_small;
+    padding: 1px 7px;
+    color: $text_muted;
+    font-size: 11px;
     font-weight: 600;
 }
 
@@ -558,8 +600,14 @@ QToolButton#pill::menu-indicator {
 QToolButton#libSwitch {
     background: transparent;
     border: 1px solid $border;
-    border-radius: $radius_pill;
-    padding: 8px 12px;
+    /* Raio 13 e não $radius_pill (18): com o padding menor a pastilha tem 26px
+     * de altura, e o Qt DESCARTA um raio maior que a metade da altura — o
+     * botão voltaria a ter canto reto (já aconteceu, Fatia 79b). */
+    border-radius: $radius_pill_small;
+    /* 8px antes. Encolher é o que faz o seletor BOIAR na faixa em vez de
+     * ocupá-la inteira: media 37px numa faixa de 37px, então o AlignVCenter
+     * que já estava lá não tinha o que centralizar. */
+    padding: 4px 12px;
     color: $text_muted;
     font-weight: 600;
 }
@@ -573,8 +621,10 @@ QToolButton#libSwitch:hover {
 QToolButton#libSwitch:pressed {
     background-color: $surface_sunken;
     border: 1px solid $border;
-    padding-top: 9px;
-    padding-bottom: 7px;
+    /* Afunda 1px sem mudar a ALTURA (a soma continua 8): altura maior aqui
+     * estouraria o raio de 13 e o canto ficaria reto só enquanto clicado. */
+    padding-top: 5px;
+    padding-bottom: 3px;
 }
 
 /* Mesma correção da pastilha de filtro: a seta é desenhada no canto
@@ -905,7 +955,7 @@ QFrame#brandDot {
 
 QLabel#brandName {
     color: $title;
-    font-size: $font_size;
+    font-size: $font_size_title;   /* 13px antes (Fatia 95: "um pouquinho maior") */
     font-weight: 700;
 }
 

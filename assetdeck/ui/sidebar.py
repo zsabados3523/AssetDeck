@@ -45,8 +45,9 @@ from assetdeck.ui import icons, theme
 
 log = logging.getLogger(__name__)
 
-LARGURA_RAIL = 44
-TAM_ICONE_RAIL = 18
+LARGURA_RAIL = 32   # 44 -> 38 (Fatia 95) -> 32 (Fatia 95b, "deixe eles mais apertados")
+TAM_ICONE_RAIL = 18   # encolheu pra 16 na Fatia 95b e voltou na 96b:
+                      # ficaram pequenos demais na tela do Rafael.
 TAM_CHEVRON = 10
 
 
@@ -239,8 +240,13 @@ class SidebarRail(QWidget):
         self.setFixedWidth(LARGURA_RAIL)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 8, 0, 8)
-        layout.setSpacing(4)
+        # Centralizados no rail (Fatia 96b). A Fatia 96 tinha encostado os
+        # ícones à esquerda com margens desiguais, interpretando "ir um pouco
+        # para o lado" como afastá-los do painel de pastas. Era o contrário:
+        # o incômodo era o TAMANHO deles, não a posição — voltaram aos 18px
+        # de antes e ficam no meio da coluna, com folga igual dos dois lados.
+        layout.setContentsMargins(0, 6, 0, 6)
+        layout.setSpacing(2)   # 4 antes — "mais apertados" (Fatia 95b)
         layout.setAlignment(Qt.AlignmentFlag.AlignHCenter)
 
         self.buttons: dict[str, QToolButton] = {}

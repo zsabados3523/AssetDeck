@@ -64,6 +64,11 @@ from assetdeck.ui.category_bar import CategoryBar
 
 log = logging.getLogger(__name__)
 
+# Altura da faixa de cima (marca à esquerda, biblioteca e modo à direita).
+# É a faixa INTEIRA que aparece na tela: desde a Fatia 95 o layout central
+# não tem mais margem em cima, então não existe "meio espaço" fora dela.
+ALTURA_FAIXA_TOPO = 42
+
 # Paleta fixa do filtro de busca por cor (Fatia 39) — decisão do Rafael:
 # botões de cor pré-definidos em vez de um seletor livre. Um hex
 # representativo por balde; a tolerância de "quão perto conta" mora em
@@ -106,6 +111,19 @@ class MainWindow(QMainWindow):
         self._db_path = db_path
         self._scan = ScanController(db_path, self._library_root, parent=self)
         self._pipeline = ThumbnailPipeline(thumbs_dir, parent=self)
+
+        # Maximização (Fatia 94). `_maximizada_desejada` é o que veio do
+        # config e vale só na primeira aparição; `_maximizada_reposta` faz a
+        # reposição acontecer uma vez só, porque `showEvent` dispara toda vez
+        # que a janela reaparece e depois da abertura quem manda é o Rafael.
+        # `_maximizada` é o último valor VISTO ao vivo (o que se grava);
+        # `_maximizada_desejada` é o que veio do config e vale só na primeira
+        # aparição. Duas variáveis, e não uma, porque o gerenciador manda um
+        # "não maximizada" logo que a janela aparece — com uma só, esse
+        # evento apagava a intenção antes dela ser aplicada (medido).
+        self._maximizada = False
+        self._maximizada_desejada = False
+        self._maximizada_reposta = False
 
         self.setWindowTitle("AssetDeck")
         self.resize(1280, 800)
@@ -396,7 +414,13 @@ class MainWindow(QMainWindow):
         central.setObjectName("appSurface")
         central.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         layout = QVBoxLayout(central)
-        layout.setContentsMargins(14, 14, 14, 14)
+        # Sem margem em cima nem embaixo (Fatia 95): quem dá o respiro ali
+        # agora é a altura da barra de menus e a do rodapé. Antes a folga era
+        # metade margem, metade barra — e o conteúdo das duas barras ficava
+        # centralizado só na METADE que é a barra, aparecendo acima do meio
+        # do espaço que o Rafael enxerga. Foi o que ele descreveu duas vezes:
+        # "deixe centralizado verticalmente no espaço em que está".
+        layout.setContentsMargins(14, 0, 14, 0)
         layout.setSpacing(12)
         layout.addWidget(splitter)
         self.setCentralWidget(central)
@@ -451,7 +475,11 @@ class MainWindow(QMainWindow):
         # encolhia a barra até o texto encostar em cima e embaixo; com altura
         # fixa sobra folga, e o respiro lateral vem do `padding` do
         # `QStatusBar` no QSS. Continua enxuto — só não espremido.
-        self.statusBar().setFixedHeight(32)
+        # 46 = os 32 de antes + os 14 de margem que saíram do layout central
+        # (ver `setContentsMargins` acima). O espaço embaixo é o mesmo de
+        # sempre; a diferença é que agora ele pertence todo à barra, e o texto
+        # cai no meio dele.
+        self.statusBar().setFixedHeight(46)
         self.statusBar().setSizeGripEnabled(False)  # o canto pontilhado comia a margem direita
         # Margem lateral do rodapé (Fatia 78, "colocar margens maiores das
         # bordas"). Vale para os widgets permanentes da direita — contagem,
@@ -786,6 +814,11 @@ class MainWindow(QMainWindow):
         from PySide6.QtWidgets import QHBoxLayout
 
         barra = self.menuBar()
+        # Mesma ideia do rodapé (Fatia 95): a faixa engole a margem que era do
+        # layout central, então marca e seletor ficam no meio do espaço que
+        # aparece na tela. 42 é MENOR que os 51 de antes (37 de barra + 14 de
+        # margem) — o Rafael pediu pra diminuir o espaço superior.
+        barra.setFixedHeight(ALTURA_FAIXA_TOPO)
 
         marca = QWidget()
         marca_layout = QHBoxLayout(marca)
@@ -813,6 +846,16 @@ class MainWindow(QMainWindow):
         # contagem de assets, que o mockup punha aqui, já está no
         # cabeçalho da lista E no rodapé — um terceiro lugar seria ruído.
         contexto = QWidget()
+        # Altura da FAIXA INTEIRA, não a do botão (Fatia 95b). O Qt encosta o
+        # widget do canto DIREITO no topo da barra de menus — medido: ele
+        # ficava em y=0..29 numa faixa de 42, com 13px sobrando só embaixo. E
+        # como o widget tinha exatamente a altura do botão, o `AlignVCenter`
+        # de dentro não tinha folga nenhuma pra distribuir: centralizava o
+        # botão nele mesmo. Dando a altura da faixa ao widget, o alinhamento
+        # interno passa a ter o que centralizar. (O canto ESQUERDO, com a
+        # marca, o Qt já centraliza sozinho — as duas pontas não recebem o
+        # mesmo tratamento.)
+        contexto.setFixedHeight(ALTURA_FAIXA_TOPO)
         contexto_layout = QHBoxLayout(contexto)
         contexto_layout.setContentsMargins(0, 0, 12, 0)
         contexto_layout.setSpacing(2)
@@ -938,6 +981,10 @@ class MainWindow(QMainWindow):
         self._bridge_led.refresh_theme()
         self.library_switcher.refresh_theme()  # ícone tingido à mão (Fatia 77)
         self.settings_window.refresh_theme()   # ícones da lateral (Fatia 80)
+        if getattr(self, "_visor_win", None) is not None:
+            # Só se já existir: criar o visualizador aqui montaria um contexto
+            # OpenGL só porque o Rafael trocou de modo claro/escuro.
+            self._visor_win.refresh_theme()
 
         self._search_icon_action.setIcon(icons.icon("search", pal["text_muted"]))
         self.rescan_btn.setIcon(icons.icon("refresh", pal["on_accent"]))
@@ -1426,13 +1473,17 @@ class MainWindow(QMainWindow):
         caminho = Path(self._library_root) / row["rel_path"]
         if can_hdr(caminho):
             # HDRI achatado num QLabel não deixa avaliar a luz (Fatia 34).
-            self._hdri_viewer().show_for(caminho)
+            log.info("Duplo clique: abrindo o visualizador de HDRI para %s",
+                     caminho.name)
+            self._visualizador().abrir_hdri(caminho)
             return
         if caminho.suffix.lower() in model3d_loader.EXTENSOES_SUPORTADAS:
             # Fase 6: modelo com câmera orbitando em vez do preview
             # achatado. content_hash só é usado pelo loader de .blend
             # (cache da exportação via Blender) — o resto ignora.
-            self._model_viewer().show_for(caminho, row["content_hash"])
+            log.info("Duplo clique: abrindo o visualizador de modelo para %s",
+                     caminho.name)
+            self._visualizador().abrir_modelo(caminho, row["content_hash"])
             return
         maps = None
         if row["asset_type"] == "pbr_set" and self.group_check.isChecked():
@@ -1441,32 +1492,23 @@ class MainWindow(QMainWindow):
         self.preview_popup.show_for(row, self._library_root,
                                     self._thumb_from_disk(row), maps=maps)
 
-    def _hdri_viewer(self):
-        """Criado sob demanda: o contexto OpenGL só é montado se o Rafael
-        realmente abrir um HDRI — quem nunca abre não paga nada.
+    def _visualizador(self):
+        """Janela dos visualizadores 3D (HDRI e modelo na mesma casca desde
+        a Fatia 90), criada sob demanda: o contexto OpenGL só é montado se o
+        Rafael realmente abrir um — quem nunca abre não paga nada.
 
-        Janela PRÓPRIA, não overlay embutido (revertido no dia da Fatia 65 —
-        `QOpenGLWidget` embutido na MainWindow mudava o modo de composição
-        da JANELA INTEIRA do AssetDeck na primeira vez que aparecia,
-        piorando o "piscar" pra afetar o app inteiro em vez de só uma
-        janelinha pequena — ver docstring de `HdriViewer`)."""
-        if getattr(self, "_hdri_win", None) is None:
-            from assetdeck.ui.hdri_viewer import HdriViewer
+        Janela PRÓPRIA, não overlay embutido: um `QOpenGLWidget` dentro da
+        MainWindow muda o modo de composição da JANELA INTEIRA do AssetDeck
+        na primeira vez que aparece, e o app todo pisca (tentado e revertido
+        na Fatia 65 — ver a docstring de `ui/viewer_window.py`)."""
+        if getattr(self, "_visor_win", None) is None:
+            from assetdeck.ui.viewer_window import VisualizadorWindow
 
-            self._hdri_win = HdriViewer(self)
-        return self._hdri_win
-
-    def _model_viewer(self):
-        """Mesmo raciocínio do `_hdri_viewer()` acima: criado sob demanda,
-        janela própria (não overlay — mesmo motivo do HDRI)."""
-        if getattr(self, "_model_win", None) is None:
-            from assetdeck.ui.model_viewer import ModelViewer
-
-            self._model_win = ModelViewer(self)
-        return self._model_win
+            self._visor_win = VisualizadorWindow(self)
+        return self._visor_win
 
     def prewarm_gl_viewers(self) -> None:
-        """Mostra e esconde o HdriViewer e o ModelViewer uma vez, fora da
+        """Mostra e esconde a janela dos visualizadores uma vez, fora da
         tela, na abertura do app — `AA_ShareOpenGLContexts` (`app.py`)
         não bastou (Rafael confirmou na tela: o piscar continua na
         PRIMEIRA vez que uma janela de OpenGL aparece na sessão, some da
@@ -1482,8 +1524,8 @@ class MainWindow(QMainWindow):
         from PySide6.QtWidgets import QApplication
 
         # O ESTADO da janela principal (maximizada/normal) tem de sobreviver
-        # a isto (Fatia 83). Os visualizadores são janelas de topo FILHAS
-        # desta; mostrar e esconder uma delas fazia o Qt recalcular o estado
+        # a isto (Fatia 83). O visualizador é janela de topo FILHA desta;
+        # mostrar e esconder ela fazia o Qt recalcular o estado
         # do pai e deixá-lo em "normal" — só o ESTADO, o tamanho continuava o
         # de maximizada. O resultado na tela: uma janela do tamanho da tela
         # que o gerenciador considera normal, então o botão de maximizar
@@ -1491,13 +1533,28 @@ class MainWindow(QMainWindow):
         # relatou: "não consigo mais maximizar a janela".
         estado_antes = self.windowState()
 
-        for viewer in (self._hdri_viewer(), self._model_viewer()):
-            pos_original = viewer.pos()
-            viewer.move(-10000, -10000)
-            viewer.show()
-            QApplication.processEvents()
-            viewer.hide()
-            viewer.move(pos_original)
+        # UMA janela desde a Fatia 90 (as duas superfícies de GL vivem num
+        # `QStackedWidget` dela). A transição de composição é por JANELA DE
+        # TOPO, então juntar as duas cortou metade deste custo — que é o
+        # trecho mais caro da abertura depois da árvore de pastas.
+        # `WA_DontShowOnScreen` (Fatia 93): o Qt monta a janela e PINTA um
+        # frame — que é o que dispara a troca de composição, o motivo deste
+        # método existir — sem nunca entregá-la ao gerenciador de janelas.
+        #
+        # Antes daqui saía um `move(-10000, -10000)` + `show()` + `hide()`.
+        # Isso deixava o visualizador ABRINDO MINIMIZADO pro resto da sessão:
+        # desmapear uma janela no X a marca como "iconificada" (é o que
+        # `hide()` faz), e o gerenciador reaplica esse estado toda vez que ela
+        # reaparece. Medido nos dois sentidos na tela do Rafael: com este
+        # pré-aquecimento nascia minimizada, sem ele nascia normal — e não era
+        # por estar fora da tela (a versão invisível por opacidade, na mesma
+        # posição, minimizava igual). Era o par mapear/desmapear.
+        visor = self._visualizador()
+        visor.setAttribute(Qt.WidgetAttribute.WA_DontShowOnScreen, True)
+        visor.show()
+        QApplication.processEvents()
+        visor.hide()
+        visor.setAttribute(Qt.WidgetAttribute.WA_DontShowOnScreen, False)
 
         if self.windowState() != estado_antes:
             self.setWindowState(estado_antes)
@@ -1997,6 +2054,82 @@ class MainWindow(QMainWindow):
         é seção (não tem chave própria no Sidebar)."""
         return [chave for chave, _r in self._secoes_do_menu] + ["detalhes"]
 
+    # ---- maximização: guardar e repor (Fatia 94) ----
+
+    def changeEvent(self, event) -> None:  # noqa: N802
+        """Anota a maximização enquanto ela ainda é verdade.
+
+        Ler `isMaximized()` na hora de salvar NÃO funciona: dentro do
+        `closeEvent` o estado já se foi — medido, a janela estava maximizada
+        um instante antes e o config saía com `false`. Aqui o valor é anotado
+        toda vez que MUDA, com a janela visível, que é quando ele vale.
+
+        Minimizar não conta: quem minimiza uma janela maximizada quer ela
+        maximizada de volta, não "normal".
+        """
+        from PySide6.QtCore import QEvent
+
+        if (event.type() == QEvent.Type.WindowStateChange
+                and self.isVisible() and not self.isMinimized()):
+            self._maximizada = self.isMaximized()
+        super().changeEvent(event)
+
+    def showEvent(self, event) -> None:  # noqa: N802
+        """Repõe a maximização depois que a janela aparece.
+
+        Não dá pra fazer isso no construtor junto com o `restoreGeometry`:
+        no GNOME Shell o pedido de maximizar só vale DEPOIS que a janela foi
+        mapeada — feito antes, é descartado sem aviso nenhum. Medido na tela
+        do Rafael: `showMaximized()` junto do `show()` deixa a janela em
+        800x500; 50ms depois, funciona.
+        """
+        super().showEvent(event)
+        if self._maximizada_desejada and not self._maximizada_reposta:
+            self._maximizada_reposta = True
+            self._repor_maximizada()
+
+    def _repor_maximizada(self, tentativa: int = 0) -> None:
+        """Insiste na maximização até ela PEGAR, por cerca de 1,5s.
+
+        Duas coisas medidas na tela do Rafael (GNOME Shell) explicam esta
+        forma:
+
+        1. O pedido feito antes da janela ser mapeada é descartado sem aviso
+           — `showMaximized()` junto do `show()` deixa a janela em 800x500,
+           50ms depois funciona. Por isso a reposição começa no `showEvent`.
+        2. Pior: o que o `restoreGeometry` marca ANTES do mapa faz o Qt dizer
+           `isMaximized() == True` na hora do `showEvent`, e o gerenciador
+           desfaz logo depois. Uma verificação única cai nessa: ela vê
+           "já está maximizada", desiste, e a janela abre normal.
+
+        Daí conferir repetidamente por um intervalo, reafirmando sempre que
+        não estiver maximizada, em vez de apostar num instante certo.
+        """
+        from PySide6.QtCore import QTimer
+
+        # Insiste pelo INTERVALO INTEIRO, sem sair mais cedo (Fatia 97).
+        #
+        # A Fatia 94 tinha posto aqui uma saída antecipada: "duas leituras
+        # seguidas dizendo maximizada, pode parar". Isso reintroduziu o
+        # próprio defeito que este laço existe pra atravessar — o Qt responde
+        # "sim, maximizada" logo depois do `restoreGeometry`, ANTES de o
+        # gerenciador confirmar, e o gerenciador desfaz depois. Duas leituras
+        # desse falso positivo bastavam pra desistir, e a janela abria em
+        # tamanho normal. O Rafael relatou: "o programa voltou a não iniciar
+        # maximizado".
+        #
+        # Pior: pus a saída antecipada DEPOIS de rodar o teste de ida e volta
+        # que provava a correção, e não repeti o teste. Custa ~10 verificações
+        # de nada em 1,5s; não vale economizar isso.
+        if not self.isMaximized():
+            self.showMaximized()
+        if tentativa >= 10:
+            if not self.isMaximized():
+                log.warning("O gerenciador de janelas não aceitou maximizar "
+                            "a janela — ela abre em tamanho normal.")
+            return
+        QTimer.singleShot(150, lambda: self._repor_maximizada(tentativa + 1))
+
     def _save_ui_state(self) -> None:
         """Grava geometria, painéis, splitters, tamanho do slider, tags
         expandidas e filtros ativos — tudo que o Rafael deixou arrumado
@@ -2008,6 +2141,14 @@ class MainWindow(QMainWindow):
         cfg = config.load_config()
         cfg["ui_state"] = {
             "window_geometry_b64": b64encode(bytes(self.saveGeometry())).decode("ascii"),
+            # Bandeira PRÓPRIA, além do que o `saveGeometry` carrega (Fatia
+            # 94). O Rafael: "a janela não vem maximizada (parece que não
+            # guarda o estado anterior da sessão)". O que o `saveGeometry`
+            # grava depende de `windowState()` valer no instante do
+            # fechamento — e no GNOME esse estado some antes. Guardar à parte
+            # o último valor VISTO durante a sessão (ver `changeEvent`) não
+            # depende de quando o app é fechado.
+            "window_maximized": self._maximizada,
             "left_splitter_sizes": self._left_splitter.sizes(),
             "main_splitter_sizes": self._main_splitter.sizes(),
             "panels_visible": dict(zip(
@@ -2039,6 +2180,11 @@ class MainWindow(QMainWindow):
         geo_b64 = estado.get("window_geometry_b64")
         if geo_b64:
             self.restoreGeometry(b64decode(geo_b64))
+        # Aplicado só depois que a janela aparece — ver `showEvent`. Pedir
+        # maximização aqui, com a janela ainda não mapeada, é descartado em
+        # silêncio pelo GNOME (medido: `showMaximized()` antes do mapa deixa
+        # a janela em 800x500; 50ms depois, funciona).
+        self._maximizada_desejada = bool(estado.get("window_maximized"))
 
         paineis = estado.get("panels_visible") or {}
         for chave, acao in zip(self._chaves_dos_paineis(), self._window_menu_actions):

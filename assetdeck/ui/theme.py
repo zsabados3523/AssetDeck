@@ -63,7 +63,11 @@ QSS_FILE = Path(__file__).parent / "theme.qss"
 # mínimos que continuam valendo (4.5:1 sobre `surface`, sobre `on_accent`, e
 # entre `accent`/`accent_soft`).
 
-BG = "#F6F6F9"          # fundo da janela: cinza muito claro
+BG = "#FFFFFF"          # fundo da janela: branco (Fatia 95). Era um cinza
+                        # muito claro, pra separar do painel branco por
+                        # tom. O Rafael pediu branco: "as janelas já têm
+                        # sombra e linha, tem contraste" — e têm mesmo,
+                        # a borda e a sombra do card seguram sozinhas.
 SURFACE = "#FFFFFF"     # painel/card/lateral: branco flutuando sobre o fundo
 BG_TINT = "#EDEDF1"     # variação do fundo (trilho de barra de rolagem, cabeçalho)
 FIELD = "#F2F2F6"       # campo de entrada: afunda em vez de sumir no branco
@@ -530,6 +534,12 @@ def build_tokens(variant: Variant = DEFAULT) -> dict[str, str]:
         # filtro 37px — 18px é a metade do menor. `test_theme.py` falha se
         # algum deles encolher a ponto de o raio parar de valer.
         "radius_pill": "18px",
+        # Pastilha PEQUENA: seletor de biblioteca e controles do visualizador
+        # 3D (Fatia 94/95). Precisa de token próprio porque o raio tem de
+        # caber na metade da altura — 18px numa pastilha de 26px faz o Qt
+        # descartar o arredondamento inteiro, sem erro nenhum.
+        "radius_pill_small": "13px",
+        "radius_chip_small": "9px",
 
         "pad_s": "4px",
         "pad_m": "8px",
