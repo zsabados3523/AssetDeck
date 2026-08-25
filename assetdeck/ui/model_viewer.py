@@ -41,6 +41,7 @@ from PySide6.QtOpenGLWidgets import QOpenGLWidget
 
 from assetdeck.model3d.loader import load_mesh
 from assetdeck.model3d.obj_parser import Mesh
+from assetdeck.ui import pools
 from assetdeck.ui.orbit_camera import OrbitCamera
 
 log = logging.getLogger(__name__)
@@ -249,4 +250,4 @@ def iniciar_carga(sig: SinalCarga, path: Path,
     A JANELA mora em `ui/viewer_window.py` desde a Fatia 90 — este módulo
     ficou com o que é do modelo: shader, VBO, câmera e esta carga.
     """
-    QThreadPool.globalInstance().start(_LoadJob(sig, path, content_hash))
+    pools.interativo().start(_LoadJob(sig, path, content_hash))

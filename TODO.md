@@ -3650,3 +3650,29 @@ O que já foi descartado, com evidência:
 
 Estado: rodando com `-X faulthandler` e saída capturada, esperando a próxima
 queda pra ter a pilha. Não reproduziu nas tentativas dele com essa instância.
+
+### ☐ Fatia 98 — filas separadas: o que se espera na tela x o trabalho de fundo
+
+**Feita por uma sessão paralela do Claude Code em 2026-08-19**, que
+encerrou antes de commitar. Revisada e commitada depois, com os testes
+dela verdes (8 novos).
+
+**Motivo.** Tudo usava o MESMO `QThreadPool.globalInstance()`: as
+miniaturas da grade E a carga do visualizador 3D. Numa biblioteca de 111
+mil assets a abertura agenda centenas de miniaturas de uma vez (564 na
+sessão do Rafael, cada HDRI 4K levando ~0,76s), e a carga do visualizador
+entrava no fim dessa fila — a janela abria em "Carregando…" e podia ficar
+dezenas de segundos assim. Foi metade do relato "cliquei duas vezes num
+.blend e num .hdr e não abre nada" (a outra metade era a janela nascer
+minimizada, Fatia 93).
+
+Pior: `ThumbnailPipeline.shutdown()` chamava `clear()` no pool GLOBAL,
+descartando de quebra o que o visualizador tivesse pendente.
+
+**Regra que fica:** nada que o usuário está esperando na tela divide fila
+com trabalho de fundo.
+
+- `ui/pools.py`: pool interativo de 2 threads (visualizador e prévia).
+- `ThumbnailPipeline`: pool próprio, metade dos núcleos, e cada thread
+  rebaixada uma vez com `nice +5` — mesmo remédio dos processos da
+  varredura (Fatia 91).
