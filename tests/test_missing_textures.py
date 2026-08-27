@@ -105,7 +105,7 @@ def test_detecta_textura_quebrada_de_verdade(dir_visivel_ao_flatpak):
         "img.use_fake_user = True;"
         f"bpy.ops.wm.save_as_mainfile(filepath=r'{blend}')"
     )
-    subprocess.run([*cmd, "-b", "--python-expr", criar],
+    subprocess.run([*cmd, "-b", "--factory-startup", "--python-expr", criar],
                    capture_output=True, timeout=120, check=False)
     assert blend.is_file(), "não consegui criar o .blend de teste"
 
@@ -123,7 +123,7 @@ def test_blend_sem_textura_quebrada_devolve_lista_vazia(dir_visivel_ao_flatpak):
     cmd = blender_command()
     blend = dir_visivel_ao_flatpak / "limpo.blend"
     criar = f"import bpy; bpy.ops.wm.save_as_mainfile(filepath=r'{blend}')"
-    subprocess.run([*cmd, "-b", "--python-expr", criar],
+    subprocess.run([*cmd, "-b", "--factory-startup", "--python-expr", criar],
                    capture_output=True, timeout=120, check=False)
     assert blend.is_file()
 

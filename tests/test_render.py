@@ -92,6 +92,21 @@ def test_script_de_render_existe():
     assert render.script_path().is_absolute()  # o Flatpak resolve /app se relativo
 
 
+def test_script_pede_cycles_e_fundo_transparente():
+    """Guarda rápida, sem precisar do Blender (os testes de integração real,
+    mais abaixo, já provam o COMPORTAMENTO — este é só pra pegar rápido uma
+    regressão óbvia de quem edite o texto do script sem querer).
+
+    Fatia 102: Rafael pediu explicitamente Cycles em vez de EEVEE, e fundo
+    transparente em vez de fundo colorido sólido.
+    """
+    texto = render.script_path().read_text(encoding="utf-8")
+    assert 'cena.render.engine = "CYCLES"' in texto
+    assert "cena.render.film_transparent = True" in texto
+    assert '"BLENDER_EEVEE"' not in texto
+    assert "film_transparent = False" not in texto
+
+
 def test_lista_so_modelos_sem_capa(env):
     conn, lib_id, root, tmp_path = env
     pendentes = render.models_without_cover(conn, lib_id, root)
@@ -215,11 +230,20 @@ def dir_visivel_ao_flatpak():
 @pytest.mark.skipif(render.blender_command() is None,
                     reason="Blender não instalado nesta máquina")
 def test_render_de_verdade_gera_png(dir_visivel_ao_flatpak):
-    """Integração real: cria um .blend com um cubo e renderiza a capa."""
+    """Integração real: cria um .blend com um cubo e renderiza a capa.
+
+    `--factory-startup` ao CRIAR o cubo também (achado escrevendo a Fatia
+    102): sem ela, o Blender fica pendurado ao encerrar em modo headless
+    nesta máquina — os add-ons do Rafael atrapalham o `atexit`. Sem
+    `--factory-startup` medi 40s de travamento até o timeout matar o
+    processo; com ela, sai limpo. `render_thumbnail()` (o que é testado de
+    verdade) já usava a flag desde sempre — só faltava aqui, no comando que
+    PREPARA o teste.
+    """
     cmd = render.blender_command()
     blend = dir_visivel_ao_flatpak / "cubo.blend"
     criar = f"import bpy; bpy.ops.wm.save_as_mainfile(filepath=r'{blend}')"
-    subprocess.run([*cmd, "-b", "--python-expr", criar],
+    subprocess.run([*cmd, "-b", "--factory-startup", "--python-expr", criar],
                    capture_output=True, timeout=300, check=False)
     assert blend.is_file(), "não consegui criar o .blend de teste"
 
@@ -232,41 +256,76 @@ def test_render_de_verdade_gera_png(dir_visivel_ao_flatpak):
 
 @pytest.mark.skipif(render.blender_command() is None,
                     reason="Blender não instalado nesta máquina")
-def test_cena_configuravel_muda_o_render_de_verdade(dir_visivel_ao_flatpak):
-    """Prova ponta a ponta (Fatia 38) que bg_color/sun_energy realmente
-    chegam no shader — não só que o argumento foi passado no comando.
-
-    Comparação DIFERENCIAL (dois renders, cores bem diferentes) em vez de
-    comparar contra um valor absoluto exato: o Blender aplica view
-    transform (AgX por padrão desde a 4.x) por cima da cor linear, então
-    prever o pixel final exato exigiria reimplementar essa curva aqui. O
-    que importa provar é que o parâmetro muda o resultado — a curva de
-    tonemapping é problema do Blender, não desta integração.
-    """
+def test_fundo_sai_transparente_de_verdade(dir_visivel_ao_flatpak):
+    """Prova ponta a ponta (Fatia 102, Rafael: "teria como deixar o fundo
+    transparente?"): o canto da imagem — garantidamente fora do objeto,
+    nunca alcançado por ele (MARGEM=1.05 é apertado, mas um círculo
+    inscrito num quadrado nunca chega no canto) — tem de ter alfa ZERO."""
     from PIL import Image
 
     cmd = render.blender_command()
     blend = dir_visivel_ao_flatpak / "cubo.blend"
     criar = f"import bpy; bpy.ops.wm.save_as_mainfile(filepath=r'{blend}')"
-    subprocess.run([*cmd, "-b", "--python-expr", criar],
+    subprocess.run([*cmd, "-b", "--factory-startup", "--python-expr", criar],
                    capture_output=True, timeout=300, check=False)
     assert blend.is_file(), "não consegui criar o .blend de teste"
 
-    def _pixel_de_fundo(bg_color) -> tuple[int, int, int]:
-        destino = dir_visivel_ao_flatpak / f"capa_{bg_color[0]}.png"
+    destino = dir_visivel_ao_flatpak / "capa.png"
+    resultado = render.render_thumbnail(blend, destino, size=64)
+    assert resultado.ok, resultado.erro
+
+    img = Image.open(destino)
+    assert img.mode == "RGBA", f"PNG sem canal alfa (modo {img.mode})"
+    r, g, b, a = img.getpixel((0, 0))
+    assert a == 0, f"canto devia ser transparente, alfa={a}"
+
+
+@pytest.mark.skipif(render.blender_command() is None,
+                    reason="Blender não instalado nesta máquina")
+def test_sun_energy_muda_o_brilho_do_objeto_de_verdade(dir_visivel_ao_flatpak):
+    """Prova ponta a ponta que `sun_energy` (a intensidade da luz KEY do
+    3-point lighting desde a Fatia 102) realmente chega no shader — não só
+    que o argumento foi passado no comando.
+
+    Antes desta fatia `sun_energy` iluminava o fundo visível e este teste
+    lia o pixel do CANTO; com o fundo transparente isso não serve mais
+    (alfa=0 ali sempre, não importa a luz). Agora mede o CENTRO — onde o
+    cubo está — e confirma que uma key mais forte deixa o objeto mais
+    claro. Comparação DIFERENCIAL, não contra um valor absoluto: o Blender
+    aplica view transform (AgX) por cima da cor linear, então prever o
+    pixel exato exigiria reimplementar essa curva aqui.
+    """
+    from PIL import Image
+
+    cmd = render.blender_command()
+    blend = dir_visivel_ao_flatpak / "cubo_sem_luz.blend"
+    # Remove a luz padrão da cena de abertura do Blender ANTES de salvar —
+    # sem isso o .blend "já tem luz própria" e o script (corretamente)
+    # respeita ela em vez de montar o 3-point lighting, e `sun_energy` (que
+    # só afeta a KEY do 3-point) nunca chegaria a valer nada aqui.
+    criar = (
+        "import bpy; "
+        "[bpy.data.objects.remove(o, do_unlink=True) for o in list(bpy.data.objects) "
+        "if o.type == 'LIGHT']; "
+        f"bpy.ops.wm.save_as_mainfile(filepath=r'{blend}')"
+    )
+    subprocess.run([*cmd, "-b", "--factory-startup", "--python-expr", criar],
+                   capture_output=True, timeout=300, check=False)
+    assert blend.is_file(), "não consegui criar o .blend de teste"
+
+    def _brilho_do_objeto(sun_energy: float) -> int:
+        destino = dir_visivel_ao_flatpak / f"capa_{sun_energy}.png"
         resultado = render.render_thumbnail(
-            blend, destino, size=64, bg_color=bg_color, bg_strength=3.0)
+            blend, destino, size=64, sun_energy=sun_energy)
         assert resultado.ok, resultado.erro
         img = Image.open(destino).convert("RGB")
-        # canto: fora da esfera que engloba o cubo (MARGEM=1.05 é
-        # apertado, mas um círculo inscrito num quadrado nunca alcança o
-        # canto) — garantidamente fundo, nunca o objeto renderizado.
-        return img.getpixel((0, 0))
+        centro = img.size[0] // 2, img.size[1] // 2
+        return sum(img.getpixel(centro))  # soma dos 3 canais = brilho
 
-    vermelho = _pixel_de_fundo((0.9, 0.05, 0.05))
-    azul = _pixel_de_fundo((0.05, 0.05, 0.9))
+    escuro = _brilho_do_objeto(0.3)
+    claro = _brilho_do_objeto(8.0)
 
-    assert vermelho != azul, "mudar bg_color não mudou nada no PNG renderizado"
-    # o canal dominante de cada um bate com a cor pedida
-    assert vermelho[0] > vermelho[2]  # vermelho > azul no render "vermelho"
-    assert azul[2] > azul[0]          # azul > vermelho no render "azul"
+    assert claro > escuro, (
+        f"key mais forte não deixou o objeto mais claro (escuro={escuro}, "
+        f"claro={claro})"
+    )
