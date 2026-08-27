@@ -84,6 +84,28 @@ _SUFIXO_SEQUENCIA = re.compile(r"[-_](?:preview_?)?v?\d+$", re.IGNORECASE)
 # Pasta de prévias que os packs criam ao lado do modelo (Chaos Cosmos).
 _PASTA_PREVIEWS = "previews"
 
+# Marcador de conversão colado no NOME DO MODELO — achado real: Poliigon
+# entrega 'ArmchairAbbraccioReplica001_preview1.png', mas o .blend
+# convertido virou 'ArmchairAbbraccioReplica001_Blender_Cycles.blend'
+# (137 casos) ou '..._Cycles.blend' (132 casos). Diferente do sufixo de
+# sequência: aqui é seguro normalizar o nome do MODELO, porque a lista é
+# fechada (palavras específicas do conversor, não um número qualquer que
+# poderia ser catálogo de verdade). Casos tipo 'Chair_Cycles.blend' e
+# 'Stool_Cycles.blend' na MESMA pasta (2 achados) continuam ambíguos de
+# propósito — o "Chair"/"Stool" no meio não é marcador de conversão, é
+# parte do nome, e a proteção de "único nos dois sentidos" da Fatia 81
+# já lida com isso sem precisar de regra nova.
+_SUFIXO_CONVERSAO = re.compile(r"_(?:blender_)?cycles$", re.IGNORECASE)
+
+
+def _bases_do_modelo(stem: str) -> list[str]:
+    """Nomes que este MODELO pode ser encontrado por — o stem original,
+    mais o stem sem o marcador de conversão, se houver um."""
+    sem_conversao = _SUFIXO_CONVERSAO.sub("", stem)
+    if sem_conversao != stem and sem_conversao:
+        return [stem, sem_conversao]
+    return [stem]
+
 
 def _bases_da_imagem(stem: str) -> list[str]:
     """Nomes de modelo que esta imagem PODE estar servindo.
@@ -296,18 +318,24 @@ def attach_stem_match_previews(conn: sqlite3.Connection, library_id: int,
         (library_id, *OWNER_TYPES),
     ):
         rel = row["rel_path"]
-        modelos.setdefault(Path(rel).stem.lower(), []).append((row["id"], rel))
+        # Registrado sob o nome cru E sob o nome sem marcador de conversão
+        # (se houver): a imagem pode bater com qualquer um dos dois.
+        for chave in _bases_do_modelo(Path(rel).stem.lower()):
+            modelos.setdefault(chave, []).append((row["id"], rel))
 
     if not modelos:
         return 0
 
     # Quantos modelos existem em cada pasta — a regra de PASTA (abaixo) só
     # vale onde há exatamente UM, senão não dá pra saber de quem é a prévia.
-    modelos_por_pasta: dict[str, int] = {}
+    # `set()` primeiro: um modelo com marcador de conversão aparece em DUAS
+    # entradas de `modelos` (nome cru + normalizado) — sem isso, contaria
+    # a mesma pasta 2x e uma pasta de 1 modelo só pareceria ter 2.
+    ids_por_pasta: dict[str, set[int]] = {}
     for lista in modelos.values():
-        for _aid, rel in lista:
-            pasta = _dir_of(rel)
-            modelos_por_pasta[pasta] = modelos_por_pasta.get(pasta, 0) + 1
+        for aid, rel in lista:
+            ids_por_pasta.setdefault(_dir_of(rel), set()).add(aid)
+    modelos_por_pasta = {pasta: len(ids) for pasta, ids in ids_por_pasta.items()}
 
     # Candidatas por modelo: chave = nome do modelo, valor = lista de
     # (rel_path, asset_id). Duas formas de virar candidata:
