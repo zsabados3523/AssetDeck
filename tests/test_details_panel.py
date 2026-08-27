@@ -214,3 +214,52 @@ def test_o_texto_completo_continua_alcancavel(painel):
 
     assert painel.name.text() == longo
     assert painel.name.toolTip() == longo
+
+
+def test_abrir_arquivo_que_sumiu_avisa_em_vez_de_nao_fazer_nada(qapp, tmp_path, monkeypatch):
+    """Rafael: "não consigo abrir nem abrir o local deles".
+
+    O botão chamava `openUrl` num caminho que não existe mais: o sistema
+    recusa, a função devolve False, e ninguém olhava. Nada acontecia na tela
+    e nada ia pro log — o tipo de falha silenciosa que as regras do projeto
+    proíbem.
+    """
+    from PySide6.QtGui import QDesktopServices
+
+    from assetdeck.ui.details_panel import DetailsPanel
+
+    monkeypatch.setattr(QDesktopServices, "openUrl",
+                        staticmethod(lambda *a: pytest.fail(
+                            "não devia nem tentar abrir um arquivo inexistente")))
+    painel = DetailsPanel(tmp_path)
+    painel._current = tmp_path / "sumiu.blend"
+
+    avisos = []
+    painel.aviso.connect(avisos.append)
+    painel._open_file()
+
+    assert len(avisos) == 1
+    assert "não existe mais no disco" in avisos[0]
+    assert "Relocalizar" in avisos[0], (
+        "o aviso precisa dizer o que fazer a respeito, não só que deu errado")
+
+
+def test_abrir_arquivo_que_existe_continua_abrindo(qapp, tmp_path, monkeypatch):
+    from PySide6.QtGui import QDesktopServices
+
+    from assetdeck.ui.details_panel import DetailsPanel
+
+    alvo = tmp_path / "existe.png"
+    alvo.write_bytes(b"x")
+    abertos = []
+    monkeypatch.setattr(QDesktopServices, "openUrl",
+                        staticmethod(lambda url: abertos.append(url) or True))
+    painel = DetailsPanel(tmp_path)
+    painel._current = alvo
+
+    avisos = []
+    painel.aviso.connect(avisos.append)
+    painel._open_file()
+
+    assert len(abertos) == 1
+    assert avisos == []

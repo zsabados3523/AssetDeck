@@ -194,6 +194,7 @@ class DetailsPanel(QWidget):
     property_value_changed = Signal(int, int, object)  # asset_id, property_id, valor
     manage_properties_requested = Signal()  # botão 'Gerenciar propriedades…'
     check_textures_requested = Signal(int, str)  # asset_id, caminho absoluto (Fatia 40)
+    aviso = Signal(str)                   # recado pro rodapé (Fatia 100)
 
     def __init__(self, library_root: Path, parent=None) -> None:
         super().__init__(parent)
@@ -722,13 +723,31 @@ class DetailsPanel(QWidget):
 
     # ---- ações ----
 
+    def _abrir_no_sistema(self, alvo: Path, oque: str) -> None:
+        """Abre `alvo` no gerenciador do sistema, ou DIZ por que não deu.
+
+        Antes isto era um `openUrl` seco (Fatia 100). Quando o arquivo tinha
+        sumido do disco, o botão simplesmente não fazia nada — sem aviso, sem
+        log, sem pista. Rafael: "não consigo abrir nem abrir o local deles".
+        Falha silenciosa é justamente o que as regras do projeto proíbem.
+        """
+        if not alvo.exists():
+            recado = (f"{oque} não existe mais no disco: {alvo}. "
+                      "Use Manutenção → Relocalizar se ele só mudou de pasta.")
+            log.warning("Tentativa de abrir %s inexistente: %s", oque, alvo)
+            self.aviso.emit(recado)
+            return
+        if not QDesktopServices.openUrl(QUrl.fromLocalFile(str(alvo))):
+            log.error("O sistema recusou abrir %s: %s", oque, alvo)
+            self.aviso.emit(f"O sistema não conseguiu abrir {alvo}.")
+
     def _open_folder(self) -> None:
         if self._current:
-            QDesktopServices.openUrl(QUrl.fromLocalFile(str(self._current.parent)))
+            self._abrir_no_sistema(self._current.parent, "a pasta")
 
     def _open_file(self) -> None:
         if self._current:
-            QDesktopServices.openUrl(QUrl.fromLocalFile(str(self._current)))
+            self._abrir_no_sistema(self._current, "o arquivo")
 
     def _request_check_textures(self) -> None:
         if self._current and self._current_asset_id is not None:

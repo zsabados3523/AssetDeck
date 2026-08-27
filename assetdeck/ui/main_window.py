@@ -290,6 +290,8 @@ class MainWindow(QMainWindow):
         self.details.preview_remove_requested.connect(self._on_preview_remove)
         self.details.property_value_changed.connect(self._on_property_value_changed)
         self.details.manage_properties_requested.connect(self._manage_properties)
+        self.details.aviso.connect(
+            lambda recado: self.statusBar().showMessage(recado, 8000))
         self.details.check_textures_requested.connect(self._check_textures)
 
         # Caminho navegável acima da grade (Fatia 28, estilo Connecter): a
@@ -564,6 +566,7 @@ class MainWindow(QMainWindow):
             min_resolution=self.res_filter.value(),
             include_hidden=self.hidden_check.isChecked(),
             include_dependencies=self.deps_check.isChecked(),
+            include_missing=self.missing_check.isChecked(),
             collection_id=self.collections.current_collection_id(),
             dominant_color=self.color_filter.value(),
             sort_by=sort_by, sort_dir=sort_dir,
@@ -1269,6 +1272,7 @@ class MainWindow(QMainWindow):
         )
         self.hidden_check.setChecked(bool(query.get("include_hidden")))
         self.deps_check.setChecked(bool(query.get("include_dependencies")))
+        self.missing_check.setChecked(bool(query.get("include_missing")))
         self.tags.select(query.get("tag_id"))
         self.collections.select(query.get("collection_id"))
         # Por último: `_go_to_dir` já reaplica os filtros com tudo no lugar,
@@ -1394,6 +1398,16 @@ class MainWindow(QMainWindow):
         selecionados = len(self._selected_asset_ids())
         if selecionados > 1:
             texto += f" · {selecionados} selecionados"
+
+        # Sumido some da grade, mas NUNCA em silêncio (Fatia 100). A
+        # biblioteca do Rafael mora num disco externo: se ele não montar, a
+        # varredura marca tudo como sumido, e sem este aviso ele abriria o
+        # app com a grade vazia e nenhuma explicação.
+        if not self.missing_check.isChecked():
+            sumidos = assets_repo.count_missing(self._conn,
+                                                library_id=self._library_id)
+            if sumidos:
+                texto += f" · {sumidos} sumidos"
         self.footer_count.setText(texto)
 
         # O mesmo número aparece de propósito no cabeçalho da lista: o rodapé
