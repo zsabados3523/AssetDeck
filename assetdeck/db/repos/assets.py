@@ -85,6 +85,7 @@ def _build_where(
     min_resolution: int | None = None,
     include_hidden: bool = False,
     include_dependencies: bool = True,
+    include_missing: bool = False,
     collection_id: int | None = None,
     category_filters: list[dict] | None = None,
     dominant_color: str | None = None,
@@ -111,6 +112,13 @@ def _build_where(
         sql += " AND a.hidden = 0"
     if not include_dependencies:
         sql += " AND a.is_dependency = 0"
+    if not include_missing:
+        # Fora da grade por padrão (Fatia 100). A varredura já marcava o
+        # arquivo sumido, mas ninguém usava a marca: o card ficava idêntico
+        # a um asset saudável e "Abrir" não fazia nada, sem dizer por quê.
+        # Rafael: "por que fica aparecendo .blends que sumiram? não consigo
+        # abrir nem abrir o local deles". Eram 168 na biblioteca dele.
+        sql += " AND f.missing_since IS NULL"
 
     match = _fts_query(search)
     substr_tokens = _substring_tokens(search)
@@ -209,6 +217,7 @@ def list_for_grid(
     min_resolution: int | None = None,
     include_hidden: bool = False,
     include_dependencies: bool = True,
+    include_missing: bool = False,
     collection_id: int | None = None,
     category_filters: list[dict] | None = None,
     dominant_color: str | None = None,
@@ -265,6 +274,7 @@ def list_for_grid(
         include_subdirs=include_subdirs, tag_id=tag_id, min_rating=min_rating,
         starred_only=starred_only, min_resolution=min_resolution,
         include_hidden=include_hidden, include_dependencies=include_dependencies,
+        include_missing=include_missing,
         collection_id=collection_id, category_filters=category_filters,
         dominant_color=dominant_color, library_id=library_id,
     )
@@ -286,6 +296,25 @@ def list_for_grid(
                 r["name"] = r["rel_path"].rsplit("/", 1)[-1].rsplit(".", 1)[0]
                 r["cover_path"] = None
     return rows
+
+
+def count_missing(conn: sqlite3.Connection, library_id: int | None = None) -> int:
+    """Quantos assets estão com o arquivo principal sumido do disco.
+
+    Existe pro rodapé avisar (Fatia 100). Some da grade sem dizer nada seria
+    pior que o problema original: a biblioteca do Rafael mora num disco
+    externo, e se ele não montar a varredura marca TUDO como sumido — sem
+    este aviso, ele abriria o app com a grade vazia e nenhuma explicação.
+    """
+    sql = """SELECT COUNT(*) AS n FROM assets a
+             JOIN files f ON f.asset_id = a.id AND f.is_primary = 1
+             WHERE a.deleted_at IS NULL AND f.deleted_at IS NULL
+               AND f.missing_since IS NOT NULL"""
+    params: list = []
+    if library_id is not None:
+        sql += " AND a.library_id = ?"
+        params.append(library_id)
+    return conn.execute(sql, params).fetchone()["n"]
 
 
 def count_for_library(conn: sqlite3.Connection, library_id: int) -> int:
