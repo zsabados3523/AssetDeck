@@ -3784,3 +3784,59 @@ contexto + 1 controle negativo de que os testes pegam o defeito de
 verdade). `pytest` nos três arquivos afetados: 83 passados; as 2 falhas
 restantes são as mesmas de ambiente já registradas (Blender headless não
 encerra nesta máquina).
+
+### ☐ Fatia 102 — capa: fundo transparente + 3-point lighting + Cycles
+
+Pedido do Rafael: "teria como deixar o fundo transparente? e fazer um setup
+padrão de 3 luzes (3 light setup)? acho que ficaria melhor e daria pra ver
+melhor o asset." — seguido de "faça questão de ser renderizado em cycles
+também."
+
+**O que mudou** (`assetdeck/blender/scripts/render_thumb.py`):
+
+- `film_transparent = True` + `color_mode = "RGBA"`: o fundo sólido
+  cinza-azulado (que existia desde sempre) deu lugar a um PNG com canal
+  alfa de verdade.
+- Motor **Cycles** em vez de EEVEE (pedido explícito), com `samples = 64` +
+  `use_denoising = True` — testado em 4 modelos reais da testlib (cadeira
+  em veludo, árvore de 137MB, metal escovado) sem ruído perceptível, e
+  bem dentro do tempo: ~2 a 8s por modelo nesta máquina, contra os 180s de
+  limite por item.
+- **3-point lighting** (key/fill/rim), só quando o `.blend` NÃO traz luz
+  própria — mesmo respeito que a câmera automática já tinha pelo trabalho
+  do autor do asset. As três são luzes Sun (direcionais, sem precisar
+  calcular posição/distância), calculadas a partir da MESMA direção da
+  câmera automática, então a relação luz-câmera fica sempre igual em
+  qualquer modelo da biblioteca:
+  - Key: mesma direção de onde a câmera olha (era o único "sol" de antes).
+  - Fill: girada 130° em torno do eixo vertical, mais rasante, 45% da
+    energia da key — suaviza a sombra sem apagá-la.
+  - Rim: girada 200°, de trás e de cima, 65% da energia da key — separa a
+    silhueta do objeto do fundo (agora transparente).
+
+**Compatibilidade preservada.** A assinatura pública de
+`render_thumbnail()`/`RenderWorker` não mudou — `bg_color`, `bg_strength`
+e `sun_energy` continuam existindo com os MESMOS nomes, só que o
+SIGNIFICADO virou "cor/intensidade da luz ambiente" e "intensidade da
+key", em vez de "cor/força do fundo visível". A tela **Configurações →
+Blender → Cena do render** (`preferences_dialog.py`) teve só os RÓTULOS
+atualizados pra essa nova realidade.
+
+**Achado organicamente, corrigido de quebra (era bug de produção, não só de
+teste):** `missing_textures.py` (o "Verificar texturas" do menu) chamava o
+Blender headless SEM `--factory-startup`. Nesta máquina isso trava o
+processo ao encerrar (os add-ons do Rafael atrapalham o `atexit`) até
+estourar o timeout — o mesmo sintoma das "falhas de ambiente" que eu vinha
+registrando desde a Fatia 90 achando que era inevitável. `render.py` já
+usava a flag nas duas chamadas dele; só faltava aqui. Os testes de
+integração real de `test_render.py`/`test_missing_textures.py`, que
+CRIAVAM o `.blend` de teste sem a flag também, tiveram o mesmo ajuste — e
+com isso passaram a rodar de verdade nesta máquina, em vez de ficarem
+pra sempre na lista de "falhas de ambiente conhecidas".
+
+**Testado:** 3 testes de integração real contra o Blender (fundo com alfa
+zero no canto; key mais forte deixa o objeto mais claro, medido num
+`.blend` sem luz própria pra forçar o 3-point; criação do `.blend` de
+teste não trava mais) + 1 guarda estática rápida (Cycles/transparência
+presentes no texto do script, EEVEE/opaco ausentes). `pytest` nos quatro
+arquivos afetados: 35 passados.

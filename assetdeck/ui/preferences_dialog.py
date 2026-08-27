@@ -54,8 +54,13 @@ class PreferencesDialog(QDialog):
     tudo que era liga/desliga simples — ponte com o Blender, porta, backups,
     previews automáticos — saiu daqui e virou LINHA na janela de
     Configurações, onde aplica na hora. Sobrou o que de fato é um formulário
-    de vários campos que só faz sentido confirmar junto: cor do fundo, força
-    do fundo e intensidade do sol. Por isso continua modal, com OK/Cancelar.
+    de vários campos que só faz sentido confirmar junto: cor da luz
+    ambiente, intensidade dela e intensidade da luz principal.
+
+    Os TRÊS campos continuam sendo os mesmos de sempre (`render_bg_color`,
+    `render_bg_strength`, `render_sun_energy` no config) — só o SIGNIFICADO
+    mudou na Fatia 102 (fundo virou transparente; a cena virou um 3-point
+    lighting). Continua modal, com OK/Cancelar.
     """
 
     def __init__(self, parent=None) -> None:
@@ -69,7 +74,7 @@ class PreferencesDialog(QDialog):
         self._render_bg_color = self._cfg.get("render_bg_color", "#959599")
         self.render_bg_color_btn = QPushButton("Escolher…")
         self.render_bg_color_btn.setIcon(_amostra_de_cor(self._render_bg_color))
-        self.render_bg_color_btn.clicked.connect(self._escolher_cor_fundo)
+        self.render_bg_color_btn.clicked.connect(self._escolher_cor_luz_ambiente)
 
         self.render_bg_strength = QDoubleSpinBox()
         self.render_bg_strength.setRange(0.1, 10.0)
@@ -95,15 +100,17 @@ class PreferencesDialog(QDialog):
         layout = QFormLayout(self)
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(10)
-        layout.addRow("Cor do fundo do render:", self.render_bg_color_btn)
-        layout.addRow("Força do fundo:", self.render_bg_strength)
-        layout.addRow("Intensidade do sol:", self.render_sun_energy)
+        # Fatia 102: o fundo é sempre transparente agora — estes três
+        # campos afinam a ILUMINAÇÃO, não mais um fundo visível.
+        layout.addRow("Cor da luz ambiente:", self.render_bg_color_btn)
+        layout.addRow("Intensidade da luz ambiente:", self.render_bg_strength)
+        layout.addRow("Intensidade da luz principal:", self.render_sun_energy)
         layout.addRow(aviso)
         layout.addRow(botoes)
 
-    def _escolher_cor_fundo(self) -> None:
+    def _escolher_cor_luz_ambiente(self) -> None:
         cor = QColorDialog.getColor(QColor(self._render_bg_color), self,
-                                    "Cor do fundo do render")
+                                    "Cor da luz ambiente")
         if cor.isValid():
             self._render_bg_color = cor.name()
             self.render_bg_color_btn.setIcon(_amostra_de_cor(self._render_bg_color))
