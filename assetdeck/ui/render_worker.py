@@ -22,12 +22,15 @@ class RenderWorker(QObject):
     failed = Signal(str)
 
     def __init__(self, db_path: Path, library_root: Path, previews_dir: Path,
-                 size: int = 512) -> None:
+                 size: int = 512, asset_ids: list[int] | None = None) -> None:
         super().__init__()
         self._db_path = db_path
         self._library_root = library_root
         self._previews_dir = previews_dir
         self._size = size
+        # Restringe a fila a um subconjunto (Fatia 101) — `None` é "todos os
+        # modelos sem capa", igual sempre foi.
+        self._asset_ids = asset_ids
         self._stop = threading.Event()
 
     def request_stop(self) -> None:
@@ -52,7 +55,8 @@ class RenderWorker(QObject):
             conn = connect(self._db_path)
             try:
                 lib_id = libraries_repo.get_or_create(conn, self._library_root)
-                pendentes = models_without_cover(conn, lib_id, self._library_root)
+                pendentes = models_without_cover(
+                    conn, lib_id, self._library_root, asset_ids=self._asset_ids)
                 total = len(pendentes)
                 if not total:
                     self.finished.emit(0, 0)
@@ -102,12 +106,13 @@ class RenderController(QObject):
     def running(self) -> bool:
         return self._thread is not None and self._thread.isRunning()
 
-    def start(self, on_progress, on_finished, on_failed) -> None:
+    def start(self, on_progress, on_finished, on_failed,
+              asset_ids: list[int] | None = None) -> None:
         if self.running:
             return
         self._thread = QThread()
         self._worker = RenderWorker(self._db_path, self._library_root,
-                                    self._previews_dir)
+                                    self._previews_dir, asset_ids=asset_ids)
         self._worker.moveToThread(self._thread)
         self._thread.started.connect(self._worker.run)
         self._worker.progress.connect(on_progress)

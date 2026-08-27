@@ -1574,14 +1574,27 @@ class MainWindow(QMainWindow):
             self.setWindowState(estado_antes)
 
     def _grid_menu(self, pos) -> None:
-        from PySide6.QtWidgets import QMenu
-
         selecionados = [
             self.model.row_at(i) for i in self.grid.selectionModel().selectedIndexes()
         ]
         selecionados = [r for r in selecionados if r is not None]
         if not selecionados:
             return
+        menu = self._montar_menu_grid(selecionados)
+        menu.exec(self.grid.mapToGlobal(pos))
+
+    def _montar_menu_grid(self, selecionados: list[dict]):
+        """Monta o menu de contexto da grade SEM executá-lo.
+
+        Separado de `_grid_menu` (Fatia 101) porque `QMenu.exec()` é
+        bloqueante e, sendo um método do Qt em C++, não dá pra interceptar
+        por monkeypatch em teste (tentado — o processo trava esperando um
+        evento de fechamento que nunca chega, mesmo offscreen). Com o menu
+        MONTADO como valor de retorno, o teste inspeciona as ações sem
+        precisar abrir nada de verdade.
+        """
+        from PySide6.QtWidgets import QMenu
+
         ids = sorted({r["id"] for r in selecionados})
         menu = QMenu(self)
 
@@ -1611,6 +1624,29 @@ class MainWindow(QMainWindow):
                 lambda: self._remove_from_current_collection(ids),
             )
 
+        # Gerar capa (Fatia 101, pedido do Rafael: "gerar preview porém
+        # somente de alguns assets"). Candidato = modelo .blend, presente no
+        # disco, sem capa hoje — os mesmos três critérios de
+        # `models_without_cover`, checados aqui em cima dos dados que a
+        # grade JÁ tem (evita uma consulta extra só pra decidir se o item de
+        # menu aparece). A ação some quando ninguém qualifica, em vez de
+        # aparecer desabilitada sem dizer por quê.
+        sem_capa = [
+            r for r in selecionados
+            if r["asset_type"] in ("model", "scene")
+            and r["rel_path"].lower().endswith(".blend")
+            and not r["cover_path"]
+            and r["missing_since"] is None
+        ]
+        if sem_capa:
+            menu.addSeparator()
+            n = len(sem_capa)
+            rotulo = f"Gerar capa ({n})…" if n > 1 else "Gerar capa…"
+            menu.addAction(
+                rotulo,
+                lambda: self._render_covers([r["id"] for r in sem_capa]),
+            )
+
         # Batch rename (Fatia 23) — a única exceção ao somente-leitura
         menu.addSeparator()
         menu.addAction("Renomear em lote…", lambda: self._batch_rename_selected(ids))
@@ -1625,7 +1661,7 @@ class MainWindow(QMainWindow):
             if len(selecionados) == 1 and atual["files_count"] > 1:
                 act = menu.addAction(f"Desagrupar ({atual['files_count']} arquivos)")
                 act.triggered.connect(lambda: self._ungroup(atual))
-        menu.exec(self.grid.mapToGlobal(pos))
+        return menu
 
     def _unhide(self, asset_ids: list[int]) -> None:
         for aid in asset_ids:
@@ -1724,12 +1760,28 @@ class MainWindow(QMainWindow):
     # ---- render de capas em lote ----
 
     def _start_render(self) -> None:
+        """Botão "Renderizar…" de Configurações — SEM parâmetro extra de
+        propósito: é o `clicked` de um `QPushButton` que chama isto direto
+        (`settings_window.py`), e o Qt casaria um primeiro parâmetro
+        posicional com o `bool` do sinal, não com uma lista de ids."""
+        self._render_covers(None)
+
+    def _render_covers(self, asset_ids: list[int] | None) -> None:
+        """Gera capa dos modelos `.blend` sem capa — todos (`None`, o botão
+        de Configurações) ou só o SUBCONJUNTO selecionado na grade (Fatia
+        101, pedido do Rafael: "gerar preview porém somente de alguns
+        assets", via botão direito)."""
         from PySide6.QtWidgets import QMessageBox
 
         from assetdeck.blender.render import blender_command, models_without_cover
         from assetdeck.db.repos import libraries as libraries_repo
 
         if self._render.running:
+            QMessageBox.information(
+                self, "Já tem um render em andamento",
+                "Espere a fila atual terminar (ou clique em Parar) antes de "
+                "pedir outra.",
+            )
             return
         if blender_command() is None:
             QMessageBox.warning(
@@ -1741,19 +1793,29 @@ class MainWindow(QMainWindow):
             return
 
         lib_id = libraries_repo.get_or_create(self._conn, self._library_root)
-        pendentes = models_without_cover(self._conn, lib_id, self._library_root)
+        pendentes = models_without_cover(self._conn, lib_id, self._library_root,
+                                         asset_ids=asset_ids)
         if not pendentes:
-            QMessageBox.information(self, "Nada a fazer",
-                                    "Todos os modelos .blend já têm capa.")
+            recado = ("Nenhum dos assets selecionados é modelo .blend sem "
+                      "capa." if asset_ids is not None else
+                      "Todos os modelos .blend já têm capa.")
+            QMessageBox.information(self, "Nada a fazer", recado)
             return
 
-        resposta = QMessageBox.question(
-            self, "Gerar capas dos modelos",
-            f"{len(pendentes)} modelo(s) sem capa serão renderizados pelo "
-            "Blender, um por vez, em segundo plano.\n\n"
-            "Leva alguns segundos por modelo e você pode continuar usando o "
-            "AssetDeck normalmente. Começar?",
-        )
+        if asset_ids is not None:
+            pergunta = (
+                f"{len(pendentes)} modelo(s) selecionado(s) sem capa serão "
+                "renderizados pelo Blender, um por vez, em segundo "
+                "plano.\n\nComeçar?"
+            )
+        else:
+            pergunta = (
+                f"{len(pendentes)} modelo(s) sem capa serão renderizados pelo "
+                "Blender, um por vez, em segundo plano.\n\n"
+                "Leva alguns segundos por modelo e você pode continuar usando o "
+                "AssetDeck normalmente. Começar?"
+            )
+        resposta = QMessageBox.question(self, "Gerar capas dos modelos", pergunta)
         if resposta != QMessageBox.StandardButton.Yes:
             return
 
@@ -1762,7 +1824,7 @@ class MainWindow(QMainWindow):
         self.progress.setVisible(True)
         self.progress.setRange(0, len(pendentes))
         self._render.start(self._on_render_progress, self._on_render_finished,
-                           self._on_render_failed)
+                           self._on_render_failed, asset_ids=asset_ids)
 
     def _stop_render(self) -> None:
         self._render.shutdown()

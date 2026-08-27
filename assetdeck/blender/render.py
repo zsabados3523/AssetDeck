@@ -167,19 +167,30 @@ def export_to_obj(blend_path: Path, dest: Path,
     return RenderResult(False, erro=_motivo(proc))
 
 
-def models_without_cover(conn, library_id: int, library_root: Path) -> list[tuple]:
-    """(asset_id, nome, caminho absoluto) dos modelos que ainda não têm capa."""
-    linhas = conn.execute(
-        """SELECT a.id, a.name, f.rel_path
-           FROM assets a JOIN files f ON f.asset_id = a.id AND f.is_primary = 1
-           WHERE a.library_id = ? AND a.deleted_at IS NULL AND f.deleted_at IS NULL
-             AND a.asset_type IN ('model', 'scene')
-             AND f.missing_since IS NULL
-             AND LOWER(f.rel_path) LIKE '%.blend'
-             AND NOT EXISTS (SELECT 1 FROM previews p
-                             WHERE p.asset_id = a.id AND p.is_cover = 1
-                               AND p.deleted_at IS NULL)
-           ORDER BY a.name COLLATE NOCASE""",
-        (library_id,),
-    ).fetchall()
+def models_without_cover(conn, library_id: int, library_root: Path,
+                         asset_ids: list[int] | None = None) -> list[tuple]:
+    """(asset_id, nome, caminho absoluto) dos modelos que ainda não têm capa.
+
+    `asset_ids` (Fatia 101, pedido do Rafael): restringe a um subconjunto —
+    "gerar preview só de alguns assets", via botão direito na grade, em vez
+    do lote inteiro da biblioteca. `None` continua sendo "todos", igual
+    sempre foi.
+    """
+    sql = """SELECT a.id, a.name, f.rel_path
+             FROM assets a JOIN files f ON f.asset_id = a.id AND f.is_primary = 1
+             WHERE a.library_id = ? AND a.deleted_at IS NULL AND f.deleted_at IS NULL
+               AND a.asset_type IN ('model', 'scene')
+               AND f.missing_since IS NULL
+               AND LOWER(f.rel_path) LIKE '%.blend'
+               AND NOT EXISTS (SELECT 1 FROM previews p
+                               WHERE p.asset_id = a.id AND p.is_cover = 1
+                                 AND p.deleted_at IS NULL)"""
+    params: list = [library_id]
+    if asset_ids is not None:
+        if not asset_ids:
+            return []
+        sql += f" AND a.id IN ({','.join('?' * len(asset_ids))})"
+        params.extend(asset_ids)
+    sql += " ORDER BY a.name COLLATE NOCASE"
+    linhas = conn.execute(sql, params).fetchall()
     return [(r["id"], r["name"], library_root / r["rel_path"]) for r in linhas]
