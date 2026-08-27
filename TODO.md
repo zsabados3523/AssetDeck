@@ -3738,3 +3738,49 @@ a menos), mesmo tempo de consulta; rodapé passa a mostrar "168 sumidos".
 ligado; a contagem existe pro rodapé) usando uma biblioteca de verdade que
 é varrida, tem um arquivo apagado e é varrida de novo. Dois no painel
 (avisar em vez de silenciar; e o caminho feliz continua abrindo).
+
+### ☐ Fatia 101 — gerar capa só de alguns assets, pelo botão direito
+
+Pedido do Rafael: "gostaria de gerar o preview porém somente de alguns
+assets, tem como dar opção de, ao clicar com o botão direito em um
+asset/vários selecionados, se detectar que está sem preview, de gerar
+preview?".
+
+Já existia geração de capa em lote (Configurações → Blender → Renderizar…),
+sempre para TODOS os modelos `.blend` sem capa da biblioteca inteira. Faltava
+o caminho pontual.
+
+**O que mudou:**
+
+- `models_without_cover` ganhou `asset_ids: list[int] | None` — recorte
+  opcional; `None` continua sendo "todos", igual sempre foi. Lista vazia
+  devolve vazio sem consultar o banco.
+- `RenderWorker`/`RenderController` repassam `asset_ids` ponta a ponta até a
+  consulta.
+- Menu de contexto da grade: quando a seleção inclui pelo menos um modelo
+  `.blend` presente no disco e sem capa, aparece **"Gerar capa…"** (ou
+  "Gerar capa (N)…" com mais de um). Mesmos três critérios de
+  `models_without_cover`, checados sobre os dados que a grade já tem — sem
+  consulta extra só pra decidir se o item de menu aparece. A ação SOME
+  quando ninguém qualifica, em vez de aparecer desabilitada sem dizer por
+  quê (textura selecionada, ou modelo que já tem capa, não mostram nada).
+- Clicar dispara a MESMA fila e o MESMO diálogo de confirmação do lote
+  geral, só que restrito aos ids selecionados — sem fila duplicada, sem
+  caminho de código próprio.
+- Pedir um render enquanto outro já está rodando agora avisa ("Espere a
+  fila atual terminar…") em vez de simplesmente não fazer nada — bug
+  pequeno que apareceu ao escrever isto, corrigido de quebra.
+
+**Detalhe técnico que vale registrar:** `_grid_menu` foi separado em
+`_montar_menu_grid` (monta, não executa) + `_grid_menu` (monta e chama
+`.exec()`). Não é só organização — `QMenu.exec()` é um método do Qt em C++,
+e tentei interceptá-lo por monkeypatch pra testar sem abrir o menu de
+verdade: o processo travava esperando um evento de fechamento que nunca
+chega, mesmo em modo offscreen. Com o menu como valor de retorno, o teste
+inspeciona as ações sem precisar simular abertura nenhuma.
+
+**Testado:** 12 testes novos (3 no repositório, 3 na fila, 4 no menu de
+contexto + 1 controle negativo de que os testes pegam o defeito de
+verdade). `pytest` nos três arquivos afetados: 83 passados; as 2 falhas
+restantes são as mesmas de ambiente já registradas (Blender headless não
+encerra nesta máquina).
