@@ -33,7 +33,7 @@ def test_escolher_cor_do_fundo_atualiza_o_estado(qapp, tmp_path, monkeypatch):
 
     monkeypatch.setattr(QColorDialog, "getColor",
                         staticmethod(lambda *a, **k: QColor("#ff8800")))
-    dlg._escolher_cor_fundo()
+    dlg._escolher_cor_luz_ambiente()
 
     assert dlg._render_bg_color == "#ff8800"
 
@@ -49,7 +49,7 @@ def test_cancelar_o_seletor_de_cor_nao_muda_nada(qapp, tmp_path, monkeypatch):
 
     monkeypatch.setattr(QColorDialog, "getColor",
                         staticmethod(lambda *a, **k: QColor()))  # inválida = cancelou
-    dlg._escolher_cor_fundo()
+    dlg._escolher_cor_luz_ambiente()
 
     assert dlg._render_bg_color == original
 

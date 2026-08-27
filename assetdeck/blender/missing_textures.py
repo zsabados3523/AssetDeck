@@ -43,7 +43,12 @@ def list_missing_textures(blend_path: Path,
     if not blend_path.is_file():
         return MissingTexturesResult(False, erro=f"Arquivo não existe: {blend_path}")
 
-    cmd = [*cmd_base, "-b", "-P", str(script_path()), "--", str(blend_path)]
+    # `--factory-startup` (achado escrevendo a Fatia 102): sem ela, o
+    # Blender fica pendurado ao encerrar em modo headless nesta máquina —
+    # os add-ons do Rafael atrapalham o `atexit`. `render.py` já usava a
+    # flag nas duas chamadas dele; esta era a única que ainda não tinha.
+    cmd = [*cmd_base, "-b", "--factory-startup", "-P", str(script_path()),
+          "--", str(blend_path)]
     try:
         proc = subprocess.run(cmd, capture_output=True, text=True,
                               timeout=TIMEOUT_S, check=False)
