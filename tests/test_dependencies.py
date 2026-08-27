@@ -572,6 +572,117 @@ def test_sufixo_Preview_maiusculo_tambem_casa(tmp_path):
     conn.close()
 
 
+def test_marcador_de_conversao_no_modelo_nao_impede_o_casamento(tmp_path):
+    """O Rafael converteu 'ArmchairAbbraccioReplica001.blend' e o
+    conversor colou '_Blender_Cycles' no nome — mas o preview do Poliigon
+    continua sendo 'ArmchairAbbraccioReplica001_preview1.png', sem o
+    marcador. Nome cru bate nome cru (ninguém casa); o QUE bate é o nome
+    do modelo sem '_Blender_Cycles' contra o nome da imagem sem
+    '_preview1' — os dois viram 'armchairabbraccioreplica001'."""
+    root = tmp_path / "lib"
+    pasta = root / "Assentos" / "Poltronas" / "ArmchairAbbraccioReplica001"
+    pasta.mkdir(parents=True)
+    (pasta / "ArmchairAbbraccioReplica001_Blender_Cycles.blend").write_bytes(b"b" * 30)
+    (pasta / "ArmchairAbbraccioReplica001_preview1.png").write_bytes(b"j" * 30)
+
+    conn = connect(tmp_path / "t.db")
+    apply_migrations(conn)
+    lib_id = libraries_repo.get_or_create(conn, root)
+    scan_library(conn, lib_id, root)
+    modelo = _id_por_caminho(
+        conn,
+        "Assentos/Poltronas/ArmchairAbbraccioReplica001/"
+        "ArmchairAbbraccioReplica001_Blender_Cycles.blend")
+
+    attach_stem_match_previews(conn, lib_id, root, tmp_path / "previews")
+
+    galeria = previews_repo.list_for(conn, modelo)
+    assert len(galeria) == 1, "não casou com '_Blender_Cycles' no nome do modelo"
+    assert galeria[0]["is_cover"] == 1
+    conn.close()
+
+
+def test_sufixo_Cycles_puro_tambem_casa(tmp_path):
+    """Variante mais curta, mesmo achado: '_Cycles' sem o 'Blender' no
+    meio — 132 casos reais na biblioteca, contra 137 de '_Blender_Cycles'."""
+    root = tmp_path / "lib"
+    pasta = root / "Assentos" / "Sofa001"
+    pasta.mkdir(parents=True)
+    (pasta / "Sofa001_Cycles.blend").write_bytes(b"b" * 30)
+    (pasta / "Sofa001_preview1.png").write_bytes(b"j" * 30)
+
+    conn = connect(tmp_path / "t.db")
+    apply_migrations(conn)
+    lib_id = libraries_repo.get_or_create(conn, root)
+    scan_library(conn, lib_id, root)
+    modelo = _id_por_caminho(conn, "Assentos/Sofa001/Sofa001_Cycles.blend")
+
+    attach_stem_match_previews(conn, lib_id, root, tmp_path / "previews")
+
+    assert len(previews_repo.list_for(conn, modelo)) == 1
+    conn.close()
+
+
+def test_dois_blends_com_qualificador_antes_de_Cycles_fica_ambiguo(tmp_path):
+    """Achado real: 'ArmchairBrown001_Chair_Cycles.blend' e
+    '..._Stool_Cycles.blend' na MESMA pasta, disputando a mesma
+    'ArmchairBrown001_Preview1.png'. 'Chair'/'Stool' não é marcador de
+    conversão — normalizar só o '_Cycles' dá 'arm...001_chair' e
+    'arm...001_stool', nomes DIFERENTES entre si e nenhum bate com
+    'arm...001' (o preview). Fica sem capa mesmo — não dá pra adivinhar
+    qual das duas variantes de móvel a prévia representa."""
+    root = tmp_path / "lib"
+    pasta = root / "Assentos" / "Poltronas" / "ArmchairBrown001"
+    pasta.mkdir(parents=True)
+    (pasta / "ArmchairBrown001_Chair_Cycles.blend").write_bytes(b"b" * 30)
+    (pasta / "ArmchairBrown001_Stool_Cycles.blend").write_bytes(b"b" * 30)
+    (pasta / "ArmchairBrown001_Preview1.png").write_bytes(b"j" * 30)
+
+    conn = connect(tmp_path / "t.db")
+    apply_migrations(conn)
+    lib_id = libraries_repo.get_or_create(conn, root)
+    scan_library(conn, lib_id, root)
+
+    attach_stem_match_previews(conn, lib_id, root, tmp_path / "previews")
+
+    for nome in ("ArmchairBrown001_Chair_Cycles", "ArmchairBrown001_Stool_Cycles"):
+        aid = _id_por_caminho(
+            conn, f"Assentos/Poltronas/ArmchairBrown001/{nome}.blend")
+        assert previews_repo.list_for(conn, aid) == [], (
+            f"{nome} não devia ter ganhado capa — é ambíguo de verdade"
+        )
+    conn.close()
+
+
+def test_pasta_com_um_modelo_convertido_ainda_conta_como_um_so(tmp_path):
+    """Bug que quase entrou: um modelo com marcador de conversão fica
+    registrado em `modelos` sob DUAS chaves (nome cru + normalizado).
+    Contar entradas de `modelos.values()` sem deduplicar faria uma pasta
+    de 1 modelo só parecer ter 2 — quebrando a regra de PASTA (Regra 2),
+    que só vale onde há exatamente um. Aqui a prévia é de nome de HASH
+    (só a pasta liga), e o único modelo tem sufixo de conversão."""
+    root = tmp_path / "lib"
+    pasta = root / "Furniture" / "SoloConvertido"
+    (pasta / "previews").mkdir(parents=True)
+    (pasta / "SoloConvertido_Cycles.blend").write_bytes(b"b" * 30)
+    (pasta / "previews" / "a586041c_999.png").write_bytes(b"j" * 30)
+
+    conn = connect(tmp_path / "t.db")
+    apply_migrations(conn)
+    lib_id = libraries_repo.get_or_create(conn, root)
+    scan_library(conn, lib_id, root)
+    modelo = _id_por_caminho(
+        conn, "Furniture/SoloConvertido/SoloConvertido_Cycles.blend")
+
+    attach_stem_match_previews(conn, lib_id, root, tmp_path / "previews")
+
+    assert len(previews_repo.list_for(conn, modelo)) == 1, (
+        "a regra de pasta não achou o único modelo — provável dupla "
+        "contagem por causa das duas chaves em `modelos`"
+    )
+    conn.close()
+
+
 def test_pasta_previews_com_dois_modelos_nao_adivinha(tmp_path):
     """A regra de PASTA só vale onde há um modelo — com dois, não dá pra
     saber de quem é a prévia de nome de hash."""
