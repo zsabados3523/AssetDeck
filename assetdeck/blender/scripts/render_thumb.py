@@ -5,11 +5,25 @@ Recebe, depois de '--':
 
 Os 5 últimos (cena configurável, Fatia 38) são opcionais — sem eles, cai
 nos mesmos valores que sempre foram hardcoded aqui, então chamar este
-script à mão continua funcionando igual.
+script à mão continua funcionando igual. Os NOMES ficaram do jeito que
+sempre foram (a assinatura pública de `render_thumbnail()` não mudou), mas
+o SIGNIFICADO mudou na Fatia 102: `bg_color`/`bg_strength` viraram a luz
+AMBIENTE (o fundo não é mais visível — é transparente), e `sun_energy`
+virou a intensidade da luz KEY do setup de 3 pontos.
 
-Enquadra tudo que é visível numa câmera automática, ilumina com um céu
-neutro e renderiza. Se o .blend já tiver câmera própria, ela é respeitada —
-o autor do asset costuma ter enquadrado melhor do que qualquer heurística.
+Enquadra tudo que é visível numa câmera automática. Se o .blend já tiver
+câmera própria, ela é respeitada — o autor do asset costuma ter enquadrado
+melhor do que qualquer heurística. Mesma lógica pra luz: um .blend com luz
+própria mantém a dele; sem nenhuma, entra o setup de 3 pontos (Fatia 102,
+pedido do Rafael: "acho que ficaria melhor e daria pra ver melhor o
+asset") — key/fill/rim nas mesmas três direções relativas à câmera sempre,
+pra ficar previsível na biblioteca inteira.
+
+Renderiza em CYCLES (Fatia 102, pedido explícito — antes era EEVEE), fundo
+TRANSPARENTE (`film_transparent`), com poucas amostras e denoise: rápido o
+bastante pra fila de capas (medido: ~3-8s por modelo nesta máquina, contra
+os ~180s de limite por item) e sem o ruído característico de Cycles em
+poucas amostras.
 """
 
 import math
@@ -21,6 +35,18 @@ from mathutils import Vector
 
 MARGEM = 1.05  # folga em volta do objeto
 NIVEIS_BUSCA = 2  # quantas pastas subir procurando texturas perdidas
+
+# Mesma direção da câmera automática (três quartos, ligeiramente acima) —
+# as três luzes são calculadas a partir dela, então a relação luz-câmera
+# fica sempre a mesma, em qualquer .blend da biblioteca.
+DIRECAO_CAMERA = Vector((1.0, -1.2, 0.75)).normalized()
+
+# Frações da energia da KEY — proporção clássica de um 3-point lighting
+# (fill mais fraca que a key pra não apagar a sombra; rim intermediária,
+# só pra separar a silhueta do fundo transparente).
+FRACAO_FILL = 0.45
+FRACAO_RIM = 0.65
+AMOSTRAS_CYCLES = 64  # suficiente com denoise pra uma capa de catálogo
 
 # Mesmos valores que sempre foram hardcoded — viram o fallback quando o
 # script roda sem os argumentos de cena (chamado à mão, ou versão antiga
@@ -84,6 +110,27 @@ def argumentos():
     return entrada, saida, tamanho, bg_color, bg_strength, sun_energy
 
 
+def _girar_z(v, graus):
+    """Gira `v` em torno do eixo Z do mundo — usado pra espalhar fill e rim
+    em volta da key, sem precisar pensar em ângulos absolutos."""
+    ang = math.radians(graus)
+    return Vector((v.x * math.cos(ang) - v.y * math.sin(ang),
+                   v.x * math.sin(ang) + v.y * math.cos(ang), v.z))
+
+
+def _nova_sun(cena, nome, direcao_de_onde_vem, energia):
+    """Sun apontando pro centro da cena a partir de `direcao_de_onde_vem` —
+    mesma técnica (`to_track_quat`) já usada pra mirar a câmera automática."""
+    luz_data = bpy.data.lights.new(nome, type="SUN")
+    luz_data.energy = energia
+    luz_data.angle = math.radians(6)  # penumbra suave, não sombra de navalha
+    luz = bpy.data.objects.new(nome, luz_data)
+    cena.collection.objects.link(luz)
+    luz.rotation_euler = (
+        direcao_de_onde_vem * -1).to_track_quat("-Z", "Y").to_euler()
+    return luz
+
+
 def caixa_da_cena(objetos):
     """(centro, raio) que engloba todos os objetos visíveis."""
     cantos = []
@@ -119,19 +166,24 @@ def main():
         cam = bpy.data.objects.new("AD_Cam", cam_data)
         cena.collection.objects.link(cam)
         cena.camera = cam
-        # Três quartos, ligeiramente acima — enquadramento clássico de catálogo
-        direcao = Vector((1.0, -1.2, 0.75)).normalized()
         # Distância exata para uma esfera de `raio` caber no campo de visão
         # (antes era um múltiplo chutado, e o objeto ficava pequeno no quadro)
         meio_angulo = cam_data.angle / 2.0
         distancia = (raio * MARGEM) / max(math.sin(meio_angulo), 1e-3)
-        cam.location = centro + direcao * distancia
-        cam.rotation_euler = (direcao * -1).to_track_quat("-Z", "Y").to_euler()
+        cam.location = centro + DIRECAO_CAMERA * distancia
+        cam.rotation_euler = (DIRECAO_CAMERA * -1).to_track_quat("-Z", "Y").to_euler()
         cam_data.clip_start = max(raio * 0.01, 0.001)
         cam_data.clip_end = raio * 100.0
 
     # World NOVO sempre: o do arquivo pode ser um céu escuro ou um HDRI
     # pesado, e as capas da biblioteca precisam ser consistentes entre si.
+    #
+    # Fatia 102 (Rafael: "teria como deixar o fundo transparente?"): o fundo
+    # deixou de aparecer no PNG (`film_transparent`, mais abaixo), mas o
+    # World continua existindo — sua força ilumina a cena inteira por igual
+    # (GI ambiente) mesmo invisível, então zerá-lo deixaria sombra e reflexo
+    # duros demais. `bg_strength` virou essa luz de preenchimento AMBIENTE,
+    # bem mais sutil do que quando era "cor de fundo visível" — daí o 0.15.
     mundo = bpy.data.worlds.new("AD_World")
     mundo.use_nodes = True
     cena.world = mundo
@@ -139,22 +191,32 @@ def main():
     nodes.clear()
     fundo = nodes.new("ShaderNodeBackground")
     fundo.inputs[0].default_value = (*bg_color, 1.0)
-    fundo.inputs[1].default_value = bg_strength
+    fundo.inputs[1].default_value = bg_strength * 0.15
     saida_mundo = nodes.new("ShaderNodeOutputWorld")
     links.new(fundo.outputs["Background"], saida_mundo.inputs["Surface"])
 
+    # 3-point lighting (Fatia 102), só quando o .blend não traz luz própria
+    # — mesmo respeito da câmera automática ao trabalho do autor do asset.
+    # Sun (direcional) em vez de Area: não precisa de posição nem de raciocinar
+    # distância/escala do objeto, então funciona igual num vaso pequeno e
+    # numa árvore de 4 metros sem reposicionar nada.
     if not any(o.type == "LIGHT" for o in visiveis):
-        luz_data = bpy.data.lights.new("AD_Sun", type="SUN")
-        luz_data.energy = sun_energy
-        luz = bpy.data.objects.new("AD_Sun", luz_data)
-        cena.collection.objects.link(luz)
-        luz.rotation_euler = (0.9, 0.2, 0.6)
+        _nova_sun(cena, "AD_Key", DIRECAO_CAMERA, sun_energy)
+        dir_fill = _girar_z(DIRECAO_CAMERA, 130)
+        dir_fill.z *= 0.35  # mais rasante — sombra de preenchimento clássica
+        _nova_sun(cena, "AD_Fill", dir_fill.normalized(), sun_energy * FRACAO_FILL)
+        dir_rim = _girar_z(DIRECAO_CAMERA, 200)
+        dir_rim.z = abs(dir_rim.z) + 0.6  # de trás e de cima — separa a silhueta
+        _nova_sun(cena, "AD_Rim", dir_rim.normalized(), sun_energy * FRACAO_RIM)
 
-    cena.render.engine = "BLENDER_EEVEE"  # rápido; qualidade suficiente p/ capa
+    cena.render.engine = "CYCLES"  # pedido explícito do Rafael (antes: EEVEE)
+    cena.cycles.samples = AMOSTRAS_CYCLES
+    cena.cycles.use_denoising = True
     cena.render.resolution_x = cena.render.resolution_y = tamanho
     cena.render.resolution_percentage = 100
-    cena.render.film_transparent = False
+    cena.render.film_transparent = True
     cena.render.image_settings.file_format = "PNG"
+    cena.render.image_settings.color_mode = "RGBA"
     cena.render.filepath = saida
     bpy.ops.render.render(write_still=True)
     print("ASSETDECK_RENDER_OK", saida, flush=True)
