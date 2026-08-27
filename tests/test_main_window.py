@@ -1121,3 +1121,66 @@ def test_a_reposicao_da_maximizacao_nao_desiste_no_falso_positivo(janela, monkey
         "o gerenciador desfez a maximização e o laço não pediu de novo — "
         "é assim que a janela volta a abrir em tamanho normal"
     )
+
+
+# ---- gerar capa pelo botão direito, só de alguns assets (Fatia 101) ----
+
+def _indice_por_nome(janela, nome):
+    for linha in range(janela.model.rowCount()):
+        idx = janela.model.index(linha)
+        if janela.model.row_at(idx)["name"] == nome:
+            return idx
+    raise AssertionError(f"{nome!r} não está na grade de teste")
+
+
+def _linha_por_nome(janela, nome):
+    idx = _indice_por_nome(janela, nome)
+    return janela.model.row_at(idx)
+
+
+def test_gerar_capa_aparece_pro_modelo_sem_capa(janela):
+    """Rafael: "gerar o preview porém somente de alguns assets... ao clicar
+    com o botão direito em um asset/vários selecionados, se detectar que
+    está sem preview, dar a opção de gerar preview"."""
+    menu = janela._montar_menu_grid([_linha_por_nome(janela, "modelo")])
+
+    textos = [a.text() for a in menu.actions()]
+    assert any("Gerar capa" in t for t in textos)
+
+
+def test_gerar_capa_nao_aparece_pra_textura(janela):
+    """O critério é o mesmo do render em lote: só modelo .blend. Uma imagem
+    já É sua própria miniatura — não faz sentido "gerar capa" dela."""
+    menu = janela._montar_menu_grid([_linha_por_nome(janela, "textura")])
+
+    textos = [a.text() for a in menu.actions()]
+    assert not any("Gerar capa" in t for t in textos)
+
+
+def test_gerar_capa_nao_aparece_quando_ja_tem_capa(janela, tmp_path):
+    from PIL import Image
+
+    from assetdeck.db.repos import previews as previews_repo
+
+    linha = _linha_por_nome(janela, "modelo")
+    capa = tmp_path / "capa.png"
+    Image.new("RGB", (4, 4)).save(capa)
+    previews_repo.add(janela._conn, linha["id"], capa, janela._thumbs_dir.parent / "previews")
+    janela._reload_grid()
+
+    menu = janela._montar_menu_grid([_linha_por_nome(janela, "modelo")])
+
+    textos = [a.text() for a in menu.actions()]
+    assert not any("Gerar capa" in t for t in textos)
+
+
+def test_gerar_capa_chama_render_covers_com_os_ids_certos(janela, monkeypatch):
+    linha = _linha_por_nome(janela, "modelo")
+    chamadas = []
+    monkeypatch.setattr(janela, "_render_covers", lambda ids: chamadas.append(ids))
+
+    menu = janela._montar_menu_grid([linha])
+    acao = next(a for a in menu.actions() if "Gerar capa" in a.text())
+    acao.trigger()
+
+    assert chamadas == [[linha["id"]]]

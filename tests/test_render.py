@@ -113,6 +113,47 @@ def test_caminhos_devolvidos_sao_absolutos(env):
         assert Path(caminho).is_file()
 
 
+# ---- gerar capa só de alguns assets (Fatia 101) ----
+
+def test_asset_ids_restringe_ao_subconjunto(env):
+    """Rafael: "gerar o preview porém somente de alguns assets", pelo botão
+    direito. `models_without_cover` precisa aceitar um recorte, não só
+    "todos os modelos sem capa"."""
+    conn, lib_id, root, _ = env
+    cadeira_id = next(i for i, n, _p in render.models_without_cover(conn, lib_id, root)
+                      if n == "cadeira")
+
+    so_cadeira = render.models_without_cover(conn, lib_id, root, asset_ids=[cadeira_id])
+
+    assert {n for _i, n, _p in so_cadeira} == {"cadeira"}
+
+
+def test_asset_ids_vazio_nao_bate_no_banco(env):
+    """Lista vazia é resultado vazio, sem consultar — evita um `IN ()` que
+    o SQLite aceita mas que custaria uma varredura à toa."""
+    conn, lib_id, root, _ = env
+    assert render.models_without_cover(conn, lib_id, root, asset_ids=[]) == []
+
+
+def test_asset_ids_ignora_quem_ja_tem_capa(env):
+    """O recorte não pula a checagem de capa — só some o universo. Selecionar
+    um asset que JÁ tem capa não deve mandar renderizar de novo."""
+    conn, lib_id, root, tmp_path = env
+    pendentes = render.models_without_cover(conn, lib_id, root)
+    alvo = pendentes[0][0]
+    previews_repo.add(conn, alvo, _png_valido(tmp_path), tmp_path / "previews")
+
+    assert render.models_without_cover(conn, lib_id, root, asset_ids=[alvo]) == []
+
+
+def _png_valido(tmp_path):
+    from PIL import Image
+
+    caminho = tmp_path / "capa.png"
+    Image.new("RGB", (4, 4)).save(caminho)
+    return caminho
+
+
 def test_arquivo_inexistente_da_erro_legivel(tmp_path):
     r = render.render_thumbnail(tmp_path / "nao-existe.blend", tmp_path / "o.png",
                                 comando=["echo"])

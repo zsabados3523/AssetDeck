@@ -77,3 +77,62 @@ def test_run_le_o_config_de_novo_a_cada_chamada(qapp, env, monkeypatch):
 
     assert primeira[2] == 3.0        # default de sempre
     assert segunda[2] == 15.0        # já pegou o valor novo, sem reconstruir nada
+
+
+# ---- restringir a fila a um subconjunto (Fatia 101) ----
+
+def test_worker_repassa_asset_ids_pra_models_without_cover(qapp, env, monkeypatch):
+    """A fila (`RenderWorker`) precisa levar o recorte até a consulta que
+    decide o que renderizar — sem isso "gerar preview de alguns" acaba
+    renderizando a biblioteca inteira de novo."""
+    tmp_path, root = env
+    capturado = {}
+
+    def _fake_mwc(conn, lib_id, library_root, asset_ids=None):
+        capturado["asset_ids"] = asset_ids
+        return []  # fila vazia: o teste termina rápido, sem chamar o Blender
+
+    monkeypatch.setattr(rw, "models_without_cover", _fake_mwc)
+
+    worker = rw.RenderWorker(tmp_path / "t.db", root, tmp_path / "previews",
+                             asset_ids=[7, 8])
+    worker.run()
+
+    assert capturado["asset_ids"] == [7, 8]
+
+
+def test_worker_sem_asset_ids_continua_pegando_tudo(qapp, env, monkeypatch):
+    """`None` é o comportamento de sempre — o botão geral de Configurações
+    não pode virar um recorte por engano."""
+    tmp_path, root = env
+    capturado = {}
+
+    def _fake_mwc(conn, lib_id, library_root, asset_ids=None):
+        capturado["asset_ids"] = asset_ids
+        return []
+
+    monkeypatch.setattr(rw, "models_without_cover", _fake_mwc)
+
+    rw.RenderWorker(tmp_path / "t.db", root, tmp_path / "previews").run()
+
+    assert capturado["asset_ids"] is None
+
+
+def test_controller_start_repassa_asset_ids_ao_worker(qapp, env, monkeypatch):
+    tmp_path, root = env
+    capturado = {}
+    orig_init = rw.RenderWorker.__init__
+
+    def _espiao(self, *a, **kw):
+        capturado["asset_ids"] = kw.get("asset_ids")
+        orig_init(self, *a, **kw)
+
+    monkeypatch.setattr(rw.RenderWorker, "__init__", _espiao)
+    monkeypatch.setattr(rw, "models_without_cover", lambda *a, **kw: [])
+
+    controller = rw.RenderController(tmp_path / "t.db", root, tmp_path / "previews")
+    controller.start(lambda *a: None, lambda *a: None, lambda *a: None,
+                     asset_ids=[3])
+    controller.shutdown()
+
+    assert capturado["asset_ids"] == [3]
