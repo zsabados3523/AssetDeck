@@ -71,11 +71,15 @@ def _pacote_de(rel_path: str) -> str:
     return acima or pasta
 
 
-# Sufixo numérico de sequência no fim do nome: "_01", "-02", "_v003".
+# Sufixo numérico de sequência no fim do nome: "_01", "-02", "_v003", e
+# "_preview1"/"_Preview1" (achado real: "ChairMakilReplica001_preview1.png"
+# ao lado de "ChairMakilReplica001.blend" — 264 arquivos assim na
+# biblioteca, batendo 0 antes desta correção porque "preview1" não é só
+# um "v" opcional seguido de dígito).
 # Usado SÓ no nome da imagem, nunca no do modelo — muitos modelos terminam
 # em número de catálogo ("Chair_125_029.blend") e normalizá-los quebraria
 # tudo (viraria "Chair", casando com qualquer cadeira).
-_SUFIXO_SEQUENCIA = re.compile(r"[-_]v?\d+$", re.IGNORECASE)
+_SUFIXO_SEQUENCIA = re.compile(r"[-_](?:preview_?)?v?\d+$", re.IGNORECASE)
 
 # Pasta de prévias que os packs criam ao lado do modelo (Chaos Cosmos).
 _PASTA_PREVIEWS = "previews"

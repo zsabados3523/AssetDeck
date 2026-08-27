@@ -517,6 +517,61 @@ def test_numero_de_catalogo_do_modelo_nao_e_confundido_com_sequencia(env_cosmos)
     assert len(galeria) == 1, "o modelo com número de catálogo ficou sem capa"
 
 
+def test_sufixo_previewN_e_reconhecido_como_sequencia(tmp_path):
+    """'ChairMakilReplica001_preview1.png' ao lado de
+    'ChairMakilReplica001.blend' — achado real na biblioteca do Rafael
+    (264 arquivos com esse padrão, categorias Assentos/Materiais). Antes
+    desta fatia, 0 desses casavam: '_SUFIXO_SEQUENCIA' só reconhecia um
+    'v' opcional antes do número ('_v001'), e 'preview1' não é isso —
+    'w' seguido de 'iew1' não é dígito. Modelo e imagem na MESMA pasta
+    (sem 'previews/' — outro padrão real, sem estrutura de subpasta)."""
+    root = tmp_path / "lib"
+    pasta = root / "Assentos" / "Cadeiras" / "ChairMakilReplica001"
+    pasta.mkdir(parents=True)
+    (pasta / "ChairMakilReplica001.blend").write_bytes(b"b" * 30)
+    (pasta / "ChairMakilReplica001_preview1.png").write_bytes(b"j" * 30)
+    (pasta / "ChairMakilReplica001_COL_4K_METALNESS.jpg").write_bytes(b"j" * 30)
+
+    conn = connect(tmp_path / "t.db")
+    apply_migrations(conn)
+    lib_id = libraries_repo.get_or_create(conn, root)
+    scan_library(conn, lib_id, root)
+    modelo = _id_por_caminho(
+        conn, "Assentos/Cadeiras/ChairMakilReplica001/ChairMakilReplica001.blend")
+
+    attach_stem_match_previews(conn, lib_id, root, tmp_path / "previews")
+
+    galeria = previews_repo.list_for(conn, modelo)
+    assert len(galeria) == 1, "não casou com '_preview1.png'"
+    assert galeria[0]["is_cover"] == 1
+    # o mapa de textura ('_COL_4K_METALNESS') não pode ter virado capa —
+    # nome-base diferente de '_preview1', não é sequência do mesmo padrão.
+    conn.close()
+
+
+def test_sufixo_Preview_maiusculo_tambem_casa(tmp_path):
+    """'_Preview1' (maiúsculo) — outro achado real, mesma biblioteca,
+    grafia diferente do mesmo padrão. A regex já é IGNORECASE; este teste
+    prova que o comportamento se mantém, não só assume."""
+    root = tmp_path / "lib"
+    pasta = root / "Assentos" / "Poltronas" / "ArmchairBrown001"
+    pasta.mkdir(parents=True)
+    (pasta / "ArmchairBrown001.blend").write_bytes(b"b" * 30)
+    (pasta / "ArmchairBrown001_Preview1.png").write_bytes(b"j" * 30)
+
+    conn = connect(tmp_path / "t.db")
+    apply_migrations(conn)
+    lib_id = libraries_repo.get_or_create(conn, root)
+    scan_library(conn, lib_id, root)
+    modelo = _id_por_caminho(
+        conn, "Assentos/Poltronas/ArmchairBrown001/ArmchairBrown001.blend")
+
+    attach_stem_match_previews(conn, lib_id, root, tmp_path / "previews")
+
+    assert len(previews_repo.list_for(conn, modelo)) == 1
+    conn.close()
+
+
 def test_pasta_previews_com_dois_modelos_nao_adivinha(tmp_path):
     """A regra de PASTA só vale onde há um modelo — com dois, não dá pra
     saber de quem é a prévia de nome de hash."""
