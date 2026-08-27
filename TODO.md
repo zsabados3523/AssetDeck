@@ -3699,3 +3699,42 @@ como o programa foi aberto e sem depender de alguém estar por perto.
 (`faulthandler._sigsegv()` num subprocesso) e exige que o arquivo tenha a
 pilha COM o nome da função onde caiu — conferir que uma função foi chamada
 não provaria nada aqui.
+
+### ☐ Fatia 100 — assets sumidos: fora da grade, mas nunca em silêncio
+
+Relato: "por que fica aparecendo .blends ou arquivos que sumiram ou removi
+da biblioteca? Não consigo abrir nem abrir o local deles, mas continuam
+aparecendo".
+
+**Diagnóstico.** A varredura JÁ marcava o arquivo sumido (`missing_since`)
+— eram **168** na biblioteca dele, todos `.blend`, marcados na passada de
+27/08. O que faltava era alguém usar a marca:
+
+- a consulta da grade não filtrava por ela;
+- o desenho do card não tinha uma única menção a "sumido" — ficava idêntico
+  a um asset saudável;
+- e "Abrir"/"Abrir pasta" chamavam `openUrl` num caminho inexistente: o
+  sistema recusa, a função devolve `False`, e ninguém olhava. Nada
+  acontecia na tela e nada ia pro log. Falha silenciosa, que é justamente o
+  que as regras deste projeto proíbem.
+
+**Correção (proposta e aprovada por ele antes de programar):**
+
+1. Sumidos **saem da grade** por padrão (`include_missing=False`).
+2. O rodapé passa a dizer `N sumidos` quando houver. Isto não é enfeite: a
+   biblioteca dele mora num disco externo (`/mnt/sdb1`) — se ele não montar,
+   a varredura marca TUDO como sumido, e sem o aviso ele abriria o app com
+   a grade vazia e nenhuma explicação.
+3. **Configurações → Filtros → "Mostrar assets sumidos"**, ao lado de
+   "Mostrar dependências" e "Mostrar ocultos", pra usar Manutenção →
+   Relocalizar (que religa o que só mudou de pasta).
+4. Abrir e Abrir pasta **explicam** — no rodapé e no log — em vez de não
+   fazer nada, e apontam pro Relocalizar.
+
+**Efeito medido na biblioteca real:** grade de 53.512 → 53.344 assets (168
+a menos), mesmo tempo de consulta; rodapé passa a mostrar "168 sumidos".
+
+**Testes:** 5 novos. Três no repositório (sai da grade; volta com o filtro
+ligado; a contagem existe pro rodapé) usando uma biblioteca de verdade que
+é varrida, tem um arquivo apagado e é varrida de novo. Dois no painel
+(avisar em vez de silenciar; e o caminho feliz continua abrindo).

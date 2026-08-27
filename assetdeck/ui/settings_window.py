@@ -384,6 +384,8 @@ class SettingsWindow(QDialog):
         mw.deps_check.toggled.connect(lambda _c: mw._apply_filters())
         mw.hidden_check = QCheckBox()
         mw.hidden_check.toggled.connect(lambda _c: mw._apply_filters())
+        mw.missing_check = QCheckBox()
+        mw.missing_check.toggled.connect(lambda _c: mw._apply_filters())
 
         lay.addWidget(_grupo("O que aparece na grade"))
         lay.addWidget(_linha(
@@ -396,6 +398,12 @@ class SettingsWindow(QDialog):
             "Mostrar dependências",
             "Texturas que acompanham um .blend/.fbx irmão.",
             mw.deps_check))
+        lay.addWidget(_linha(
+            "Mostrar assets sumidos",
+            "Arquivos que a varredura não achou mais no disco. Ligue pra "
+            "usar Manutenção → Relocalizar, que religa o que só mudou de "
+            "pasta.",
+            mw.missing_check))
         lay.addWidget(_linha(
             "Mostrar ocultos",
             "Inclui imagens ocultadas por virarem preview de um modelo.",

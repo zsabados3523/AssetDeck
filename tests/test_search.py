@@ -331,3 +331,69 @@ def test_a_busca_por_substring_nao_vira_subconsulta_correlacionada(tmp_path):
         "a busca voltou a ter subconsulta correlacionada — ela roda uma vez "
         f"POR ASSET: {correlacionadas}"
     )
+
+
+# ---- assets sumidos do disco (Fatia 100) ----
+
+def _biblioteca_com_um_sumido(tmp_path):
+    """Duas texturas indexadas; uma delas some do disco e é varrida de novo."""
+    from PIL import Image
+
+    from assetdeck.db.connection import connect
+    from assetdeck.db.migrate import apply_migrations
+    from assetdeck.db.repos import libraries as libraries_repo
+    from assetdeck.indexer.scanner import scan_library
+
+    raiz = tmp_path / "lib"
+    raiz.mkdir()
+    Image.new("RGB", (8, 8), (255, 0, 0)).save(raiz / "fica.png")
+    Image.new("RGB", (8, 8), (0, 255, 0)).save(raiz / "some.png")
+
+    conn = connect(tmp_path / "t.db")
+    apply_migrations(conn)
+    lib = libraries_repo.get_or_create(conn, raiz)
+    scan_library(conn, lib, raiz)
+
+    (raiz / "some.png").unlink()
+    scan_library(conn, lib, raiz)          # é esta passada que marca o sumido
+    return conn, lib
+
+
+def test_asset_sumido_sai_da_grade(tmp_path):
+    """Rafael, 2026-08-27: "por que fica aparecendo .blends que sumiram? não
+    consigo abrir nem abrir o local deles".
+
+    A varredura já marcava o arquivo sumido — o que faltava era alguém usar
+    essa marca. Eram 168 na biblioteca dele, todos aparecendo como se
+    estivessem lá.
+    """
+    from assetdeck.db.repos import assets as repo
+
+    conn, lib = _biblioteca_com_um_sumido(tmp_path)
+    nomes = {r["name"] for r in repo.list_for_grid(conn, library_id=lib)}
+
+    assert "fica" in nomes
+    assert "some" not in nomes, "asset com arquivo sumido continua na grade"
+
+
+def test_quem_quiser_ver_os_sumidos_liga_o_filtro(tmp_path):
+    """Some da grade, mas não some do programa: é assim que dá pra usar
+    Manutenção → Relocalizar, que religa o que só mudou de pasta."""
+    from assetdeck.db.repos import assets as repo
+
+    conn, lib = _biblioteca_com_um_sumido(tmp_path)
+    nomes = {r["name"] for r in repo.list_for_grid(conn, library_id=lib,
+                                                   include_missing=True)}
+
+    assert nomes == {"fica", "some"}
+
+
+def test_a_contagem_de_sumidos_alimenta_o_aviso_do_rodape(tmp_path):
+    """O rodapé precisa do número pra avisar. Sem esse aviso, um disco
+    externo que não montou faria a grade abrir VAZIA sem explicação — a
+    biblioteca do Rafael mora num."""
+    from assetdeck.db.repos import assets as repo
+
+    conn, lib = _biblioteca_com_um_sumido(tmp_path)
+
+    assert repo.count_missing(conn, library_id=lib) == 1
