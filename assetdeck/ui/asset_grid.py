@@ -101,6 +101,7 @@ class AssetGridModel(QAbstractListModel):
         self._min_resolution: int | None = None
         self._include_hidden: bool = False        # Fatia 10b
         self._include_dependencies: bool = True   # Fatia 13
+        self._include_missing: bool = False        # Fatia 100
         self._dominant_color: str | None = None   # Fatia 39
         self._sort_by: str = "name"                # Fatia 63
         self._sort_dir: str = "asc"
@@ -115,6 +116,7 @@ class AssetGridModel(QAbstractListModel):
                     min_resolution: int | None = None,
                     include_hidden: bool = False,
                     include_dependencies: bool = True,
+                    include_missing: bool = False,
                     collection_id: int | None = None,
                     category_filters: list[dict] | None = None,
                     dominant_color: str | None = None,
@@ -130,6 +132,7 @@ class AssetGridModel(QAbstractListModel):
         self._min_resolution = min_resolution
         self._include_hidden = include_hidden
         self._include_dependencies = include_dependencies
+        self._include_missing = include_missing
         self._collection_id = collection_id
         self._dominant_color = dominant_color
         self._sort_by = sort_by
@@ -187,6 +190,7 @@ class AssetGridModel(QAbstractListModel):
             min_resolution=self._min_resolution,
             include_hidden=self._include_hidden,
             include_dependencies=self._include_dependencies,
+            include_missing=self._include_missing,
             collection_id=self._collection_id,
             category_filters=self._category_filters,
             dominant_color=self._dominant_color,
