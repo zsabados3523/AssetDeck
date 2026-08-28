@@ -198,6 +198,8 @@ class SettingsWindow(QDialog):
 
         mw.relocate_action = QPushButton("Abrir…")
         mw.relocate_action.clicked.connect(mw._relocate_lost_assets)
+        btn_esquecer = QPushButton("Esquecer…")
+        btn_esquecer.clicked.connect(mw._esquecer_assets_sumidos)
         mw.duplicates_action = QPushButton("Procurar…")
         mw.duplicates_action.clicked.connect(mw._find_duplicates)
         btn_template = QPushButton("Aplicar…")
@@ -220,6 +222,11 @@ class SettingsWindow(QDialog):
             "Relocalizar assets perdidos",
             "Religa no banco os arquivos que mudaram de pasta.",
             mw.relocate_action))
+        lay.addWidget(_linha(
+            "Esquecer assets sumidos",
+            "Tira da grade os assets 100% ausentes (você moveu ou apagou "
+            "fora do AssetDeck). Não mexe no disco, só no que é mostrado.",
+            btn_esquecer))
         lay.addWidget(_linha(
             "Duplicados por conteúdo visual",
             "Acha imagens iguais mesmo com nomes diferentes.",

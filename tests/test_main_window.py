@@ -280,6 +280,86 @@ def test_assinalar_previews_automaticamente_sem_par_de_nome_nao_cria_nada(janela
     assert "Nenhum modelo" in janela.statusBar().currentMessage()
 
 
+def test_esquecer_assets_sumidos_sem_nenhum_sumido_avisa_e_nao_confirma(
+    janela, monkeypatch
+):
+    """Biblioteca mínima do fixture: tudo presente, nada pra esquecer —
+    mostra o aviso ('Nada a fazer') e NÃO chega a perguntar 'Continuar?'.
+
+    QMessageBox.information também é modal (.exec() trava headless sem
+    isto) — mesmo cuidado do QMessageBox.question em outros testes."""
+    from PySide6.QtWidgets import QMessageBox
+
+    avisos = []
+    monkeypatch.setattr(
+        QMessageBox, "information",
+        staticmethod(lambda *a, **k: avisos.append(a) or QMessageBox.StandardButton.Ok),
+    )
+    perguntou = []
+    monkeypatch.setattr(
+        QMessageBox, "question",
+        staticmethod(lambda *a, **k: perguntou.append(a) or QMessageBox.StandardButton.Yes),
+    )
+
+    janela._esquecer_assets_sumidos()
+
+    assert avisos, "deveria ter avisado 'nada a fazer'"
+    assert not perguntou, "não deveria nem chegar a perguntar sem candidato"
+
+
+def test_esquecer_assets_sumidos_some_da_grade_apos_confirmar(janela, monkeypatch):
+    """Fatia 100: some da grade um asset 100% sumido, só depois do 'Sim'."""
+    from PySide6.QtWidgets import QMessageBox
+
+    from assetdeck.indexer.scanner import scan_library
+
+    root = janela._library_root
+    (root / "vai_sumir.blend").write_bytes(b"x" * 50)
+    lib_id = janela._conn.execute(
+        "SELECT id FROM libraries WHERE root_path = ?", (str(root),)
+    ).fetchone()["id"]
+    scan_library(janela._conn, lib_id, root)
+    (root / "vai_sumir.blend").unlink()
+    scan_library(janela._conn, lib_id, root)  # marca missing_since, não apaga
+
+    monkeypatch.setattr(QMessageBox, "question",
+                        staticmethod(lambda *a, **k: QMessageBox.StandardButton.Yes))
+
+    janela._esquecer_assets_sumidos()
+
+    row = janela._conn.execute(
+        "SELECT deleted_at FROM assets WHERE name = 'vai_sumir'"
+    ).fetchone()
+    assert row["deleted_at"] is not None
+    assert "1 asset" in janela.statusBar().currentMessage()
+
+
+def test_esquecer_assets_sumidos_cancelado_nao_marca_nada(janela, monkeypatch):
+    """Clicar em 'Não' não muda nada no banco."""
+    from PySide6.QtWidgets import QMessageBox
+
+    from assetdeck.indexer.scanner import scan_library
+
+    root = janela._library_root
+    (root / "fica_visivel.blend").write_bytes(b"y" * 50)
+    lib_id = janela._conn.execute(
+        "SELECT id FROM libraries WHERE root_path = ?", (str(root),)
+    ).fetchone()["id"]
+    scan_library(janela._conn, lib_id, root)
+    (root / "fica_visivel.blend").unlink()
+    scan_library(janela._conn, lib_id, root)
+
+    monkeypatch.setattr(QMessageBox, "question",
+                        staticmethod(lambda *a, **k: QMessageBox.StandardButton.No))
+
+    janela._esquecer_assets_sumidos()
+
+    row = janela._conn.execute(
+        "SELECT deleted_at FROM assets WHERE name = 'fica_visivel'"
+    ).fetchone()
+    assert row["deleted_at"] is None
+
+
 def test_a_barra_de_menus_fica_vazia(janela):
     """Fatia 67: os 5 menus de topo (Arquivo/Editar/Ferramentas/
     Configurações/Janela) viraram uma janela única de configurações,

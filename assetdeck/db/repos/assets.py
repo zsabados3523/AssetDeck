@@ -578,6 +578,84 @@ def uuid_exists(conn: sqlite3.Connection, uuid: str) -> bool:
     ).fetchone() is not None
 
 
+def count_missing_all(conn: sqlite3.Connection, library_id: int | None = None) -> int:
+    """Quantos assets estão 100% sumidos (todo arquivo com missing_since
+    preenchido) — o que `purge_missing` marcaria se rodasse agora. Serve
+    pra UI mostrar o número antes de pedir confirmação."""
+    where_lib = " AND a.library_id = ?" if library_id is not None else ""
+    params = (library_id,) if library_id is not None else ()
+    row = conn.execute(
+        f"""SELECT COUNT(*) AS n FROM assets a
+            WHERE a.deleted_at IS NULL{where_lib}
+              AND EXISTS (SELECT 1 FROM files f
+                          WHERE f.asset_id = a.id AND f.deleted_at IS NULL)
+              AND NOT EXISTS (SELECT 1 FROM files f
+                              WHERE f.asset_id = a.id AND f.deleted_at IS NULL
+                                AND f.missing_since IS NULL)""",
+        params,
+    ).fetchone()
+    return row["n"]
+
+
+def purge_missing(conn: sqlite3.Connection, library_id: int | None = None) -> int:
+    """Some da grade, de vez, os assets 100% sumidos — pedido explícito do
+    Rafael depois de mover uma leva grande de assets pra fora da
+    biblioteca (a varredura sozinha NUNCA faz isso: só marca
+    `missing_since` e deixa visível/filtrável, proteção contra HD
+    desconectado por engano — SCHEMA.md).
+
+    Soft delete, no mesmo padrão do resto do app (`ungroup`,
+    `previews.soft_delete`): marca `assets.deleted_at`/`files.deleted_at`
+    e tira o `is_cover` das prévias. A cópia da imagem de preview
+    continua no disco — mesma decisão de `previews.soft_delete` ("o
+    arquivo copiado permanece"), não é apagar de propósito, é só não
+    reaproveitar. `rebuild_fts` no final: os nomes desses assets não
+    podem continuar achável na busca.
+
+    Só marca um asset se TODOS os arquivos dele estiverem sumidos — um
+    modelo com textura sumida mas o .blend presente continua intacto,
+    intocado por esta função.
+
+    Retorna quantos assets foram marcados.
+    """
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc).isoformat()
+    where_lib = " AND a.library_id = ?" if library_id is not None else ""
+    params = (library_id,) if library_id is not None else ()
+
+    alvo = conn.execute(
+        f"""SELECT a.id FROM assets a
+            WHERE a.deleted_at IS NULL{where_lib}
+              AND EXISTS (SELECT 1 FROM files f
+                          WHERE f.asset_id = a.id AND f.deleted_at IS NULL)
+              AND NOT EXISTS (SELECT 1 FROM files f
+                              WHERE f.asset_id = a.id AND f.deleted_at IS NULL
+                                AND f.missing_since IS NULL)""",
+        params,
+    ).fetchall()
+    ids = [r["id"] for r in alvo]
+    if not ids:
+        return 0
+
+    marcador = ",".join("?" * len(ids))
+    conn.execute(
+        f"UPDATE assets SET deleted_at = ?, updated_at = ? WHERE id IN ({marcador})",
+        (now, now, *ids),
+    )
+    conn.execute(
+        f"UPDATE files SET deleted_at = ?, updated_at = ? WHERE asset_id IN ({marcador})",
+        (now, now, *ids),
+    )
+    conn.execute(
+        f"UPDATE previews SET deleted_at = ?, is_cover = 0 WHERE asset_id IN ({marcador})",
+        (now, *ids),
+    )
+    conn.commit()
+    rebuild_fts(conn)
+    return len(ids)
+
+
 def rebuild_fts(conn: sqlite3.Connection) -> None:
     """Reconstrói o índice de busca a partir dos assets ativos.
 
