@@ -3885,3 +3885,57 @@ só tocam `dependencies.py`, `importer.py` e `assets_repo`.
 As worktrees `assetdeck-fatia97/98/101` e as duas velhas em
 `assetdeck/.claude/worktrees/` (`xenodochial-leavitt`, `gracious-mcclintock`
 — conteúdo já redundante na `main`) foram removidas.
+### ☑ Fatia 106 — purga de previews órfãos (limpeza da pasta previews/)
+
+**O problema.** `~/.local/share/assetdeck/previews/` (as CÓPIAS que o app
+faz quando você escolhe um preview) inchou pra ~30 GB / 22,6 mil arquivos.
+`previews_repo.soft_delete` sempre carimbou só o `deleted_at` da linha —
+**nunca apagou o arquivo `.png/.jpg`**. Meses de "assinalar previews por
+nome" (Fatias 57/81/84/101) rodado várias vezes + troca de capa deixaram
+~16 mil arquivos que nenhuma linha ativa de `previews` referencia.
+
+Isto **não é a biblioteca** — `previews/` é dado gerenciado do app,
+recriável (igual `thumbs/`). Apagar órfão daqui não abre exceção nova ao
+somente-leitura. Mesmo assim segue o padrão do projeto.
+
+**O que entrou:**
+- `assetdeck/previews_cleanup.py` — `planejar(conn, previews_dir)` (só
+  leitura: separa órfão de arquivo em uso, soma tamanho) e
+  `executar(plano)` (apaga um a um, cada `unlink` que falha é logado com
+  contexto e o lote continua).
+- Regra de segurança: arquivo referenciado por linha ativa, OU cujo
+  `file_path` aponta pra FORA de `previews/` (imagem escolhida direto,
+  nunca copiada — hoje não existe nenhuma, mas o código não assume),
+  jamais entra na lista. Só apaga arquivos com extensão de imagem —
+  `.json`/`.tmp`/etc. na pasta ficam onde estão.
+- Configurações › Manutenção › Arquivos: linha nova "Previews órfãos →
+  Analisar…". Diálogo mostra quantos e quanto espaço libera, confirma
+  ("Apagar N" / Cancelar, com Cancelar como padrão), ou "Nada para
+  limpar". Sem gatilho automático — o Rafael pediu só botão manual.
+
+**Ressalva registrada (não resolvida aqui).** A tabela `previews` guarda
+só o caminho da CÓPIA, não a origem. Pra textura o `PreviewPopup` já
+reabre o arquivo original da biblioteca (`files.rel_path`); pra capa de
+`.blend` a origem se perde. Importa pra Fatia 107 (redimensionar a cópia
+no `previews_repo.add` pra teto de 1280 px): a cópia encolhida pode ser a
+única versão que resta de um render largado no card.
+
+**Próximas (planejadas com o Rafael, ordem A→B→C):**
+- **Fatia 107** — `previews_repo.add()` grava a cópia com dimensão máx.
+  1280 px (proporção mantida, formato original; origem já menor é copiada
+  sem re-encodar; HDR/EXR e não-imagem sempre crus).
+- **Fatia 108** — migração opcional que reprocessa as cópias grandes que
+  já estão em `previews/` (~9 GB de ganho estimado).
+
+**Numeração:** nasceu "Fatia 104", renumerada pra 106 — 103/104/105 foram
+mergeadas na `main` por outra sessão enquanto esta rodava (assinalar
+`_previewN`/`_Cycles`, Library Override no import Link, "Esquecer assets
+sumidos").
+
+**Testado:** 5 testes novos (`tests/test_previews_cleanup.py`) — órfão de
+linha soft-deletada é apagado e o ativo preservado; `file_path` externo
+nunca é candidato; `.json`/`.tmp` na pasta ficam; `unlink` que falha não
+derruba o lote; pasta inexistente dá plano vazio. Suíte completa:
+957 passados, 1 falha pré-existente e alheia (`test_library_root.py::
+test_modo_screenshot_nao_trava_num_dialogo` — `PermissionError` num
+tmp path `/media/root/...`, falha idêntica sem esta fatia).
