@@ -1209,6 +1209,52 @@ class MainWindow(QMainWindow):
             "('Mostrar ocultos' traz de volta)"
         )
 
+    # ---- purga de previews órfãos (Fatia 104) ----
+
+    def _purgar_previews_orfaos(self) -> None:
+        """Apaga de ~/.local/share/assetdeck/previews/ as cópias que nenhuma
+        linha ativa de `previews` referencia. Não é a biblioteca — é dado
+        gerenciado do app — então não abre exceção ao somente-leitura."""
+        from PySide6.QtWidgets import QMessageBox
+
+        from assetdeck import config, previews_cleanup
+        from assetdeck.ui.details_panel import human_size
+
+        plano = previews_cleanup.planejar(self._conn, config.previews_dir())
+        if not plano.orfaos:
+            QMessageBox.information(
+                self, "Nada para limpar",
+                "Todas as cópias de preview na pasta do app estão em uso por "
+                "algum asset.",
+            )
+            return
+
+        box = QMessageBox(self)
+        box.setWindowTitle("Previews órfãos")
+        box.setIcon(QMessageBox.Icon.Question)
+        box.setText(
+            f"{plano.total_orfaos} arquivo(s) de preview não pertencem a "
+            "nenhum asset — sobra de trocas de capa e de \"assinalar por "
+            "nome\" rodado várias vezes.\n\n"
+            f"Apagar libera {human_size(plano.bytes_orfaos)}.\n\n"
+            "Os originais na biblioteca não são tocados. Cada arquivo "
+            "apagado vai pro log."
+        )
+        apagar = box.addButton(f"Apagar {plano.total_orfaos}",
+                               QMessageBox.ButtonRole.DestructiveRole)
+        box.addButton(QMessageBox.StandardButton.Cancel)
+        box.setDefaultButton(QMessageBox.StandardButton.Cancel)
+        box.exec()
+        if box.clickedButton() is not apagar:
+            return
+
+        apagados, liberados, falhas = previews_cleanup.executar(plano)
+        recado = (f"{apagados} preview(s) órfão(s) apagado(s) · "
+                  f"{human_size(liberados)} liberados")
+        if falhas:
+            recado += f" · {falhas} falharam (ver log)"
+        self.statusBar().showMessage(recado)
+
     # ---- batch rename (Fatia 23) — a única exceção ao somente-leitura ----
 
     def _batch_rename_selected(self, asset_ids: list[int]) -> None:
