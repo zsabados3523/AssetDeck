@@ -3840,3 +3840,48 @@ zero no canto; key mais forte deixa o objeto mais claro, medido num
 teste não trava mais) + 1 guarda estática rápida (Cycles/transparência
 presentes no texto do script, EEVEE/opaco ausentes). `pytest` nos quatro
 arquivos afetados: 35 passados.
+
+### ☑ Limpeza 2026-08-28 — worktrees pendentes mergeadas (Fatias 103/104/105)
+
+Três branches ficaram em worktrees (`assetdeck-fatia97/98/101`) sem merge
+porque as sessões que as criaram encerraram antes do passo do merge. O
+Rafael confirmou que testou as três na tela ("já testei, até com o import
+de arrastar o asset no blender, pode confirmar tudo e tirar as pastas") e
+foram mergeadas na `main`. **Colisão de número resolvida** — as branches se
+chamavam "Fatia 97/100/101" mas esses números já estavam na `main` com
+outro conteúdo; renumeradas aqui.
+
+- **Fatia 103** (era "Fatia 101/101b" da branch `fatia-101-preview-suffix`,
+  sessão do Cosmos): `assinalar-por-nome` reconhece o sufixo de sequência
+  `_previewN`/`_PreviewN` e o marcador de conversão `_Blender_Cycles`/
+  `_Cycles` no nome do MODELO (269 de 271 `.blend` convertidos batem). Toca
+  `indexer/dependencies.py` + `tests/test_dependencies.py`.
+- **Fatia 104** (era "Fatia 97" da branch `fatia-97-drop-library-override`):
+  o import Link do add-on (Fatia 68) embrulhava os objetos linkados num
+  Empty local e gravava `obj.parent` no datablock LINKADO — que pertence ao
+  arquivo da biblioteca e não pode ser salvo no `.blend` do usuário; ao
+  reabrir, o parentesco sumia e o objeto voltava pro centro da cena. Trocado
+  por **Library Override** (`obj.override_create(remap_local_usages=True)`):
+  cópia local só do editável (transformação, modificadores), malha continua
+  na biblioteca — posição salva, arquivo não incha (0,11 MB contra 0,34 do
+  Append no sofá de teste). `importer.py` + `tests/test_drop_override.py`.
+- **Fatia 105** (era "Fatia 100" da branch `fatia-100-esquecer-perdidos`):
+  **"Esquecer assets sumidos"** — complementa a Fatia 100 da `main`
+  (esconder da grade) com a ação de esquecer DE VEZ. `assets_repo.
+  purge_missing()`/`count_missing_all()` dão soft delete nos assets cujos
+  arquivos TODOS têm `missing_since`, com `rebuild_fts` no fim; nunca toca
+  no disco; um asset com só uma textura sumida fica intacto.
+  `MainWindow._esquecer_assets_sumidos()` confirma mostrando o número
+  exato. Botão em Configurações → Manutenção → "Esquecer assets sumidos".
+  `tests/test_purge_missing.py` (novo) + 3 em `test_main_window.py`.
+
+**Suíte completa depois dos 3 merges: 961 passados, 1 falha** — a de
+`/media/root` em `test_library_root.py::test_modo_screenshot_nao_trava_num_dialogo`,
+que já é conhecida como falha de ambiente (diretório root-owned sob
+`/media/root/tmp/` de uma rodada antiga envenena a varredura de pontos de
+montagem do `library_root.resolve()`). Não é regressão destes merges — eles
+só tocam `dependencies.py`, `importer.py` e `assets_repo`.
+
+As worktrees `assetdeck-fatia97/98/101` e as duas velhas em
+`assetdeck/.claude/worktrees/` (`xenodochial-leavitt`, `gracious-mcclintock`
+— conteúdo já redundante na `main`) foram removidas.
