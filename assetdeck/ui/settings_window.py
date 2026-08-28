@@ -200,6 +200,8 @@ class SettingsWindow(QDialog):
         mw.relocate_action.clicked.connect(mw._relocate_lost_assets)
         mw.duplicates_action = QPushButton("Procurar…")
         mw.duplicates_action.clicked.connect(mw._find_duplicates)
+        mw.purge_previews_action = QPushButton("Analisar…")
+        mw.purge_previews_action.clicked.connect(mw._purgar_previews_orfaos)
         btn_template = QPushButton("Aplicar…")
         btn_template.clicked.connect(mw.tags.apply_template_dialog)
         btn_previews = QPushButton("Rodar agora")
@@ -224,6 +226,10 @@ class SettingsWindow(QDialog):
             "Duplicados por conteúdo visual",
             "Acha imagens iguais mesmo com nomes diferentes.",
             mw.duplicates_action))
+        lay.addWidget(_linha(
+            "Previews órfãos",
+            "Apaga cópias de preview que nenhum asset usa mais.",
+            mw.purge_previews_action))
 
         lay.addWidget(_grupo("Organização"))
         lay.addWidget(_linha(
