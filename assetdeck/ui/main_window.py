@@ -2042,6 +2042,47 @@ class MainWindow(QMainWindow):
         self._refresh_details_tags()
         self.statusBar().showMessage("Preview removido da galeria")
 
+    def _esquecer_assets_sumidos(self) -> None:
+        """Manutenção → tira da grade, de vez, os assets 100% sumidos
+        (Fatia 100 — pedido do Rafael depois de mover uma leva grande de
+        assets Cosmos pra fora da biblioteca).
+
+        A varredura sozinha NUNCA faz isso — só marca `missing_since` e
+        deixa visível/filtrável, proteção contra HD desconectado por
+        engano (SCHEMA.md). Esta é uma ação explícita, com confirmação
+        mostrando o número exato antes de agir. Soft delete: reversível
+        no banco, nunca mexe no disco.
+        """
+        from PySide6.QtWidgets import QMessageBox
+
+        from assetdeck.db.repos import libraries as libraries_repo
+
+        lib_id = libraries_repo.get_or_create(self._conn, self._library_root)
+        n = assets_repo.count_missing_all(self._conn, lib_id)
+        if not n:
+            QMessageBox.information(
+                self, "Nada a fazer",
+                "Nenhum asset está totalmente sumido no momento.",
+            )
+            return
+
+        resposta = QMessageBox.question(
+            self, "Esquecer assets sumidos",
+            f"{n} asset(s) têm TODOS os arquivos sumidos do caminho "
+            "esperado (você os moveu ou apagou fora do AssetDeck).\n\n"
+            "Eles vão sumir da grade e da busca. Os arquivos no disco, "
+            "onde quer que estejam agora, não são tocados — isto só "
+            "arruma o que o AssetDeck mostra. Continuar?",
+        )
+        if resposta != QMessageBox.StandardButton.Yes:
+            return
+
+        marcados = assets_repo.purge_missing(self._conn, lib_id)
+        self._reload_all()
+        self.statusBar().showMessage(
+            f"{marcados} asset(s) sumido(s) removido(s) da grade"
+        )
+
     def _assinalar_previews_automaticamente(self) -> None:
         """Ferramentas → roda o casamento por nome igual (Fatia 57) sob
         demanda, sem esperar a próxima varredura — útil logo depois de
