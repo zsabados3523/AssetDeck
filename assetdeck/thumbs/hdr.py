@@ -50,6 +50,12 @@ def _read_exr(path: Path) -> np.ndarray:
         return channels["RGBA"].pixels[..., :3].astype(np.float32)
     if "RGB" in channels:
         return channels["RGB"].pixels.astype(np.float32)
+    if len(channels) == 1:
+        # Mapa de 1 canal (displacement/roughness/altura), comum em texturas
+        # PBR — vira escala de cinza replicando o canal único em RGB.
+        (canal,) = channels.values()
+        cinza = canal.pixels.astype(np.float32)
+        return np.repeat(cinza[..., np.newaxis], 3, axis=-1)
     try:
         return np.stack(
             [channels[c].pixels.astype(np.float32) for c in ("R", "G", "B")], axis=-1

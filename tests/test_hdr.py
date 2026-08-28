@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from assetdeck.thumbs.hdr import _tonemap, can_hdr, load_tonemapped
+from assetdeck.thumbs.hdr import _read_exr, _tonemap, can_hdr, load_tonemapped
 from assetdeck.thumbs.preview import can_preview, make_any_thumbnail
 from pathlib import Path
 
@@ -14,6 +14,13 @@ def _write_hdr(path, array_rgb: np.ndarray) -> None:
 
     ok = cv2.imwrite(str(path), array_rgb[..., ::-1].astype(np.float32))  # RGB→BGR
     assert ok, "cv2 não conseguiu escrever o .hdr de teste"
+
+
+def _write_exr_canais(path, canais: dict) -> None:
+    import OpenEXR
+
+    part = OpenEXR.Part({}, {nome: v.astype(np.float32) for nome, v in canais.items()})
+    OpenEXR.File([part]).write(str(path))
 
 
 def test_can_hdr_e_can_preview():
@@ -66,3 +73,45 @@ def test_hdr_ilegivel_levanta_erro(tmp_path):
     ruim.write_bytes(b"nao sou radiance")
     with pytest.raises(ValueError):
         load_tonemapped(ruim)
+
+
+@pytest.mark.parametrize("nome_canal", ["R", "G", "Y"])
+def test_exr_canal_unico_vira_escala_de_cinza(tmp_path, nome_canal):
+    # Mapas de displacement/roughness/altura frequentemente têm 1 canal só
+    # (visto na biblioteca real: 'R', 'G' ou 'Y' sozinho, sem RGB completo).
+    src = tmp_path / f"displacement_{nome_canal}.exr"
+    valores = np.linspace(0.0, 2.0, 4 * 6, dtype=np.float32).reshape(4, 6)
+    _write_exr_canais(src, {nome_canal: valores})
+
+    rgb = _read_exr(src)
+
+    assert rgb.shape == (4, 6, 3)
+    assert np.array_equal(rgb[..., 0], rgb[..., 1])
+    assert np.array_equal(rgb[..., 1], rgb[..., 2])
+    assert np.allclose(rgb[..., 0], valores)
+
+
+def test_exr_canal_unico_gera_thumbnail_de_ponta_a_ponta(tmp_path):
+    src = tmp_path / "displacement.exr"
+    valores = np.linspace(0.0, 2.0, 32 * 32, dtype=np.float32).reshape(32, 32)
+    _write_exr_canais(src, {"R": valores})
+    dest = tmp_path / "thumb.png"
+
+    make_any_thumbnail(src, dest, size=16)
+
+    with Image.open(dest) as t:
+        assert t.mode == "RGB"
+        assert max(t.size) == 16
+
+
+def test_exr_canais_incompletos_ainda_levanta_erro(tmp_path):
+    # 2 canais sem RGB/RGBA completo e sem ser o caso especial de 1 canal:
+    # continua sendo um erro real, não deve virar thumbnail silenciosamente.
+    src = tmp_path / "estranho.exr"
+    _write_exr_canais(
+        src,
+        {"R": np.zeros((4, 4), np.float32), "X": np.zeros((4, 4), np.float32)},
+    )
+
+    with pytest.raises(ValueError):
+        _read_exr(src)
