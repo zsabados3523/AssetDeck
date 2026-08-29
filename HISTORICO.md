@@ -257,11 +257,11 @@ do Blender: `missing_textures.py` sem `--factory-startup`.
 - **`QOpenGLWidget` derruba o processo no modo offscreen do pytest** — a
   matemática (câmera etc.) mora fora do widget de propósito, coberta pelo
   pytest normal; o render se confere com `DISPLAY=:0` + `.grab()`.
-- **`processEvents()` sozinho nunca despacha `DeferredDelete`** — o fixture
-  `qt_settle` faz o flush escopado por widget (escopar por `None` causava
-  segfault na suíte inteira). Cortava a suíte de ~27s para ~13s — mas
-  **ficou na branch `claude/xenodochial-leavitt-9b82fe` e nunca foi
-  mergeado** (a suíte hoje ainda leva ~20 min). Ver §10.
+- **`processEvents()` sozinho nunca despacha `DeferredDelete`** — o teardown
+  da `MainWindow` nos testes deixava ~2268 widgets zumbis, degradando
+  `apply_theme()` ao longo da suíte. O fixture `qt_settle` (branch
+  `claude/xenodochial-leavitt-9b82fe`) resolvia em 2026-08-02 (~27s→~13s)
+  mas contra a suíte atual dá segfault — não foi recuperado. Ver §10.
 - **Teste de token tem que enumerar TODOS os widgets que consomem o token**,
   não uma amostra (Fatia 79b: o teste passou com o bug vivo).
 - **Arrasto testado sem mouse real não prova nada** (regra desde a Fatia
@@ -436,16 +436,19 @@ Rafael, V-Ray 7.40).
 - **Múltiplas bibliotecas:** `config.py` ainda aceita só uma raiz por vez;
   o vazamento cosmético de extensões no checklist da barra de categorias
   (banco de dev sujo).
-- **Duas correções nunca mergeadas** (achadas na limpeza de 2026-08-28, na
-  worktree `assetdeck/.claude/worktrees/xenodochial-leavitt-9b82fe`):
-  - **Fix de EXR de canal único** (`hdr.py`, 6 linhas + 51 de teste) —
-    `.exr` com 1 canal (displacement/roughness/height) vira cinza em vez de
-    `ValueError`. Nunca foi commitado (sessão `65518940`, 2026-08-14). **É
-    um bug real:** esses mapas ficam sem miniatura hoje.
-  - **`qt_settle`** (branch `claude/xenodochial-leavitt-9b82fe`, commit
-    `40d08ac`) — corta a suíte de ~27s para ~13s. Nunca mergeado.
-- **Fatias 103/104/105** mergeadas em 2026-08-28 (limpeza de worktrees
-  pendentes). Ver TODO.md.
+- **Fatias 103/104/105/106** mergeadas em 2026-08-28 (limpeza de worktrees
+  pendentes + purga de previews órfãos). Ver TODO.md. **Fatia 107/108**
+  (redimensionar cópias de preview p/ 1280px + migração) ficam pra sessão
+  própria.
+- **Fix de EXR de canal único recuperado** (2026-08-28, commit `6b4d56d`) —
+  `.exr` com 1 canal (displacement/roughness/height) agora vira cinza em
+  vez de `ValueError`; estava sem commit desde 2026-08-14 (sessão
+  `65518940`) e esses mapas ficavam sem miniatura.
+- **`qt_settle` NÃO foi recuperado.** O fixture (branch
+  `claude/xenodochial-leavitt-9b82fe`, `40d08ac`) cortava a suíte de ~27s
+  para ~13s em 2026-08-02, mas contra a suíte atual (4 meses e centenas de
+  testes depois) **causa segfault no teardown do `test_main_window.py`**.
+  Não vale o risco — a lentidão da suíte (~20 min) é incômodo, não bug.
 - **Pendências fora do código:** `sudo apt remove -y blender` (remove o
   4.0.2 redundante); cadastrar a biblioteca real do SSD como segunda
   library quando o app amadurecer.
