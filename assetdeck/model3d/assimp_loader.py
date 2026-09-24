@@ -13,8 +13,7 @@ from __future__ import annotations
 import array
 from pathlib import Path
 
-from assetdeck.model3d.obj_parser import Mesh
-
+from assetdeck.model3d.obj_parser import MaterialRange, Mesh, _resolve_texture
 
 def load_via_assimp(path: Path) -> Mesh:
     """Lê qualquer formato que o assimp suporte, achatado pro mesmo
@@ -55,10 +54,14 @@ def load_via_assimp(path: Path) -> Mesh:
 
     positions: list[tuple[float, float, float]] = []
     normals: list[tuple[float, float, float]] = []
+    uvs: list[tuple[float, float]] = []
+    materials: list[MaterialRange] = []
 
     for malha in cena.meshes:
+        start = len(positions)
         verts = array.array("f", malha.vertices)
         norms = array.array("f", malha.normals) if malha.normals else None
+        coords = array.array("f", malha.texcoords[0]) if malha.texcoords else None
         indices = array.array("I", malha.indices)
         for i in indices:
             positions.append((verts[3 * i], verts[3 * i + 1], verts[3 * i + 2]))
@@ -68,8 +71,21 @@ def load_via_assimp(path: Path) -> Mesh:
                 # Process_GenNormals deveria sempre preencher — sobra só
                 # como rede de segurança pra um formato/caso exótico.
                 normals.append((0.0, 0.0, 1.0))
+            uvs.append((coords[2 * i], coords[2 * i + 1]) if coords is not None
+                       else (0.0, 0.0))
+
+        props = cena.materials[malha.material_index]
+        raw_color = props.get("COLOR_DIFFUSE") or (0.72, 0.72, 0.75)
+        color = tuple(float(x) for x in raw_color[:3])
+        texture_name = props.get("TEXTURE_BASE")
+        if not texture_name:
+            diffuse = props.get("TEXTURES", {}).get(assimp_py.TextureType_DIFFUSE, [])
+            texture_name = diffuse[0] if diffuse else None
+        texture = _resolve_texture(path.parent, texture_name) if texture_name else None
+        if len(positions) > start:
+            materials.append(MaterialRange(start, len(positions) - start, color, texture))
 
     if not positions:
         raise ValueError(f"{path.name}: malha sem vértices")
 
-    return Mesh(positions=positions, normals=normals)
+    return Mesh(positions=positions, normals=normals, uvs=uvs, materials=materials)

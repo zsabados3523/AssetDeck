@@ -4,8 +4,8 @@ Começou como POC só de `.obj`; a Fatia 72 trouxe `.fbx` (via `assimp-py`,
 lê a geometria direto) e `.blend` (via o próprio Blender headless, ver
 `model3d/blend_loader.py` — não existe parser de terceiros confiável pro
 formato binário fechado). `model3d/loader.py` escolhe o loader certo pela
-extensão; este módulo só desenha o que qualquer um deles devolver. Ainda
-sem MTL/textura — cor única, câmera orbitando.
+extensão; este módulo só desenha o que qualquer um deles devolver.
+UVs, cor e textura de cor base são renderizados quando disponíveis.
 
 Mesmo padrão do visualizador de HDRI (Fatia 34/65):
 - Parser/câmera (`model3d/obj_parser.py`, `ui/orbit_camera.py`) sem
@@ -29,18 +29,19 @@ from pathlib import Path
 
 import numpy as np
 from PySide6.QtCore import QObject, QRunnable, Qt, QThreadPool, Signal
-from PySide6.QtGui import QMatrix4x4, QVector3D
+from PySide6.QtGui import QImage, QMatrix4x4, QVector3D
 from PySide6.QtOpenGL import (
     QOpenGLBuffer,
     QOpenGLFunctions_3_3_Core,
     QOpenGLShader,
     QOpenGLShaderProgram,
+    QOpenGLTexture,
     QOpenGLVertexArrayObject,
 )
 from PySide6.QtOpenGLWidgets import QOpenGLWidget
 
 from assetdeck.model3d.loader import load_mesh
-from assetdeck.model3d.obj_parser import Mesh
+from assetdeck.model3d.obj_parser import MaterialRange, Mesh
 from assetdeck.ui import pools
 from assetdeck.ui.orbit_camera import OrbitCamera
 
@@ -55,16 +56,17 @@ _GL_DEPTH_BUFFER_BIT = 0x0100
 TAN_MEIO_FOV = 0.6  # ~62° de campo de visão — combina com OrbitCamera.enquadrar
 
 _COR_FUNDO = (0.05, 0.05, 0.06, 1.0)  # mesmo tom do visualizador de HDRI
-_COR_MODELO = (0.72, 0.72, 0.75)  # cinza neutro — POC não tem material ainda
-
 _VS = """#version 330 core
 layout(location = 0) in vec3 pos;
 layout(location = 1) in vec3 normal;
+layout(location = 2) in vec2 uv;
 uniform mat4 mvp;
 uniform mat3 normal_view;
 out vec3 v_normal;
+out vec2 v_uv;
 void main() {
     v_normal = normalize(normal_view * normal);
+    v_uv = uv;
     gl_Position = mvp * vec4(pos, 1.0);
 }
 """
@@ -75,23 +77,28 @@ void main() {
 # volume reconhecível.
 _FS = """#version 330 core
 in vec3 v_normal;
+in vec2 v_uv;
 out vec4 frag;
 uniform vec3 cor_base;
+uniform sampler2D cor_textura;
+uniform bool tem_textura;
 void main() {
     vec3 n = normalize(v_normal);
     float luz = max(dot(n, vec3(0.0, 0.0, 1.0)), 0.18);
-    frag = vec4(cor_base * luz, 1.0);
+    vec4 base = tem_textura ? texture(cor_textura, v_uv) : vec4(cor_base, 1.0);
+    frag = vec4(base.rgb * luz, base.a);
 }
 """
 
 
 def _mesh_to_buffer(mesh: Mesh) -> np.ndarray:
-    """Posição + normal intercaladas (x,y,z,nx,ny,nz por vértice) — o
+    """Posição + normal + UV intercaladas (x,y,z,nx,ny,nz,u,v) — o
     formato que o VBO único abaixo espera."""
     n = len(mesh.positions)
-    buf = np.empty((n, 6), dtype=np.float32)
+    buf = np.empty((n, 8), dtype=np.float32)
     buf[:, 0:3] = mesh.positions
     buf[:, 3:6] = mesh.normals
+    buf[:, 6:8] = mesh.uvs if mesh.uvs else (0.0, 0.0)
     return buf.reshape(-1)
 
 
@@ -129,6 +136,7 @@ class ModelGLView(QOpenGLWidget):
         self._n_vertices = 0
         self._ultimo_pos = None
         self._gl = None
+        self._textures: dict[Path, QOpenGLTexture | None] = {}
         self.setCursor(Qt.CursorShape.OpenHandCursor)
 
     def set_mesh(self, mesh: Mesh) -> None:
@@ -158,6 +166,7 @@ class ModelGLView(QOpenGLWidget):
     # ---- OpenGL ----
 
     def initializeGL(self) -> None:  # noqa: N802
+        self.context().aboutToBeDestroyed.connect(self._cleanup_textures)
         self._gl = QOpenGLFunctions_3_3_Core()
         self._gl.initializeOpenGLFunctions()
         self._gl.glEnable(_GL_DEPTH_TEST)
@@ -180,15 +189,21 @@ class ModelGLView(QOpenGLWidget):
         self._gl.glClear(_GL_COLOR_BUFFER_BIT | _GL_DEPTH_BUFFER_BIT)
 
         if self._pendente is not None:
+            for texture in self._textures.values():
+                if texture is not None:
+                    texture.destroy()
+            self._textures.clear()
             dados = self._pendente
             self._vao.bind()
             self._vbo.bind()
             self._vbo.allocate(dados.tobytes(), dados.nbytes)
-            stride = 6 * 4  # 6 floats por vértice, 4 bytes cada
+            stride = 8 * 4  # 8 floats por vértice, 4 bytes cada
             self._prog.enableAttributeArray(0)
             self._prog.setAttributeBuffer(0, _GL_FLOAT, 0, 3, stride)
             self._prog.enableAttributeArray(1)
             self._prog.setAttributeBuffer(1, _GL_FLOAT, 3 * 4, 3, stride)
+            self._prog.enableAttributeArray(2)
+            self._prog.setAttributeBuffer(2, _GL_FLOAT, 6 * 4, 2, stride)
             self._vao.release()
             self._pendente = None
 
@@ -210,11 +225,53 @@ class ModelGLView(QOpenGLWidget):
         self._prog.bind()
         self._prog.setUniformValue("mvp", mvp)
         self._prog.setUniformValue("normal_view", normal_view)
-        self._prog.setUniformValue("cor_base", *_COR_MODELO)
+        self._prog.setUniformValue1i("cor_textura", 0)
         self._vao.bind()
-        self._gl.glDrawArrays(_GL_TRIANGLES, 0, self._n_vertices)
+        ranges = self._mesh.materials if self._mesh and self._mesh.materials else [
+            MaterialRange(0, self._n_vertices)]
+        for material in ranges:
+            self._prog.setUniformValue("cor_base", *material.color)
+            texture = self._get_texture(material.texture) if material.texture else None
+            self._prog.setUniformValue1i("tem_textura", int(texture is not None))
+            if texture is not None:
+                texture.bind(0)
+            self._gl.glDrawArrays(_GL_TRIANGLES, material.start, material.count)
+            if texture is not None:
+                texture.release(0)
         self._vao.release()
         self._prog.release()
+
+    def _get_texture(self, path: Path) -> QOpenGLTexture | None:
+        if path not in self._textures:
+            image = QImage(str(path))
+            if image.isNull():
+                log.warning("Não consegui abrir a textura do modelo: %s", path)
+                self._textures[path] = None
+            else:
+                if max(image.width(), image.height()) > 2048:
+                    image = image.scaled(2048, 2048, Qt.AspectRatioMode.KeepAspectRatio,
+                                         Qt.TransformationMode.SmoothTransformation)
+                texture = QOpenGLTexture(image.mirrored())
+                texture.setMinMagFilters(QOpenGLTexture.Filter.LinearMipMapLinear,
+                                         QOpenGLTexture.Filter.Linear)
+                texture.setWrapMode(QOpenGLTexture.WrapMode.Repeat)
+                self._textures[path] = texture
+        return self._textures[path]
+
+    def _cleanup_textures(self) -> None:
+        if not self._textures:
+            return
+        self.makeCurrent()
+        for texture in self._textures.values():
+            if texture is not None:
+                texture.destroy()
+        self._textures.clear()
+        self.doneCurrent()
+
+    def closeEvent(self, event) -> None:  # noqa: N802
+        if self.context() is not None:
+            self._cleanup_textures()
+        super().closeEvent(event)
 
     def resizeGL(self, w: int, h: int) -> None:  # noqa: N802
         self._gl.glViewport(0, 0, w, h)

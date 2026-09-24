@@ -14,14 +14,16 @@ from assetdeck.ui import model_viewer
 from assetdeck.ui.orbit_camera import OrbitCamera
 
 
-def test_mesh_to_buffer_intercala_posicao_e_normal():
+def test_mesh_to_buffer_intercala_posicao_normal_e_uv():
     mesh = Mesh(
         positions=[(1.0, 2.0, 3.0), (4.0, 5.0, 6.0)],
         normals=[(0.0, 0.0, 1.0), (0.0, 1.0, 0.0)],
+        uvs=[(0.25, 0.5), (0.75, 1.0)],
     )
     buf = model_viewer._mesh_to_buffer(mesh)
     esperado = np.array(
-        [1.0, 2.0, 3.0, 0.0, 0.0, 1.0, 4.0, 5.0, 6.0, 0.0, 1.0, 0.0], dtype=np.float32,
+        [1.0, 2.0, 3.0, 0.0, 0.0, 1.0, 0.25, 0.5,
+         4.0, 5.0, 6.0, 0.0, 1.0, 0.0, 0.75, 1.0], dtype=np.float32,
     )
     assert np.array_equal(buf, esperado)
 
