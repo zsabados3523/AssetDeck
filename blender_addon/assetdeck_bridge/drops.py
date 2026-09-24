@@ -13,12 +13,15 @@ com as opções — a nossa aparece ao lado das nativas.
 from __future__ import annotations
 
 import os
+import logging
 
 import bpy
 from bpy.props import CollectionProperty, StringProperty
 from bpy.types import FileHandler, Operator, OperatorFileListElement
 
 from . import materials, viewport
+
+log = logging.getLogger(__name__)
 
 HDR_EXTS = ".hdr;.exr"
 TEX_EXTS = ".png;.jpg;.jpeg;.tif;.tiff;.webp;.bmp;.tga"
@@ -94,7 +97,7 @@ class ASSETDECK_OT_drop_texture(Operator):
         from . import client
 
         caminho = _primeiro_arquivo(self)
-        if not caminho:
+        if not caminho or not os.path.isfile(caminho):
             self.report({"ERROR"}, "Arquivo não encontrado.")
             return {"CANCELLED"}
 
@@ -105,6 +108,11 @@ class ASSETDECK_OT_drop_texture(Operator):
             self.report({"ERROR"}, str(exc))
             return {"CANCELLED"}
 
+        tipo = resposta.get("asset", {}).get("asset_type")
+        if tipo not in {"pbr_set", "texture"}:
+            self.report({"ERROR"}, "Este asset não é uma textura ou set PBR.")
+            return {"CANCELLED"}
+
         mapas: dict[str, str] = {}
         for f in resposta.get("files", []):
             papel = f.get("map_role") or "none"
@@ -112,10 +120,16 @@ class ASSETDECK_OT_drop_texture(Operator):
                 papel = "basecolor"
             mapas.setdefault(papel, f["path"])
         if not mapas:
-            mapas = {"basecolor": caminho}
+            self.report({"ERROR"}, "Este asset não tem mapas utilizáveis.")
+            return {"CANCELLED"}
 
         nome = resposta.get("asset", {}).get("name") or os.path.basename(caminho)
-        mat = materials.build_material(nome, mapas)
+        try:
+            mat = materials.build_material(nome, mapas)
+        except Exception as exc:
+            log.exception("Falha ao montar material %r a partir de %s", nome, caminho)
+            self.report({"ERROR"}, f"Falha ao montar o material '{nome}': {exc}")
+            return {"CANCELLED"}
 
         # Soltou em cima de um objeto? Aplica NELE e o seleciona — é o
         # feedback visual de "onde o material foi parar" (Fatia 68). Sem
