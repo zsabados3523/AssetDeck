@@ -329,8 +329,10 @@ class VisualizadorWindow(QDialog):
                  getattr(self._alvo, "name", "?"), len(malha.positions))
         self.modelo.set_mesh(malha)
         n_tris = len(malha.positions) // 3
+        n_texturas = len({r.texture for r in malha.materials if r.texture is not None})
+        info_textura = f"  ·  {n_texturas} textura(s)" if n_texturas else ""
         self.status.setText(
-            f"{n_tris:n} triângulos  ·  arraste para orbitar, roda pra zoom")
+            f"{n_tris:n} triângulos{info_textura}  ·  arraste para orbitar, roda pra zoom")
 
     def _falhou(self, mensagem: str) -> None:
         log.error("Visualizador não conseguiu abrir %s: %s",

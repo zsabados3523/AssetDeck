@@ -68,6 +68,19 @@ f 1 2 3 4
 
 
 @requer_assimp
+def test_uv_cor_e_textura_de_material(tmp_path):
+    (tmp_path / "cor.png").write_bytes(b"referencia")
+    (tmp_path / "tri.mtl").write_text("newmtl Cor\nKd 0.2 0.4 0.6\nmap_Kd cor.png\n")
+    caminho = tmp_path / "tri.obj"
+    caminho.write_text("mtllib tri.mtl\nv 0 0 0\nv 1 0 0\nv 0 1 0\n"
+                       "vt 0 0\nvt 1 0\nvt 0 1\nusemtl Cor\nf 1/1 2/2 3/3\n")
+    mesh = load_via_assimp(caminho)
+    assert mesh.uvs == pytest.approx([(0, 0), (1, 0), (0, 1)])
+    assert mesh.materials[0].color == pytest.approx((0.2, 0.4, 0.6))
+    assert mesh.materials[0].texture == tmp_path / "cor.png"
+
+
+@requer_assimp
 def test_arquivo_sem_malha_levanta_valueerror(tmp_path):
     caminho = tmp_path / "vazio.obj"
     caminho.write_text("# só um comentário, nenhum vértice\n")

@@ -21,7 +21,8 @@ log = logging.getLogger(__name__)
 
 
 def _cache_path(cache_dir: Path, content_hash: str) -> Path:
-    return cache_dir / f"{content_hash}.obj"
+    # Novo formato de exportação: não reutilizar OBJ antigo sem UV/MTL.
+    return cache_dir / f"{content_hash}-textured-v1.obj"
 
 
 def load_via_blender(blend_path: Path, content_hash: str, cache_dir: Path) -> Mesh:
