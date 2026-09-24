@@ -101,6 +101,7 @@ class SettingsWindow(QDialog):
         self.setWindowTitle("Configurações")
         self.setModal(False)
         self.resize(780, 520)
+        self.setMinimumSize(720, 480)
 
         self._lista = QListWidget()
         self._lista.setObjectName("cfgLista")
@@ -321,11 +322,21 @@ class SettingsWindow(QDialog):
             config.load_config().get("theme_mode") == "escuro")
         mw.dark_mode_action.toggled.connect(mw._toggle_dark_mode)
 
+        mw.reduce_motion_check = QCheckBox()
+        mw.reduce_motion_check.setAccessibleName("Reduzir movimento")
+        mw.reduce_motion_check.setChecked(
+            bool(config.load_config().get("reduce_motion", False)))
+        mw.reduce_motion_check.toggled.connect(mw._toggle_reduce_motion)
+
         lay.addWidget(_grupo("Tema"))
         lay.addWidget(_linha(
             "Modo escuro",
             "Vale na hora, sem reabrir o app.",
             mw.dark_mode_action))
+        lay.addWidget(_linha(
+            "Reduzir movimento",
+            "Desliga a transição de hover dos cards da grade.",
+            mw.reduce_motion_check))
         lay.addStretch(1)
         return pagina
 

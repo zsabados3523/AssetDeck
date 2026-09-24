@@ -210,6 +210,10 @@ class MainWindow(QMainWindow):
                                     library_id=self._library_id, parent=self)
         self.grid = AssetGridView()
         self.grid.setModel(self.model)
+        from assetdeck import config
+
+        self.grid.itemDelegate().set_reduced_motion(
+            bool(config.load_config().get("reduce_motion", False)))
         self.grid.selectionModel().currentChanged.connect(self._on_selection)
         self.model.dataChanged.connect(self._on_data_changed)
         self.grid.image_dropped.connect(self._on_image_dropped)
@@ -976,6 +980,16 @@ class MainWindow(QMainWindow):
         config.save_config(cfg)
         self._update_brand_context()  # o canto direito da faixa diz o modo
         self.statusBar().showMessage(f"Modo {modo} aplicado.")
+
+    def _toggle_reduce_motion(self, reduzir: bool) -> None:
+        from assetdeck import config
+
+        cfg = config.load_config()
+        cfg["reduce_motion"] = bool(reduzir)
+        config.save_config(cfg)
+        self.grid.itemDelegate().set_reduced_motion(reduzir)
+        estado = "reduzido" if reduzir else "normal"
+        self.statusBar().showMessage(f"Movimento {estado} aplicado.")
 
     def _refresh_theme_dependent_widgets(self) -> None:
         """Widgets que pintam cor "à mão" (fora do QSS) precisam ser

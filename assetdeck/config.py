@@ -25,6 +25,9 @@ DEFAULTS = {
     # a de base escura. Quem já tem um config.json não é afetado (o valor
     # gravado ganha do DEFAULT) — isto vale só pra primeira execução.
     "theme_mode": "escuro",
+    # Interrompe a animação de hover dos cards; todas as ações continuam
+    # funcionando sem movimento transitório.
+    "reduce_motion": False,
     "backup_keep": 14,  # quantos backups diários do .db manter
     # Ao usar uma imagem da biblioteca como preview de um modelo:
     # "ask" pergunta se oculta a imagem; "always"/"never" lembram a escolha

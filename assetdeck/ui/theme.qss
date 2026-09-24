@@ -446,6 +446,12 @@ QPushButton:checked, QToolButton:checked {
     font-weight: 600;
 }
 
+QPushButton:focus, QToolButton:focus,
+QPushButton#primary:focus, QToolButton#pill:focus,
+QToolButton#pillMini:focus {
+    border-color: $focus;
+}
+
 QPushButton:disabled, QToolButton:disabled {
     color: $text_disabled;
     background-color: $surface;
@@ -904,6 +910,10 @@ QTreeView::item:selected, QListWidget::item:selected, QTableView::item:selected 
     color: $accent;
     border: 1px solid transparent;
     font-weight: 600;
+}
+
+QTreeView::item:focus, QListWidget::item:focus, QTableView::item:focus {
+    border: 1px solid $focus;
 }
 
 QListWidget::item {
