@@ -570,7 +570,11 @@ def test_tokens_tipograficos_tornam_hierarquia_legivel_e_compacta():
     assert tokens["font_size_small"] == "11px"
     assert tokens["font_size_title"] == "17px"
     assert tokens["font_size_brand"] == "19px"
+    assert tokens["font_family_display"] == '"Space Grotesk"'
     assert "font-size: 19px" in qss
+    assert 'font-family: "Space Grotesk"' in qss
+    assert theme.build_tokens(theme.Variant(font="sistema"))["font_family_display"] \
+        == "inherit"
 
 
 def test_todas_as_variantes_aplicam_sem_erro(tema_isolado, tmp_path, monkeypatch):

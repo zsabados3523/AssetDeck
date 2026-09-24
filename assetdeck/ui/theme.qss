@@ -39,6 +39,7 @@ QDialog {
 
 QLabel#dialogHeading {
     color: $title;
+    font-family: $font_family_display;
     font-size: $font_size_title;
     font-weight: 700;
 }
@@ -365,6 +366,7 @@ QLabel#sectionTitle {
 
 QLabel#title {
     color: $title;
+    font-family: $font_family_display;
     font-size: $font_size_title;
     font-weight: 600;
 }
@@ -994,6 +996,7 @@ QFrame#brandGlyph {
 
 QLabel#brandName {
     color: $title;
+    font-family: $font_family_display;
     font-size: $font_size_brand;
     font-weight: 700;
     letter-spacing: .2px;

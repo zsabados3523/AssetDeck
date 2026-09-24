@@ -226,6 +226,7 @@ FONTS = {
     "inter": "Inter",
     "sistema": "",  # vazio = mantém a fonte padrão do sistema
 }
+DISPLAY_FONT = "Space Grotesk"
 
 BACKGROUNDS = ("liso", "grao")
 MODES = ("claro", "escuro")
@@ -514,6 +515,9 @@ def build_tokens(variant: Variant = DEFAULT) -> dict[str, str]:
         "pad_l": "12px",
 
         "font_family": f'"{familia}"' if familia else "inherit",
+        "font_family_display": (
+            f'"{DISPLAY_FONT}"' if familia else "inherit"
+        ),
         "font_size": "13px",
         "font_size_small": "11px",
         "font_size_title": "17px",
@@ -652,6 +656,11 @@ def apply_theme(app, variant: Variant = DEFAULT) -> None:
             log.warning(
                 "Fonte %r não está instalada; usando a fonte padrão do sistema.", familia
             )
+    if familia and DISPLAY_FONT not in QFontDatabase.families():
+        log.warning(
+            "Fonte de títulos %r não está instalada; usando o fallback do Qt.",
+            DISPLAY_FONT,
+        )
 
     app.setPalette(build_palette(variant))
     app.setStyleSheet(build_qss(variant))
