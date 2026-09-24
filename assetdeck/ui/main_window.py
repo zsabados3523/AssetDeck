@@ -7,7 +7,7 @@ import sqlite3
 from pathlib import Path
 
 from PySide6.QtCore import QModelIndex, QSize, Qt, QTimer
-from PySide6.QtGui import QPixmapCache
+from PySide6.QtGui import QPixmap, QPixmapCache
 from PySide6.QtWidgets import (
     QApplication,
     QFrame,
@@ -36,6 +36,7 @@ from assetdeck.indexer import duplicates as duplicates_finder
 from assetdeck.indexer import relocator
 from assetdeck.model3d import loader as model3d_loader
 from assetdeck.indexer.scanner import ScanStats
+from assetdeck.blender.material_preview import preview_key, preview_path
 from assetdeck.thumbs.hdr import can_hdr
 from assetdeck.thumbs.pipeline import ThumbnailPipeline
 from assetdeck.ui import asset_grid
@@ -431,6 +432,9 @@ class MainWindow(QMainWindow):
         # Duplo clique num asset = preview ampliado, embutido na própria
         # janela (Fatia 65) — precisa do widget central já existir.
         self.preview_popup = PreviewPopup(self._central)
+        self._pipeline.ready.connect(self.preview_popup.material_preview_ready)
+        self._pipeline.material_failed.connect(
+            self.preview_popup.material_preview_failed)
 
         # Navegação de pastas (Fatia 32), mesmas teclas de um navegador.
         # Ctrl+T (tags) virou QAction da Fatia 36 — ver _setup_menu_bar
@@ -1546,11 +1550,33 @@ class MainWindow(QMainWindow):
             self._visualizador().abrir_modelo(caminho, row["content_hash"])
             return
         maps = None
+        material_preview = None
+        material_failed = False
+        thumb = self._thumb_from_disk(row)
         if row["asset_type"] == "pbr_set" and self.group_check.isChecked():
             # PBR Material Viewer: botões para alternar entre os mapas do set
             maps = assets_repo.list_files(self._conn, row["id"])
+            key = preview_key(maps)
+            material_preview = preview_path(self._thumbs_dir, key, size=640)
+            map_paths = {}
+            for file in maps:
+                role = file["map_role"] or "basecolor"
+                map_paths.setdefault(role, self._library_root / file["rel_path"])
+            if map_paths:
+                self._pipeline.get_or_request_material(
+                    row["id"], row["name"], map_paths, key,
+                    size=640, priority=2)
+                material_failed = self._pipeline.material_failed_for(
+                    row["id"], key, 640)
+            grid_preview = preview_path(self._thumbs_dir, key)
+            if grid_preview.is_file():
+                pix = QPixmap(str(grid_preview))
+                if not pix.isNull():
+                    thumb = pix
         self.preview_popup.show_for(row, self._library_root,
-                                    self._thumb_from_disk(row), maps=maps)
+                                    thumb, maps=maps,
+                                    material_preview=material_preview,
+                                    material_failed=material_failed)
 
     def _visualizador(self):
         """Janela dos visualizadores 3D (HDRI e modelo na mesma casca desde

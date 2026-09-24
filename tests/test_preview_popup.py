@@ -3,6 +3,7 @@ fecham (Fatia 65: overlay embutido, não janela separada — clicar no
 CARTÃO não pode fechar, só o fundo em volta)."""
 
 import pytest
+from PIL import Image
 from PySide6.QtCore import QEvent, QPointF, Qt
 from PySide6.QtGui import QKeyEvent, QMouseEvent, QPixmap
 from PySide6.QtWidgets import QWidget
@@ -109,3 +110,76 @@ def test_fit_to_host_acompanha_o_tamanho_do_host(popup):
     popup._fit_to_host()
 
     assert (popup.width(), popup.height()) == (1000, 700)
+
+
+def test_material_renderizado_aparece_antes_dos_mapas(popup, tmp_path):
+    root = tmp_path / "lib"
+    root.mkdir()
+    Image.new("RGB", (16, 16), "red").save(root / "Color.png")
+    Image.new("RGB", (16, 16), "blue").save(root / "Normal.png")
+    rendered = tmp_path / "material_640.png"
+    Image.new("RGBA", (640, 640), (150, 70, 30, 255)).save(rendered)
+    maps = [{"rel_path": "Color.png", "map_role": "basecolor"},
+            {"rel_path": "Normal.png", "map_role": "normal"}]
+
+    popup.show_for({"id": 7, "name": "Material", "rel_path": "Color.png"},
+                   root, QPixmap(str(rendered)), maps=maps,
+                   material_preview=rendered)
+
+    buttons = popup._maps_group.buttons()
+    assert [btn.text() for btn in buttons] == ["Material", "basecolor", "normal"]
+    assert buttons[0].isChecked()
+    assert popup._loading_for == rendered
+    buttons[2].click()
+    assert popup._loading_for == root / "Normal.png"
+    buttons[0].click()
+    assert popup._loading_for == rendered
+
+
+def test_render_tardio_nao_troca_o_mapa_escolhido(popup, tmp_path):
+    root = tmp_path / "lib"
+    root.mkdir()
+    Image.new("RGB", (16, 16), "red").save(root / "Color.png")
+    Image.new("RGB", (16, 16), "blue").save(root / "Normal.png")
+    rendered = tmp_path / "material_640.png"
+    maps = [{"rel_path": "Color.png", "map_role": "basecolor"},
+            {"rel_path": "Normal.png", "map_role": "normal"}]
+
+    popup.show_for({"id": 7, "name": "Material", "rel_path": "Color.png"},
+                   root, QPixmap(256, 256), maps=maps,
+                   material_preview=rendered)
+    assert popup.info_label.text() == "Gerando preview do material…"
+    popup._maps_group.buttons()[2].click()
+    chosen = root / "Normal.png"
+    assert popup._loading_for == chosen
+
+    Image.new("RGBA", (640, 640), (150, 70, 30, 255)).save(rendered)
+    popup.material_preview_ready(999, str(rendered))
+    popup.material_preview_ready(7, str(rendered))
+    assert popup._loading_for == chosen
+
+    popup._maps_group.buttons()[0].click()
+    assert popup._loading_for == rendered
+
+
+def test_falha_no_render_mostra_erro_sem_esconder_mapas(popup, tmp_path):
+    root = tmp_path / "lib"
+    root.mkdir()
+    Image.new("RGB", (16, 16), "red").save(root / "Color.png")
+    Image.new("RGB", (16, 16), "blue").save(root / "Normal.png")
+    rendered = tmp_path / "material_640.png"
+    maps = [{"rel_path": "Color.png", "map_role": "basecolor"},
+            {"rel_path": "Normal.png", "map_role": "normal"}]
+
+    popup.show_for({"id": 7, "name": "Material", "rel_path": "Color.png"},
+                   root, QPixmap(256, 256), maps=maps,
+                   material_preview=rendered)
+    popup.material_preview_failed(7, str(rendered))
+    assert "Não consegui gerar" in popup.info_label.text()
+    assert [button.text() for button in popup._maps_group.buttons()] == [
+        "Material", "basecolor", "normal",
+    ]
+
+    popup._maps_group.buttons()[1].click()
+    popup._maps_group.buttons()[0].click()
+    assert "Não consegui gerar" in popup.info_label.text()
