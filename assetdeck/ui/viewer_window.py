@@ -131,8 +131,10 @@ class VisualizadorWindow(QDialog):
         # ---- cabeçalho ----
         self.titulo = QLabel("—")
         self.titulo.setObjectName("title")  # mesmo estilo do título do preview
+        self.titulo.setAccessibleName("Nome do asset visualizado")
         self.chip = QLabel()
         self.chip.setObjectName("chipMini")
+        self.chip.setAccessibleName("Formato do arquivo")
         # Sem ✕ próprio (Fatia 94, Rafael: "tem o botão de fechar porém ainda
         # sim tem os botões de qualquer janela, então fica meio redundante").
         # Esta é uma janela normal do sistema: minimizar/maximizar/fechar já
@@ -147,8 +149,10 @@ class VisualizadorWindow(QDialog):
         # ---- controles (o que aparece depende da página) ----
         self.btn_ambiente = QToolButton()
         self.btn_ambiente.setText("Ambiente")
+        self.btn_ambiente.setAccessibleName("Modo de iluminação: ambiente")
         self.btn_esfera = QToolButton()
         self.btn_esfera.setText("Esfera de reflexo")
+        self.btn_esfera.setAccessibleName("Modo de iluminação: esfera de reflexo")
         self._modos = QButtonGroup(self)
         self._modos.setExclusive(True)
         for indice, botao in ((hdri_viewer.MODO_AMBIENTE, self.btn_ambiente),
@@ -165,6 +169,7 @@ class VisualizadorWindow(QDialog):
         self.btn_enquadrar.setToolButtonStyle(
             Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         self.btn_enquadrar.setToolTip("Recentraliza a câmera no modelo")
+        self.btn_enquadrar.setAccessibleName("Enquadrar modelo")
         self.btn_enquadrar.clicked.connect(self._enquadrar)
 
         controles = QHBoxLayout()
@@ -191,6 +196,7 @@ class VisualizadorWindow(QDialog):
         # ---- rodapé ----
         self.status = QLabel("Carregando…")
         self.status.setObjectName("muted")
+        self.status.setAccessibleName("Estado da visualização 3D")
         self.dica = QLabel("Esc fecha")
         self.dica.setObjectName("visorDica")
         rodape = QHBoxLayout()

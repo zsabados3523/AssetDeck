@@ -66,15 +66,21 @@ class PreviewPopup(OverlayPanel):
         self.title_label.setObjectName("title")
         self.title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.title_label.setWordWrap(True)
+        self.title_label.setAccessibleName("Nome do asset visualizado")
 
         self.image_label = QLabel()
         self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.image_label.setAccessibleName("Preview ampliado do asset")
         self.info_label = QLabel()
         self.info_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.info_label.setObjectName("previewInfo")
+        self.info_label.setAccessibleName("Estado do preview")
 
         # Barra do "PBR Material Viewer": um botão por mapa do set
         self.maps_bar = QWidget()
+        self.maps_bar.setAccessibleName("Mapas do material")
+        self.maps_bar.setAccessibleDescription(
+            "Escolha o material ou um mapa PBR para visualizar")
         self._maps_layout = QHBoxLayout(self.maps_bar)
         self._maps_layout.setContentsMargins(0, 0, 0, 0)
         self._maps_group = QButtonGroup(self)
@@ -171,6 +177,7 @@ class PreviewPopup(OverlayPanel):
             return
         if material_preview is not None:
             btn = QPushButton("Material")
+            btn.setAccessibleName("Preview do material PBR")
             btn.setCheckable(True)
             btn.clicked.connect(self._on_material_clicked)
             self._maps_group.addButton(btn)
@@ -181,7 +188,9 @@ class PreviewPopup(OverlayPanel):
             if m["map_role"] in PRIMARY_ORDER else 99,
         )
         for m in ordenados:
-            btn = QPushButton(m["map_role"] if m["map_role"] != "none" else "arquivo")
+            label = _map_role_label(m["map_role"])
+            btn = QPushButton(label)
+            btn.setAccessibleName(f"Visualizar mapa {label}")
             btn.setCheckable(True)
             rel = m["rel_path"]
             btn.clicked.connect(lambda _c=False, r=rel: self._on_map_clicked(r))
@@ -265,3 +274,19 @@ class PreviewPopup(OverlayPanel):
         return pix.scaled(min(pix.width(), area_w), min(pix.height(), area_h),
                           Qt.AspectRatioMode.KeepAspectRatio,
                           Qt.TransformationMode.SmoothTransformation)
+
+
+def _map_role_label(role: str) -> str:
+    """Nome visível de cada mapa, sem expor os identificadores do indexador."""
+    return {
+        "basecolor": "Base Color",
+        "normal": "Normal",
+        "roughness": "Roughness",
+        "height": "Height",
+        "ao": "Oclusão",
+        "metallic": "Metallic",
+        "specular": "Specular",
+        "opacity": "Opacity",
+        "emission": "Emission",
+        "none": "Arquivo",
+    }.get(role, role.replace("_", " ").title())

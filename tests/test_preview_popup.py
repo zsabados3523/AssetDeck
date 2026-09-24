@@ -127,7 +127,7 @@ def test_material_renderizado_aparece_antes_dos_mapas(popup, tmp_path):
                    material_preview=rendered)
 
     buttons = popup._maps_group.buttons()
-    assert [btn.text() for btn in buttons] == ["Material", "basecolor", "normal"]
+    assert [btn.text() for btn in buttons] == ["Material", "Base Color", "Normal"]
     assert buttons[0].isChecked()
     assert popup._loading_for == rendered
     buttons[2].click()
@@ -177,8 +177,9 @@ def test_falha_no_render_mostra_erro_sem_esconder_mapas(popup, tmp_path):
     popup.material_preview_failed(7, str(rendered))
     assert "Não consegui gerar" in popup.info_label.text()
     assert [button.text() for button in popup._maps_group.buttons()] == [
-        "Material", "basecolor", "normal",
+        "Material", "Base Color", "Normal",
     ]
+    assert popup._maps_group.buttons()[1].accessibleName() == "Visualizar mapa Base Color"
 
     popup._maps_group.buttons()[1].click()
     popup._maps_group.buttons()[0].click()
