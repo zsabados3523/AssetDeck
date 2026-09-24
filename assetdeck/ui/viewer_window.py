@@ -324,11 +324,13 @@ class VisualizadorWindow(QDialog):
             f"{imagem.width()} × {imagem.height()} px  ·  "
             "arraste para girar, duplo clique centraliza")
 
-    def _modelo_carregado(self, malha) -> None:
+    def _modelo_carregado(self, prepared: model_viewer.PreparedModel) -> None:
+        malha = prepared.mesh
         log.info("Modelo pronto na tela: %s (%d vértices)",
                  getattr(self._alvo, "name", "?"), len(malha.positions))
-        self.modelo.set_mesh(malha)
-        n_tris = len(malha.positions) // 3
+        self.modelo.set_mesh(malha, buffer=prepared.buffer, images=prepared.images)
+        n_tris = (len(malha.indices) if malha.indices is not None
+                  else len(malha.positions)) // 3
         n_texturas = len({r.texture for r in malha.materials if r.texture is not None})
         info_textura = f"  ·  {n_texturas} textura(s)" if n_texturas else ""
         self.status.setText(
