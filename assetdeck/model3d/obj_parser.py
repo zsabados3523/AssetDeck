@@ -6,6 +6,8 @@ import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import numpy as np
+
 
 log = logging.getLogger(__name__)
 
@@ -16,25 +18,30 @@ class MaterialRange:
     count: int
     color: tuple[float, float, float] = (0.72, 0.72, 0.75)
     texture: Path | None = None
+    name: str | None = None
 
 
 @dataclass
 class Mesh:
-    """Um vértice por CANTO de triângulo usado (não deduplicado) — é o
-    formato que `glDrawArrays(GL_TRIANGLES, ...)` quer direto, sem
-    precisar de buffer de índices. Gasta mais memória que deduplicar,
-    mas pra uma POC (um modelo por vez, não a biblioteca inteira) não
-    compensa a complexidade a mais."""
+    """Geometria para o OpenGL: opcionalmente indexada para modelos grandes.
 
-    positions: list[tuple[float, float, float]]
-    normals: list[tuple[float, float, float]]
-    uvs: list[tuple[float, float]] = field(default_factory=list)
+    O parser OBJ simples ainda fornece um vértice por canto. O Assimp
+    mantém vértices compartilhados em ``indices``, evitando triplicar o
+    buffer de modelos densos.
+    """
+
+    positions: list[tuple[float, float, float]] | np.ndarray
+    normals: list[tuple[float, float, float]] | np.ndarray
+    uvs: list[tuple[float, float]] | np.ndarray = field(default_factory=list)
     materials: list[MaterialRange] = field(default_factory=list)
+    indices: np.ndarray | None = field(default=None, repr=False, compare=False)
 
     def bounds(self) -> tuple[tuple[float, float, float], tuple[float, float, float]]:
         """(mínimo, máximo) dos vértices — usado pra centralizar e
         enquadrar a câmera sozinho ao carregar (ver `OrbitCamera.
         enquadrar`), sem o Rafael precisar achar o modelo na mão."""
+        if isinstance(self.positions, np.ndarray):
+            return tuple(self.positions.min(axis=0)), tuple(self.positions.max(axis=0))
         xs = [p[0] for p in self.positions]
         ys = [p[1] for p in self.positions]
         zs = [p[2] for p in self.positions]
@@ -202,11 +209,12 @@ def parse_obj(path: Path) -> Mesh:
         count = len(positions) - start
         if count:
             if (ranges and ranges[-1].start + ranges[-1].count == start
-                    and ranges[-1].color == color and ranges[-1].texture == texture):
+                    and ranges[-1].color == color and ranges[-1].texture == texture
+                    and ranges[-1].name == material_name):
                 previous = ranges[-1]
                 ranges[-1] = MaterialRange(previous.start, previous.count + count,
-                                           color, texture)
+                                           color, texture, material_name)
             else:
-                ranges.append(MaterialRange(start, count, color, texture))
+                ranges.append(MaterialRange(start, count, color, texture, material_name))
 
     return Mesh(positions=positions, normals=normals, uvs=uvs, materials=ranges)

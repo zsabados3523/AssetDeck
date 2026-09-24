@@ -12,6 +12,17 @@ import pytest
 
 from assetdeck.blender.render import RenderResult
 from assetdeck.model3d import blend_loader
+from assetdeck.model3d.obj_parser import MaterialRange, Mesh
+
+
+@pytest.fixture(autouse=True)
+def _manifesto_fake(monkeypatch):
+    """O teste do cache não inicia o Blender só para gerar metadados."""
+    def fake_manifest(_blend, obj, comando=None):
+        target = obj.with_suffix(".materials.json")
+        target.write_text("{}")
+        return RenderResult(True, dest=target)
+    monkeypatch.setattr(blend_loader, "export_material_manifest", fake_manifest)
 
 
 def _obj_valido(caminho: Path) -> None:
@@ -90,3 +101,36 @@ def test_export_falhou_levanta_runtimeerror_com_o_motivo(tmp_path, monkeypatch):
     with pytest.raises(RuntimeError, match="cena vazia"):
         blend_loader.load_via_blender(
             tmp_path / "modelo.blend", "hash123", tmp_path / "cache")
+
+
+def test_manifesto_recupera_cor_e_textura_do_blend(tmp_path):
+    imagem = tmp_path / "cor.png"
+    imagem.write_bytes(b"imagem referenciada")
+    manifesto = tmp_path / "modelo.materials.json"
+    manifesto.write_text(
+        '{"Mat": {"color": [0.2, 0.5, 0.7], "texture": "cor.png"}}')
+    mesh = Mesh(positions=[(0, 0, 0)], normals=[(0, 0, 1)],
+                materials=[MaterialRange(0, 1, name="Mat")])
+    blend_loader._apply_manifest(mesh, manifesto, tmp_path / "modelo.blend")
+    assert mesh.materials[0].color == pytest.approx((0.2, 0.5, 0.7))
+    assert mesh.materials[0].texture == imagem
+
+
+def test_manifesto_nao_refaz_exportacao_do_obj_cacheado(tmp_path, monkeypatch):
+    cache = tmp_path / "cache"
+    cache.mkdir()
+    _obj_valido(blend_loader._cache_path(cache, "hash123"))
+    monkeypatch.setattr(blend_loader, "export_to_obj", lambda *_: pytest.fail(
+        "OBJ cacheado não deve ser exportado outra vez"))
+    calls = []
+
+    def fake_manifest(_blend, obj, comando=None):
+        calls.append(obj)
+        target = obj.with_suffix(".materials.json")
+        target.write_text("{}")
+        return RenderResult(True, dest=target)
+
+    monkeypatch.setattr(blend_loader, "export_material_manifest", fake_manifest)
+    blend_loader.load_via_blender(tmp_path / "modelo.blend", "hash123", cache)
+    blend_loader.load_via_blender(tmp_path / "modelo.blend", "hash123", cache)
+    assert calls == [blend_loader._cache_path(cache, "hash123")]
