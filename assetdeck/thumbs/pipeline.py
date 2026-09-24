@@ -9,6 +9,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QObject, QRunnable, QThreadPool, Signal
 
+from assetdeck.blender.material_preview import preview_path, render_material_preview
 from assetdeck.thumbs.cache import thumb_name, thumb_path
 from assetdeck.thumbs.preview import make_any_thumbnail
 
@@ -18,6 +19,11 @@ log = logging.getLogger(__name__)
 class _Signaller(QObject):
     ready = Signal(int, str)    # asset_id, caminho da thumb
     failed = Signal(int)        # asset_id
+
+
+class _MaterialSignaller(QObject):
+    ready = Signal(int, str)
+    failed = Signal(int)
 
 
 _rebaixada = threading.local()
@@ -67,6 +73,34 @@ class _ThumbJob(QRunnable):
             self._sig.failed.emit(self._asset_id)
 
 
+class _MaterialJob(QRunnable):
+    def __init__(self, signaller: _MaterialSignaller, asset_id: int, name: str,
+                 maps: dict[str, Path], dest: Path, cancel: threading.Event) -> None:
+        super().__init__()
+        self._sig = signaller
+        self._asset_id = asset_id
+        self._name = name
+        self._maps = maps
+        self._dest = dest
+        self._cancel = cancel
+
+    def run(self) -> None:
+        rebaixar_esta_thread()
+        try:
+            if self._cancel.is_set():
+                return
+            render_material_preview(self._name, self._maps, self._dest, self._cancel)
+            self._sig.ready.emit(self._asset_id, str(self._dest))
+        except Exception:
+            if self._cancel.is_set():
+                log.info("Capa PBR cancelada ao fechar: %s (asset %d)",
+                         self._name, self._asset_id)
+            else:
+                log.exception("Capa PBR falhou para %s (asset %d)",
+                              self._name, self._asset_id)
+            self._sig.failed.emit(self._asset_id)
+
+
 class ThumbnailPipeline(QObject):
     """Pede-se uma thumb; se não existe, é gerada no pool e avisada por sinal."""
 
@@ -87,11 +121,34 @@ class ThumbnailPipeline(QObject):
         #    também o que o visualizador e a prévia tivessem pendente.
         self._pool = QThreadPool(self)
         self._pool.setMaxThreadCount(max(2, (os.cpu_count() or 4) // 2))
+        self._material_pool = QThreadPool(self)
+        self._material_pool.setMaxThreadCount(1)  # um Blender headless por vez
+        self._material_cancel = threading.Event()
         self._sig = _Signaller()
         self._sig.ready.connect(self._on_ready)
         self._sig.failed.connect(self._on_failed)
+        self._material_sig = _MaterialSignaller()
+        self._material_sig.ready.connect(self._on_material_ready)
+        self._material_sig.failed.connect(self._on_material_failed)
         self._inflight: set[int] = set()
         self._failed: set[int] = set()
+        self._material_inflight: dict[int, str] = {}
+        self._material_failed: dict[int, str] = {}
+
+    def get_or_request_material(self, asset_id: int, name: str,
+                                maps: dict[str, Path], key: str) -> Path | None:
+        """Capa PBR sob demanda; o grid usa o mapa principal enquanto espera."""
+        dest = preview_path(self._thumbs_dir, key)
+        if dest.is_file():
+            return dest
+        if (asset_id in self._material_inflight
+                or self._material_failed.get(asset_id) == key):
+            return None
+        self._material_inflight[asset_id] = key
+        self._material_pool.start(
+            _MaterialJob(self._material_sig, asset_id, name, maps, dest,
+                         self._material_cancel), 1)
+        return None
 
     def get_or_request(self, asset_id: int, src: Path, content_hash: str,
                        priority: int = 1) -> Path | None:
@@ -165,7 +222,20 @@ class ThumbnailPipeline(QObject):
         self._inflight.discard(asset_id)
         self._failed.add(asset_id)  # não tenta de novo nesta sessão
 
+    def _on_material_ready(self, asset_id: int, path: str) -> None:
+        self._material_inflight.pop(asset_id, None)
+        self.ready.emit(asset_id, path)
+
+    def _on_material_failed(self, asset_id: int) -> None:
+        key = self._material_inflight.pop(asset_id, None)
+        if key is not None:
+            self._material_failed[asset_id] = key
+
     def shutdown(self, timeout_ms: int = 3000) -> None:
+        self._material_cancel.set()
         self._pool.clear()  # descarta jobs ainda não iniciados
+        self._material_pool.clear()
         if not self._pool.waitForDone(timeout_ms):
             log.error("Pool de thumbnails não terminou em %dms.", timeout_ms)
+        if not self._material_pool.waitForDone(timeout_ms):
+            log.error("Pool de capas PBR não terminou em %dms.", timeout_ms)

@@ -19,6 +19,7 @@ from PySide6.QtWidgets import QListView
 MIME_ASSETS = "application/x-assetdeck-asset-ids"
 
 from assetdeck.db.repos import assets as assets_repo
+from assetdeck.blender.material_preview import preview_key
 from assetdeck.thumbs.pipeline import ThumbnailPipeline
 from assetdeck.thumbs.preview import can_preview
 from assetdeck.ui import theme
@@ -85,6 +86,7 @@ class AssetGridModel(QAbstractListModel):
         # Populado por _pixmap_for a cada DecorationRole; o delegate lê logo
         # depois via HAS_THUMB_ROLE — mesma chamada de paint, sem corrida.
         self._is_placeholder: dict[int, bool] = {}
+        self._material_files: dict[int, tuple[str, dict[str, Path]]] = {}
         # Tamanho da miniatura, ajustável pelo slider da grade (Fatia 28).
         self._icon_px = ICON
         # Filtros ativos (Fatia 4; tipos viraram lista na Fatia 5)
@@ -182,6 +184,7 @@ class AssetGridModel(QAbstractListModel):
 
     def _requery(self) -> None:
         self.beginResetModel()
+        self._material_files.clear()
         self._rows = assets_repo.list_for_grid(
             self._conn, search=self._search, asset_types=self._asset_types,
             dir_prefix=self._dir_prefix, include_subdirs=self._include_subdirs,
@@ -299,10 +302,31 @@ class AssetGridModel(QAbstractListModel):
 
     def _pixmap_for(self, row) -> QPixmap:
         cover = row.get("cover_path")
+        material_path = None
+        material_key = None
+        if (not cover and not self._expand_sets and row["asset_type"] == "pbr_set"
+                and row["missing_since"] is None):
+            cached_files = self._material_files.get(row["id"])
+            if cached_files is None:
+                files = assets_repo.list_files(self._conn, row["id"])
+                maps = {}
+                for f in files:
+                    if f["map_role"]:
+                        maps.setdefault(f["map_role"], self._root / f["rel_path"])
+                cached_files = (preview_key(files), maps)
+                self._material_files[row["id"]] = cached_files
+            material_key, maps = cached_files
+            if maps:
+                material_path = self._pipeline.get_or_request_material(
+                    row["id"], row["name"], maps, material_key)
+
         if cover:
             # Capa escolhida pelo usuário vence o arquivo do asset
             src = Path(cover)
             key_hash = f"prev-{src.stem}"  # nome já é uuid: chave estável
+        elif material_path is not None:
+            src = material_path
+            key_hash = f"material-{material_key}"
         else:
             src = self._root / row["rel_path"]
             key_hash = row["content_hash"]
@@ -315,6 +339,21 @@ class AssetGridModel(QAbstractListModel):
         if cached:
             self._is_placeholder[row["id"]] = False
             return cached
+
+        if material_path is not None:
+            pix = QPixmap(str(material_path))
+            if not pix.isNull():
+                pix = pix.scaled(
+                    self._icon_px, self._icon_px, Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation,
+                )
+                QPixmapCache.insert(key, pix)
+                self._is_placeholder[row["id"]] = False
+                return pix
+            log.warning("Capa PBR ilegível para asset %d: %s", row["id"], material_path)
+            src = self._root / row["rel_path"]
+            key_hash = row["content_hash"]
+            key = f"thumb:{key_hash}:{self._icon_px}"
 
         if (cover or row["missing_since"] is None) and can_preview(src):
             path = self._pipeline.get_or_request(row["id"], src, key_hash)
