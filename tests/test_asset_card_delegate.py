@@ -373,3 +373,14 @@ def test_o_hover_zera_quando_a_grade_recarrega(grid, qapp):
     assert not delegate._hover_progress, "sobrou progresso de hover após a recarga"
     assert not delegate._hover_target, "sobrou alvo de hover após a recarga"
     assert not delegate._hover_timer.isActive(), "o timer continuou rodando à toa"
+
+
+def test_reduzir_movimento_desliga_timer_sem_remover_hover(grid):
+    view, modelo, _conn = grid
+    delegate = view.itemDelegate()
+    delegate.set_reduced_motion(True)
+    delegate.set_hover(None, modelo.index(0))
+
+    assert delegate._reduced_motion is True
+    assert not delegate._hover_target
+    assert not delegate._hover_timer.isActive()

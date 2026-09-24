@@ -119,6 +119,7 @@ class AssetCardDelegate(QStyledItemDelegate):
         # INTERAÇÃO, não de tema, por isso mora aqui e não em `refresh_theme`.
         # `AssetGridView` chama `set_pressed()` no mousePress/Release.
         self._pressed_index = None
+        self._reduced_motion = False
 
         # Progresso animado do hover, por LINHA (Fatia 74, ajuste: "a
         # animação poderia ser um pouco mais suave"). 0 = repouso, 1 = mouse
@@ -206,6 +207,14 @@ class AssetCardDelegate(QStyledItemDelegate):
         sob o cursor muda (Fatia 74) — dispara a animação de entrada do novo
         índice e de saída do antigo, em vez de o `paint()` ler um booleano e
         saltar direto pro estado final."""
+        if self._reduced_motion:
+            self._hover_progress.clear()
+            self._hover_target.clear()
+            self._hover_timer.stop()
+            view = self.parent()
+            if view is not None:
+                view.viewport().update()
+            return
         if old_index is not None and old_index.isValid():
             self._hover_target[old_index.row()] = 0.0
             self._hover_progress.setdefault(old_index.row(), 1.0)
@@ -215,6 +224,17 @@ class AssetCardDelegate(QStyledItemDelegate):
         if self._hover_target and not self._hover_timer.isActive():
             self._hover_clock.start()
             self._hover_timer.start()
+
+    def set_reduced_motion(self, reduced: bool) -> None:
+        """Liga/desliga a transição de hover sem remover o estado de hover."""
+        self._reduced_motion = bool(reduced)
+        if self._reduced_motion:
+            self._hover_progress.clear()
+            self._hover_target.clear()
+            self._hover_timer.stop()
+        view = self.parent()
+        if view is not None:
+            view.viewport().update()
 
     def clear_hover(self) -> None:
         """Zera a animação de hover (Fatia 74). O progresso é indexado por

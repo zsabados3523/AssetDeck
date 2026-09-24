@@ -69,6 +69,21 @@ def test_cada_categoria_tem_uma_pagina(janela):
     assert sw._paginas.count() == sw._lista.count()
 
 
+def test_reduzir_movimento_salva_e_aplica_na_grade(janela):
+    check = janela.reduce_motion_check
+    delegate = janela.grid.itemDelegate()
+
+    assert check.isChecked() is False
+    assert delegate._reduced_motion is False
+    check.setChecked(True)
+    assert config.load_config()["reduce_motion"] is True
+    assert delegate._reduced_motion is True
+
+    check.setChecked(False)
+    assert config.load_config()["reduce_motion"] is False
+    assert delegate._reduced_motion is False
+
+
 # ------------------------ opções que vieram da janela de Preferências --
 
 def test_a_ponte_carrega_o_valor_do_config(janela):
