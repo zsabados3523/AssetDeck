@@ -23,16 +23,20 @@ def preview_key(files: list) -> str:
     return hashlib.sha256(payload.encode()).hexdigest()
 
 
-def preview_path(thumbs_dir: Path, key: str) -> Path:
-    return thumbs_dir / f"material_{key}.png"
+def preview_path(thumbs_dir: Path, key: str, size: int = 256) -> Path:
+    suffix = "" if size == 256 else f"_{size}"
+    return thumbs_dir / f"material_{key}{suffix}.png"
 
 
 def render_material_preview(name: str, maps: dict[str, Path], dest: Path,
-                            cancel: threading.Event | None = None) -> None:
+                            cancel: threading.Event | None = None,
+                            size: int = 256) -> None:
     """Renderiza em arquivo temporário e publica a capa completa de uma vez."""
     blender = shutil.which("blender")
     if blender is None:
         raise RuntimeError("Blender não encontrado para gerar a capa PBR")
+    if size not in (256, 640):
+        raise ValueError(f"Tamanho de capa PBR não suportado: {size}")
     for role, path in maps.items():
         if not path.is_file():
             raise FileNotFoundError(f"Mapa {role} não encontrado: {path}")
@@ -42,7 +46,7 @@ def render_material_preview(name: str, maps: dict[str, Path], dest: Path,
     script = Path(__file__).parent / "scripts" / "render_material_preview.py"
     materials = Path(__file__).parents[2] / "blender_addon/assetdeck_bridge/materials.py"
     args = [blender, "-b", "-t", "1", "--factory-startup", "-P", str(script),
-            "--", str(materials), str(temp), name,
+            "--", str(materials), str(temp), name, str(size),
             json.dumps({role: str(path) for role, path in maps.items()})]
     try:
         with subprocess.Popen(args, stdout=subprocess.PIPE,

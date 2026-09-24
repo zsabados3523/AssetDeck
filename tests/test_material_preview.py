@@ -55,16 +55,20 @@ def test_pipeline_avisa_quando_capa_pbr_fica_pronta(qapp, tmp_path):
     ready = []
     pipeline.ready.connect(lambda aid, path: ready.append((aid, path)))
     key = preview_key([{"map_role": "basecolor", "content_hash": "teste"}])
-    dest = preview_path(tmp_path / "thumbs", key)
+    dest = preview_path(tmp_path / "thumbs", key, size=640)
     try:
-        assert pipeline.get_or_request_material(7, "Teste", {"basecolor": color}, key) is None
-        deadline = time.monotonic() + 20
+        assert pipeline.get_or_request_material(
+            7, "Teste", {"basecolor": color}, key, size=640, priority=2) is None
+        deadline = time.monotonic() + 30
         while not ready and time.monotonic() < deadline:
             qapp.processEvents()
             time.sleep(0.02)
         assert ready == [(7, str(dest))]
         assert dest.is_file()
-        assert pipeline.get_or_request_material(7, "Teste", {"basecolor": color}, key) == dest
+        with Image.open(dest) as image:
+            assert image.size == (640, 640)
+        assert pipeline.get_or_request_material(
+            7, "Teste", {"basecolor": color}, key, size=640) == dest
     finally:
         pipeline.shutdown()
 

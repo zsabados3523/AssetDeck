@@ -247,6 +247,36 @@ def test_thumb_from_disk_usa_a_capa_customizada(janela, tmp_path):
     assert pix is not None and not pix.isNull()
 
 
+def test_duplo_clique_em_set_pbr_abre_material_antes_dos_mapas(
+        janela, tmp_path, monkeypatch):
+    from assetdeck.indexer.grouper import apply_grouping
+
+    root = janela._library_root
+    Image.new("RGB", (16, 16), "red").save(root / "Stone_Color.png")
+    Image.new("RGB", (16, 16), "blue").save(root / "Stone_Normal.png")
+    scan_library(janela._conn, janela._library_id, root)
+    apply_grouping(janela._conn, janela._library_id)
+    janela.group_check.setChecked(True)
+    janela.model.reload()
+    asset_id = janela._conn.execute(
+        "SELECT id FROM assets WHERE asset_type = 'pbr_set' AND deleted_at IS NULL"
+    ).fetchone()["id"]
+
+    requests = []
+    monkeypatch.setattr(
+        janela._pipeline, "get_or_request_material",
+        lambda aid, name, maps, key, **kw: requests.append((aid, kw)) or None,
+    )
+    janela._open_preview(janela.model.index_of_asset(asset_id))
+
+    assert not janela.preview_popup.isHidden()
+    assert [b.text() for b in janela.preview_popup._maps_group.buttons()] == [
+        "Material", "basecolor", "normal",
+    ]
+    assert any(aid == asset_id and options["size"] == 640
+               and options["priority"] == 2 for aid, options in requests)
+
+
 def test_ponte_e_render_ficam_prontos(janela):
     """Cobre o NameError que derrubava a abertura do app."""
     assert janela._bridge is not None

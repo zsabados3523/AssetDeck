@@ -22,8 +22,8 @@ class _Signaller(QObject):
 
 
 class _MaterialSignaller(QObject):
-    ready = Signal(int, str)
-    failed = Signal(int)
+    ready = Signal(int, int, str)  # asset_id, tamanho, caminho
+    failed = Signal(int, int)
 
 
 _rebaixada = threading.local()
@@ -75,7 +75,8 @@ class _ThumbJob(QRunnable):
 
 class _MaterialJob(QRunnable):
     def __init__(self, signaller: _MaterialSignaller, asset_id: int, name: str,
-                 maps: dict[str, Path], dest: Path, cancel: threading.Event) -> None:
+                 maps: dict[str, Path], dest: Path, cancel: threading.Event,
+                 size: int) -> None:
         super().__init__()
         self._sig = signaller
         self._asset_id = asset_id
@@ -83,14 +84,16 @@ class _MaterialJob(QRunnable):
         self._maps = maps
         self._dest = dest
         self._cancel = cancel
+        self._size = size
 
     def run(self) -> None:
         rebaixar_esta_thread()
         try:
             if self._cancel.is_set():
                 return
-            render_material_preview(self._name, self._maps, self._dest, self._cancel)
-            self._sig.ready.emit(self._asset_id, str(self._dest))
+            render_material_preview(self._name, self._maps, self._dest,
+                                    self._cancel, self._size)
+            self._sig.ready.emit(self._asset_id, self._size, str(self._dest))
         except Exception:
             if self._cancel.is_set():
                 log.info("Capa PBR cancelada ao fechar: %s (asset %d)",
@@ -98,13 +101,14 @@ class _MaterialJob(QRunnable):
             else:
                 log.exception("Capa PBR falhou para %s (asset %d)",
                               self._name, self._asset_id)
-            self._sig.failed.emit(self._asset_id)
+            self._sig.failed.emit(self._asset_id, self._size)
 
 
 class ThumbnailPipeline(QObject):
     """Pede-se uma thumb; se não existe, é gerada no pool e avisada por sinal."""
 
     ready = Signal(int, str)   # repassado ao modelo da grid
+    material_failed = Signal(int, str)  # asset_id, caminho esperado
 
     def __init__(self, thumbs_dir: Path, parent: QObject | None = None) -> None:
         super().__init__(parent)
@@ -132,23 +136,28 @@ class ThumbnailPipeline(QObject):
         self._material_sig.failed.connect(self._on_material_failed)
         self._inflight: set[int] = set()
         self._failed: set[int] = set()
-        self._material_inflight: dict[int, str] = {}
-        self._material_failed: dict[int, str] = {}
+        self._material_inflight: dict[tuple[int, int], str] = {}
+        self._material_failed: dict[tuple[int, int], str] = {}
 
     def get_or_request_material(self, asset_id: int, name: str,
-                                maps: dict[str, Path], key: str) -> Path | None:
+                                maps: dict[str, Path], key: str,
+                                size: int = 256, priority: int = 1) -> Path | None:
         """Capa PBR sob demanda; o grid usa o mapa principal enquanto espera."""
-        dest = preview_path(self._thumbs_dir, key)
+        dest = preview_path(self._thumbs_dir, key, size)
         if dest.is_file():
             return dest
-        if (asset_id in self._material_inflight
-                or self._material_failed.get(asset_id) == key):
+        request_id = (asset_id, size)
+        if (request_id in self._material_inflight
+                or self._material_failed.get(request_id) == key):
             return None
-        self._material_inflight[asset_id] = key
+        self._material_inflight[request_id] = key
         self._material_pool.start(
             _MaterialJob(self._material_sig, asset_id, name, maps, dest,
-                         self._material_cancel), 1)
+                         self._material_cancel, size), priority)
         return None
+
+    def material_failed_for(self, asset_id: int, key: str, size: int) -> bool:
+        return self._material_failed.get((asset_id, size)) == key
 
     def get_or_request(self, asset_id: int, src: Path, content_hash: str,
                        priority: int = 1) -> Path | None:
@@ -222,14 +231,17 @@ class ThumbnailPipeline(QObject):
         self._inflight.discard(asset_id)
         self._failed.add(asset_id)  # não tenta de novo nesta sessão
 
-    def _on_material_ready(self, asset_id: int, path: str) -> None:
-        self._material_inflight.pop(asset_id, None)
+    def _on_material_ready(self, asset_id: int, size: int, path: str) -> None:
+        self._material_inflight.pop((asset_id, size), None)
         self.ready.emit(asset_id, path)
 
-    def _on_material_failed(self, asset_id: int) -> None:
-        key = self._material_inflight.pop(asset_id, None)
+    def _on_material_failed(self, asset_id: int, size: int) -> None:
+        request_id = (asset_id, size)
+        key = self._material_inflight.pop(request_id, None)
         if key is not None:
-            self._material_failed[asset_id] = key
+            self._material_failed[request_id] = key
+            self.material_failed.emit(
+                asset_id, str(preview_path(self._thumbs_dir, key, size)))
 
     def shutdown(self, timeout_ms: int = 3000) -> None:
         self._material_cancel.set()

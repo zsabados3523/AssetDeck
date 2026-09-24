@@ -35,8 +35,8 @@ log = logging.getLogger(__name__)
 
 
 class _Signaller(QObject):
-    loaded = Signal(QImage, int, int)  # imagem, largura original, altura original
-    failed = Signal(str)
+    loaded = Signal(str, QImage, int, int)  # caminho, imagem, largura, altura
+    failed = Signal(str, str)  # caminho, erro
 
 
 class _LoadJob(QRunnable):
@@ -52,10 +52,10 @@ class _LoadJob(QRunnable):
             img = img.convert("RGBA")
             qimg = QImage(img.tobytes("raw", "RGBA"), img.width, img.height,
                           QImage.Format.Format_RGBA8888).copy()
-            self._sig.loaded.emit(qimg, w, h)
+            self._sig.loaded.emit(str(self._path), qimg, w, h)
         except Exception as exc:
             log.exception("Preview ampliado falhou para %s", self._path)
-            self._sig.failed.emit(str(exc))
+            self._sig.failed.emit(str(self._path), str(exc))
 
 
 class PreviewPopup(OverlayPanel):
@@ -102,6 +102,11 @@ class PreviewPopup(OverlayPanel):
         self._sig.failed.connect(self._on_failed)
         self._loading_for: Path | None = None
         self._library_root: Path | None = None
+        self._material_asset_id: int | None = None
+        self._material_preview_path: Path | None = None
+        self._material_button: QPushButton | None = None
+        self._material_thumb: QPixmap | None = None
+        self._material_failed = False
         # Tamanho do CARTÃO padronizado (feedback do Rafael): não pula de
         # tamanho trocando de imagem, seja ela 256px ou 8K — só o conteúdo
         # escala. Recalculado a cada abertura a partir do tamanho da janela
@@ -116,9 +121,15 @@ class PreviewPopup(OverlayPanel):
         self._card.setFixedSize(self._win_w, self._win_h)
 
     def show_for(self, row: sqlite3.Row, library_root: Path,
-                 thumb: QPixmap | None, maps: list | None = None) -> None:
+                 thumb: QPixmap | None, maps: list | None = None,
+                 material_preview: Path | None = None,
+                 material_failed: bool = False) -> None:
         self._resize_card()
         self._library_root = library_root
+        self._material_asset_id = row["id"] if material_preview else None
+        self._material_preview_path = material_preview
+        self._material_thumb = thumb
+        self._material_failed = material_failed
         self.title_label.setText(row["name"])
 
         if thumb and not thumb.isNull():
@@ -126,7 +137,16 @@ class PreviewPopup(OverlayPanel):
         else:
             self.image_label.setText("(sem preview)")
 
-        self._build_maps_bar(maps)
+        self._build_maps_bar(maps, material_preview)
+        if material_preview is not None:
+            if material_preview.is_file():
+                self._load(material_preview)
+            else:
+                self._loading_for = None
+                self.info_label.setText(self._material_status_text())
+            self.open_overlay()
+            return
+
         alvo = library_root / row["rel_path"]
         cover = dict(row).get("cover_path")  # funciona para dict e sqlite3.Row
         if cover and not can_preview(alvo):
@@ -138,13 +158,24 @@ class PreviewPopup(OverlayPanel):
 
     # ---- PBR Material Viewer (sets agrupados) ----
 
-    def _build_maps_bar(self, maps: list | None) -> None:
+    def _build_maps_bar(self, maps: list | None,
+                        material_preview: Path | None = None) -> None:
         for btn in self._maps_group.buttons():
             self._maps_group.removeButton(btn)
+            self._maps_layout.removeWidget(btn)
+            btn.hide()
             btn.deleteLater()
+        self._material_button = None
         if not maps or len(maps) < 2:
             self.maps_bar.setVisible(False)
             return
+        if material_preview is not None:
+            btn = QPushButton("Material")
+            btn.setCheckable(True)
+            btn.clicked.connect(self._on_material_clicked)
+            self._maps_group.addButton(btn)
+            self._maps_layout.addWidget(btn)
+            self._material_button = btn
         ordenados = sorted(
             maps, key=lambda m: PRIMARY_ORDER.index(m["map_role"])
             if m["map_role"] in PRIMARY_ORDER else 99,
@@ -163,6 +194,39 @@ class PreviewPopup(OverlayPanel):
         if self._library_root is not None:
             self._load(self._library_root / rel_path)
 
+    def _on_material_clicked(self) -> None:
+        path = self._material_preview_path
+        if path is None:
+            return
+        if path.is_file():
+            self._load(path)
+        else:
+            self._loading_for = None
+            if self._material_thumb and not self._material_thumb.isNull():
+                self.image_label.setPixmap(self._fit(self._material_thumb))
+            self.info_label.setText(self._material_status_text())
+
+    def _material_status_text(self) -> str:
+        if self._material_failed:
+            return "Não consegui gerar o preview do material — escolha um mapa"
+        return "Gerando preview do material…"
+
+    def material_preview_ready(self, asset_id: int, path: str) -> None:
+        """Atualiza o popup aberto só se este ainda mostra o mesmo material."""
+        if (not self.isVisible() or asset_id != self._material_asset_id
+                or self._material_preview_path != Path(path)):
+            return
+        if self._material_button and self._material_button.isChecked():
+            self._load(Path(path))
+
+    def material_preview_failed(self, asset_id: int, path: str) -> None:
+        if (not self.isVisible() or asset_id != self._material_asset_id
+                or self._material_preview_path != Path(path)):
+            return
+        self._material_failed = True
+        if self._material_button and self._material_button.isChecked():
+            self.info_label.setText(self._material_status_text())
+
     def _load(self, path: Path) -> None:
         self._loading_for = path
         if can_preview(path) and path.exists():
@@ -178,12 +242,16 @@ class PreviewPopup(OverlayPanel):
 
     # ---- resultado do carregamento ----
 
-    def _on_loaded(self, qimg: QImage, w: int, h: int) -> None:
+    def _on_loaded(self, path: str, qimg: QImage, w: int, h: int) -> None:
+        if self._loading_for != Path(path) or not self.isVisible():
+            return
         pix = QPixmap.fromImage(qimg)
         self.image_label.setPixmap(self._fit(pix))
         self.info_label.setText(f"{w} × {h} px — Esc fecha")
 
-    def _on_failed(self, message: str) -> None:
+    def _on_failed(self, path: str, message: str) -> None:
+        if self._loading_for != Path(path) or not self.isVisible():
+            return
         self.info_label.setText(f"Não consegui carregar a imagem completa: {message}")
 
     def _fit(self, pix: QPixmap) -> QPixmap:
