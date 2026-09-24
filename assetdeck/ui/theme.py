@@ -124,8 +124,8 @@ SURFACE_SUNKEN = "#E4E4EB"
 # rótulo de extensão no canto (".fbx"/".exr"/...), não de cor. Antes isto era
 # um apelido de ACCENT; virou constante própria justamente para o azul não
 # vazar até aqui. Consumido pelo delegate (Fatia 27).
-TYPE_TINT = "#4A4A52"
-ON_TYPE_TINT = "#FFFFFF"  # texto/glifo sobre a pastilha acima
+TYPE_TINT = "#EDEDF1"
+ON_TYPE_TINT = "#303136"  # texto/glifo sobre a pastilha acima
 
 # --------------------------------------------------------------------------
 # Paleta escura (Fatia 43)
