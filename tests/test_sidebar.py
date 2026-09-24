@@ -123,6 +123,20 @@ def test_clicar_no_cabecalho_alterna(arvore, qapp):
     assert not secao.is_collapsed()
 
 
+def test_cabecalho_de_secao_responde_a_teclado(arvore, qapp):
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+
+    secao = SidebarSection("tags", "Tags", arvore)
+    assert secao.header.accessibleName() == "Tags"
+    assert secao.header.focusPolicy() == Qt.FocusPolicy.StrongFocus
+
+    QTest.keyClick(secao.header, Qt.Key.Key_Space)
+    assert secao.is_collapsed()
+    QTest.keyClick(secao.header, Qt.Key.Key_Return)
+    assert not secao.is_collapsed()
+
+
 def test_recolher_duas_vezes_seguidas_nao_faz_nada(arvore, qapp):
     """`set_collapsed(True)` repetido não pode encolher o teto de altura de
     novo em cima do valor já encolhido."""
