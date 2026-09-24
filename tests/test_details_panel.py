@@ -101,6 +101,11 @@ def test_formato_tipo_e_tamanho_sao_pastilhas_no_topo(painel):
     assert painel.f_size.objectName() == "chip"
 
 
+def test_tipo_no_detalhe_usa_rotulo_amigavel(painel):
+    painel.show_asset(_row("material.blend"), None)
+    assert painel.f_type.text() == "Modelo 3D"
+
+
 def test_as_secoes_do_painel_abrem_e_fecham(painel):
     """O painel empilhava seis blocos sempre abertos — a rolagem passava de
     duas telas. Agora cada um abre e fecha."""
@@ -162,15 +167,15 @@ def test_o_favorito_cabe_na_largura_do_painel(painel, qapp):
     painel.close()
 
 
-def test_o_tipo_aparece_com_o_rotulo_da_categoria(painel):
+def test_o_tipo_aparece_com_rotulo_especifico_da_tela(painel):
     """"hdri"/"pbr_set" são vocabulário de SCHEMA, não de tela — apareciam em
-    minúsculas na ficha técnica. A ficha usa o mesmo rótulo da barra de
-    categorias; tipo desconhecido cai no valor cru em vez de sumir."""
+    minúsculas na ficha técnica. O detalhe usa o mesmo rótulo específico do
+    subtítulo do card; tipo desconhecido cai no valor cru em vez de sumir."""
     painel.show_asset(dict(_row("ceu.exr"), asset_type="hdri"), None)
-    assert painel.f_type.text() == "HDRIs"
+    assert painel.f_type.text() == "HDRI"
 
     painel.show_asset(dict(_row("parede.blend"), asset_type="pbr_set"), None)
-    assert painel.f_type.text() == "Materiais"
+    assert painel.f_type.text() == "Material PBR"
 
     painel.show_asset(dict(_row("x.zzz"), asset_type="tipo_novo"), None)
     assert painel.f_type.text() == "tipo_novo"

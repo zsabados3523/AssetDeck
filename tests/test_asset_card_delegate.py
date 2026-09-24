@@ -17,7 +17,8 @@ from assetdeck.db.repos import libraries as libraries_repo
 from assetdeck.indexer.scanner import scan_library
 from assetdeck.thumbs.pipeline import ThumbnailPipeline
 from assetdeck.ui import asset_grid
-from assetdeck.ui.asset_card_delegate import CELL, AssetCardDelegate, _asset_type_label
+from assetdeck.ui.asset_card_delegate import CELL, AssetCardDelegate
+from assetdeck.ui.categories import type_label_of
 
 
 @pytest.fixture
@@ -64,10 +65,10 @@ def test_view_usa_o_delegate_novo(grid):
     ("pbr_set", "Material PBR"),
     ("hdri", "HDRI"),
     ("texture", "Textura"),
-    ("tipo_desconhecido", ""),
+    ("tipo_desconhecido", "tipo_desconhecido"),
 ])
 def test_tipo_de_asset_tem_rotulo_de_card(asset_type, esperado):
-    assert _asset_type_label(asset_type) == esperado
+    assert type_label_of(asset_type) == esperado
 
 
 def test_size_hint_e_exatamente_cell(grid):

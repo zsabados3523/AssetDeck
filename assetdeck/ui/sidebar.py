@@ -85,6 +85,9 @@ class SectionHeader(QWidget):
         super().__init__(parent)
         self.setObjectName("sidebarHeader")
         self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.setAccessibleName(titulo)
+        self.setAccessibleDescription("Expandir ou recolher seção")
         self._recolhida = False
 
         layout = QHBoxLayout(self)
@@ -131,6 +134,13 @@ class SectionHeader(QWidget):
         if event.button() == Qt.MouseButton.LeftButton:
             self.clicked.emit()
         super().mouseReleaseEvent(event)
+
+    def keyPressEvent(self, event) -> None:  # noqa: N802
+        if event.key() in (Qt.Key.Key_Space, Qt.Key.Key_Return, Qt.Key.Key_Enter):
+            self.clicked.emit()
+            event.accept()
+            return
+        super().keyPressEvent(event)
 
 
 class SidebarSection(QWidget):

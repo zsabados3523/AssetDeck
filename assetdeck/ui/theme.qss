@@ -302,6 +302,11 @@ QWidget#sidebarHeader:hover {
     border: 1px solid $border;
 }
 
+QWidget#sidebarHeader:focus {
+    background-color: $surface_raised;
+    border: 1px solid $focus;
+}
+
 QLabel#sidebarSectionTitle {
     color: $text_muted;
     font-size: $font_size_small;

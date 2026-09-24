@@ -509,8 +509,7 @@ class DetailsPanel(QWidget):
         # de schema, não de tela — aparecia em minúsculas na ficha. Aqui vira
         # o mesmo rótulo que a barra de categorias usa; tipo desconhecido cai
         # no valor cru em vez de sumir.
-        categoria = categories.category_of(row["asset_type"])
-        self.f_type.setText(categoria.label if categoria else row["asset_type"])
+        self.f_type.setText(categories.type_label_of(row["asset_type"]))
         self.f_dims.setText(self._read_dims(path))
         self.f_size.setText(human_size(row["size_bytes"]))
         self.f_format.setText(path.suffix.lstrip(".").upper() or "—")

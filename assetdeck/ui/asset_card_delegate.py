@@ -17,7 +17,7 @@ from PySide6.QtCore import QElapsedTimer, QRect, QRectF, QSize, Qt, QTimer
 from PySide6.QtGui import QColor, QFont, QFontMetrics, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import QStyle, QStyledItemDelegate
 
-from assetdeck.ui import icons, theme
+from assetdeck.ui import categories, icons, theme
 from assetdeck.ui.asset_grid import (
     CARD_GAP,
     CARD_MARGIN,
@@ -455,7 +455,7 @@ class AssetCardDelegate(QStyledItemDelegate):
             linha_nome, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, elidido
         )
 
-        tipo = _asset_type_label(index.data(TYPE_ROLE))
+        tipo = categories.type_label_of(index.data(TYPE_ROLE) or "")
         if tipo:
             linha_tipo = QRect(rect.x(), rect.y() + 18, rect.width(), 15)
             painter.setFont(self._font_type)
@@ -467,21 +467,3 @@ class AssetCardDelegate(QStyledItemDelegate):
                 Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
                 elidido_tipo,
             )
-
-
-def _asset_type_label(asset_type: str | None) -> str:
-    """Rótulo humano do tipo do asset, usado como subtítulo do card."""
-    return {
-        "model": "Modelo 3D",
-        "scene": "Cena 3D",
-        "pbr_set": "Material PBR",
-        "other": "Outro material",
-        "texture": "Textura",
-        "cutout": "Recorte",
-        "hdri": "HDRI",
-        "vector": "Vetor",
-        "reference": "Referência",
-        "psd": "Photoshop",
-        "ies": "Perfil IES",
-        "lut": "LUT",
-    }.get(asset_type or "", "")
