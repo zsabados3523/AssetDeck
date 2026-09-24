@@ -31,6 +31,7 @@ from assetdeck.ui.asset_grid import (
     MIN_ICON,
     NAME_HEIGHT,
     STARRED_ROLE,
+    TYPE_ROLE,
     cell_for_icon,
 )
 
@@ -99,6 +100,10 @@ class AssetCardDelegate(QStyledItemDelegate):
         self._font_name.setPixelSize(12)  # px, não pt: mais previsível entre telas
         self._fm_name = QFontMetrics(self._font_name)
 
+        self._font_type = QFont()
+        self._font_type.setPixelSize(10)
+        self._fm_type = QFontMetrics(self._font_type)
+
         self._font_chip = QFont()
         self._font_chip.setPixelSize(10)
         self._font_chip.setBold(True)
@@ -149,6 +154,7 @@ class AssetCardDelegate(QStyledItemDelegate):
         # compostos, e compor sobre `bg` daria uma pastilha de tom errado.
         base = pal["surface"]
         self._pen_name = QPen(QColor(pal["text"]))
+        self._pen_type = QPen(QColor(pal["text_muted"]))
         self._brush_selected = QColor(theme.blend(pal["selection"], base))
         self._pen_selected_border = QColor(pal["accent"])
         self._type_tint_color = QColor(pal["type_tint"])
@@ -442,7 +448,40 @@ class AssetCardDelegate(QStyledItemDelegate):
         nome = index.data(Qt.ItemDataRole.DisplayRole) or ""
         painter.setFont(self._font_name)
         painter.setPen(self._pen_name)
-        elidido = self._fm_name.elidedText(nome, Qt.TextElideMode.ElideRight, rect.width())
+        linha_nome = QRect(rect.x(), rect.y(), rect.width(), 19)
+        elidido = self._fm_name.elidedText(
+            nome, Qt.TextElideMode.ElideRight, linha_nome.width())
         painter.drawText(
-            rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, elidido
+            linha_nome, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, elidido
         )
+
+        tipo = _asset_type_label(index.data(TYPE_ROLE))
+        if tipo:
+            linha_tipo = QRect(rect.x(), rect.y() + 18, rect.width(), 15)
+            painter.setFont(self._font_type)
+            painter.setPen(self._pen_type)
+            elidido_tipo = self._fm_type.elidedText(
+                tipo, Qt.TextElideMode.ElideRight, linha_tipo.width())
+            painter.drawText(
+                linha_tipo,
+                Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+                elidido_tipo,
+            )
+
+
+def _asset_type_label(asset_type: str | None) -> str:
+    """Rótulo humano do tipo do asset, usado como subtítulo do card."""
+    return {
+        "model": "Modelo 3D",
+        "scene": "Cena 3D",
+        "pbr_set": "Material PBR",
+        "other": "Outro material",
+        "texture": "Textura",
+        "cutout": "Recorte",
+        "hdri": "HDRI",
+        "vector": "Vetor",
+        "reference": "Referência",
+        "psd": "Photoshop",
+        "ies": "Perfil IES",
+        "lut": "LUT",
+    }.get(asset_type or "", "")

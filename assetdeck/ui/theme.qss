@@ -243,6 +243,12 @@ QLabel#listCount {
     font-size: $font_size_small;
 }
 
+QLabel#gridSizeValue {
+    color: $text_muted;
+    font-size: $font_size_small;
+    font-weight: 600;
+}
+
 /* -------------------------------------------------------------- lateral -- */
 
 /* Rail: coluna estreita de ícones, um por seção (Fatia 45). Fica no tom do

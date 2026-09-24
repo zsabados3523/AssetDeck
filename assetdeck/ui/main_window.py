@@ -324,8 +324,16 @@ class MainWindow(QMainWindow):
         self.size_slider = QSlider(Qt.Orientation.Horizontal)
         self.size_slider.setRange(asset_grid.MIN_ICON, asset_grid.MAX_ICON)
         self.size_slider.setValue(asset_grid.DEFAULT_ICON)
-        self.size_slider.setFixedWidth(72)
+        self.size_slider.setFixedWidth(120)
         self.size_slider.setToolTip("Tamanho das miniaturas")
+        self.size_slider.setAccessibleName("Tamanho das miniaturas")
+        self.size_value = QLabel(f"{self.size_slider.value()} px")
+        self.size_value.setObjectName("gridSizeValue")
+        self.size_value.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.size_value.setMinimumWidth(42)
+        self.size_value.setToolTip("Tamanho atual das miniaturas em pixels")
+        self.size_slider.valueChanged.connect(
+            lambda pixels: self.size_value.setText(f"{pixels} px"))
         self.size_slider.valueChanged.connect(self.grid.set_icon_size)
 
         # Voltar / Avançar / Subir (Fatia 32): a árvore lateral era o único
@@ -364,6 +372,7 @@ class MainWindow(QMainWindow):
         path_row.addWidget(self.color_filter)
         path_row.addSpacing(4)
         path_row.addWidget(self.size_slider)
+        path_row.addWidget(self.size_value)
         path_row.addSpacing(4)
         path_row.addWidget(self.progress)
         path_row.addWidget(self.rescan_btn)

@@ -74,7 +74,7 @@ class CategoryButton(QToolButton):
     def _sync_icon(self) -> None:
         """Ícone na cor de destaque quando a categoria está ligada.
 
-        O QSS já pinta o TEXTO do botão marcado de azul, mas `color:` não
+        O QSS já pinta o TEXTO do botão marcado com destaque, mas `color:` não
         alcança um QIcon — sem isto, a pastilha ativa saía com o nome azul e o
         glifo cinza ao lado, parecendo desligado pela metade.
         """
