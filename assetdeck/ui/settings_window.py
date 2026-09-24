@@ -335,7 +335,7 @@ class SettingsWindow(QDialog):
             mw.dark_mode_action))
         lay.addWidget(_linha(
             "Reduzir movimento",
-            "Desliga a transição de hover dos cards da grade.",
+            "Desliga animações de interação da grade e dos controles.",
             mw.reduce_motion_check))
         lay.addStretch(1)
         return pagina

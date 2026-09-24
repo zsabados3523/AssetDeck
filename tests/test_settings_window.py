@@ -75,13 +75,17 @@ def test_reduzir_movimento_salva_e_aplica_na_grade(janela):
 
     assert check.isChecked() is False
     assert delegate._reduced_motion is False
+    assert janela._reduce_motion is False
     check.setChecked(True)
     assert config.load_config()["reduce_motion"] is True
     assert delegate._reduced_motion is True
+    assert janela._reduce_motion is True
+    assert janela._size_value_effect.opacity() == 1.0
 
     check.setChecked(False)
     assert config.load_config()["reduce_motion"] is False
     assert delegate._reduced_motion is False
+    assert janela._reduce_motion is False
 
 
 # ------------------------ opções que vieram da janela de Preferências --

@@ -6,11 +6,19 @@ import logging
 import sqlite3
 from pathlib import Path
 
-from PySide6.QtCore import QModelIndex, QSize, Qt, QTimer
+from PySide6.QtCore import (
+    QEasingCurve,
+    QModelIndex,
+    QPropertyAnimation,
+    QSize,
+    Qt,
+    QTimer,
+)
 from PySide6.QtGui import QPixmap, QPixmapCache
 from PySide6.QtWidgets import (
     QApplication,
     QFrame,
+    QGraphicsOpacityEffect,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -212,8 +220,8 @@ class MainWindow(QMainWindow):
         self.grid.setModel(self.model)
         from assetdeck import config
 
-        self.grid.itemDelegate().set_reduced_motion(
-            bool(config.load_config().get("reduce_motion", False)))
+        self._reduce_motion = bool(config.load_config().get("reduce_motion", False))
+        self.grid.itemDelegate().set_reduced_motion(self._reduce_motion)
         self.grid.selectionModel().currentChanged.connect(self._on_selection)
         self.model.dataChanged.connect(self._on_data_changed)
         self.grid.image_dropped.connect(self._on_image_dropped)
@@ -316,28 +324,41 @@ class MainWindow(QMainWindow):
 
         self._update_breadcrumb("")
 
-        # Slider de tamanho da miniatura (pedido do Rafael, estilo Connecter):
-        # a grade e o modelo mudam JUNTOS — ver AssetGridView.set_icon_size.
-        # Fatia 56: saiu do rodapé (longe da grade, alça "bola" destoando dos
-        # botões de filtro ao lado) e foi pra faixa 3, junto de nota/
-        # resolução/cor — mesma linha que já refina o que está na tela.
-        # Mais estreito que os 110px de antes: cabe ao lado de 3 botões
-        # ícone-only sem empurrar o contador pra fora.
+        # Slider contínuo de tamanho da miniatura (pedido do Rafael, estilo
+        # Connecter): cada valor inteiro entre MIN_ICON e MAX_ICON vale — sem
+        # tamanhos predefinidos — e grade/modelo mudam JUNTOS. Ele fica na
+        # faixa de filtros finos, junto de resolução/cor, e ganha largura para
+        # o ajuste ser fácil de mirar sem tomar a linha do breadcrumb.
         from PySide6.QtWidgets import QSlider
 
         self.size_slider = QSlider(Qt.Orientation.Horizontal)
         self.size_slider.setRange(asset_grid.MIN_ICON, asset_grid.MAX_ICON)
+        self.size_slider.setSingleStep(1)
+        self.size_slider.setPageStep(8)
         self.size_slider.setValue(asset_grid.DEFAULT_ICON)
-        self.size_slider.setFixedWidth(120)
-        self.size_slider.setToolTip("Tamanho das miniaturas")
+        self.size_slider.setFixedWidth(168)
+        self.size_slider.setToolTip(
+            f"Tamanho das miniaturas: {asset_grid.MIN_ICON}–"
+            f"{asset_grid.MAX_ICON} px. Use as setas para ajustar de 1 em 1."
+        )
         self.size_slider.setAccessibleName("Tamanho das miniaturas")
+        self.size_slider.setAccessibleDescription(
+            f"Ajuste contínuo de {asset_grid.MIN_ICON} a {asset_grid.MAX_ICON} pixels."
+        )
         self.size_value = QLabel(f"{self.size_slider.value()} px")
         self.size_value.setObjectName("gridSizeValue")
         self.size_value.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.size_value.setMinimumWidth(42)
-        self.size_value.setToolTip("Tamanho atual das miniaturas em pixels")
-        self.size_slider.valueChanged.connect(
-            lambda pixels: self.size_value.setText(f"{pixels} px"))
+        self.size_value.setFixedSize(58, 28)
+        self.size_value.setToolTip(
+            "Tamanho atual das miniaturas. O valor muda de 1 em 1 pixel."
+        )
+        self._size_value_effect = QGraphicsOpacityEffect(self.size_value)
+        self.size_value.setGraphicsEffect(self._size_value_effect)
+        self._size_value_animation = QPropertyAnimation(
+            self._size_value_effect, b"opacity", self)
+        self._size_value_animation.setDuration(140)
+        self._size_value_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self.size_slider.valueChanged.connect(self._on_icon_size_changed)
         self.size_slider.valueChanged.connect(self.grid.set_icon_size)
 
         # Voltar / Avançar / Subir (Fatia 32): a árvore lateral era o único
@@ -993,12 +1014,29 @@ class MainWindow(QMainWindow):
     def _toggle_reduce_motion(self, reduzir: bool) -> None:
         from assetdeck import config
 
+        self._reduce_motion = bool(reduzir)
         cfg = config.load_config()
-        cfg["reduce_motion"] = bool(reduzir)
+        cfg["reduce_motion"] = self._reduce_motion
         config.save_config(cfg)
-        self.grid.itemDelegate().set_reduced_motion(reduzir)
-        estado = "reduzido" if reduzir else "normal"
+        self.grid.itemDelegate().set_reduced_motion(self._reduce_motion)
+        if self._reduce_motion:
+            self._size_value_animation.stop()
+            self._size_value_effect.setOpacity(1.0)
+        estado = "reduzido" if self._reduce_motion else "normal"
         self.statusBar().showMessage(f"Movimento {estado} aplicado.")
+
+    def _on_icon_size_changed(self, pixels: int) -> None:
+        """Atualiza o valor visível e dá um retorno breve ao ajuste contínuo."""
+        self.size_value.setText(f"{pixels} px")
+        if self._reduce_motion:
+            self._size_value_effect.setOpacity(1.0)
+            return
+
+        self._size_value_animation.stop()
+        self._size_value_effect.setOpacity(0.72)
+        self._size_value_animation.setStartValue(0.72)
+        self._size_value_animation.setEndValue(1.0)
+        self._size_value_animation.start()
 
     def _refresh_theme_dependent_widgets(self) -> None:
         """Widgets que pintam cor "à mão" (fora do QSS) precisam ser

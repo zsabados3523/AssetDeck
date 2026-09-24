@@ -514,9 +514,26 @@ def test_size_slider_mora_na_faixa_de_navegacao_com_os_filtros(janela):
 
     assert not isinstance(janela.size_slider.parentWidget(), QStatusBar)
     assert janela.size_slider.parentWidget() is janela.color_filter.parentWidget()
-    assert janela.size_slider.width() == 120
+    assert janela.size_slider.width() == 168
+    assert janela.size_slider.minimum() == 96
+    assert janela.size_slider.maximum() == 240
+    assert janela.size_slider.singleStep() == 1
     assert janela.size_value.text() == f"{janela.size_slider.value()} px"
     janela.size_slider.setValue(janela.size_slider.value() + 1)
+    assert janela.size_value.text() == f"{janela.size_slider.value()} px"
+    assert janela.grid.iconSize().width() == janela.size_slider.value()
+
+
+def test_feedback_do_slider_respeita_reducao_de_movimento(janela):
+    from PySide6.QtCore import QAbstractAnimation
+
+    janela.size_slider.setValue(janela.size_slider.value() + 1)
+    assert janela._size_value_animation.state() == QAbstractAnimation.State.Running
+
+    janela._toggle_reduce_motion(True)
+    assert janela._size_value_animation.state() == QAbstractAnimation.State.Stopped
+    janela.size_slider.setValue(janela.size_slider.value() + 1)
+    assert janela._size_value_effect.opacity() == 1.0
     assert janela.size_value.text() == f"{janela.size_slider.value()} px"
 
 

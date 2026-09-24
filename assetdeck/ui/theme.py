@@ -507,6 +507,7 @@ def build_tokens(variant: Variant = DEFAULT) -> dict[str, str]:
         # descartar o arredondamento inteiro, sem erro nenhum.
         "radius_pill_small": "13px",
         "radius_chip_small": "9px",
+        "radius_slider_handle": "6px",
 
         "pad_s": "4px",
         "pad_m": "8px",
