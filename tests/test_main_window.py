@@ -514,6 +514,10 @@ def test_size_slider_mora_na_faixa_de_navegacao_com_os_filtros(janela):
 
     assert not isinstance(janela.size_slider.parentWidget(), QStatusBar)
     assert janela.size_slider.parentWidget() is janela.color_filter.parentWidget()
+    assert janela.size_slider.width() == 120
+    assert janela.size_value.text() == f"{janela.size_slider.value()} px"
+    janela.size_slider.setValue(janela.size_slider.value() + 1)
+    assert janela.size_value.text() == f"{janela.size_slider.value()} px"
 
 
 def test_o_topo_tem_duas_faixas_separadas(janela, qapp):
@@ -525,27 +529,30 @@ def test_o_topo_tem_duas_faixas_separadas(janela, qapp):
     O que este teste protege: as duas faixas continuam SEPARADAS — se
     alguém voltar a empilhar tudo numa linha, o caminho de pasta funda
     volta a ser cortado por falta de espaço."""
-    janela.resize(1200, 800)
     janela.show()
-    qapp.processEvents()
 
-    def linha_do(widget):
-        return widget.mapTo(janela, widget.rect().center()).y()
+    for largura, altura in ((1280, 800), (1600, 900)):
+        janela.resize(largura, altura)
+        qapp.processEvents()
 
-    y_caminho = linha_do(janela.breadcrumb)
-    y_categorias = linha_do(janela.categories)
+        def linha_do(widget):
+            return widget.mapTo(janela, widget.rect().center()).y()
 
-    assert y_caminho < y_categorias, (
-        "as duas faixas do topo têm de estar empilhadas, não na mesma linha"
-    )
-    # Busca e filtros finos moram na MESMA faixa da navegação/caminho
-    # (Fatia 66) — não têm mais faixa própria.
-    assert abs(linha_do(janela.search_box) - y_caminho) < 5
-    assert abs(linha_do(janela.res_filter) - y_caminho) < 5
-    assert abs(linha_do(janela.color_filter) - y_caminho) < 5
-    # A contagem de itens desce pra linha das categorias — não sobrou faixa
-    # própria pra ela.
-    assert abs(linha_do(janela.list_scope) - y_categorias) < 5
+        y_caminho = linha_do(janela.breadcrumb)
+        y_categorias = linha_do(janela.categories)
+
+        assert y_caminho < y_categorias, (
+            "as duas faixas do topo têm de estar empilhadas, não na mesma linha"
+        )
+        # Busca e filtros finos moram na MESMA faixa da navegação/caminho
+        # (Fatia 66) — não têm mais faixa própria.
+        assert abs(linha_do(janela.search_box) - y_caminho) < 5
+        assert abs(linha_do(janela.res_filter) - y_caminho) < 5
+        assert abs(linha_do(janela.color_filter) - y_caminho) < 5
+        assert abs(linha_do(janela.size_slider) - y_caminho) < 5
+        # A contagem de itens desce pra linha das categorias.
+        assert abs(linha_do(janela.list_scope) - y_categorias) < 5
+        assert janela.size_value.geometry().right() < janela.width()
 
 
 def test_o_escopo_da_lista_acompanha_a_pasta(janela, qapp):
