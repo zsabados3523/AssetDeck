@@ -831,7 +831,7 @@ class MainWindow(QMainWindow):
         atalho de teclado, navegação por Alt e integração com o gerenciador
         de janelas.
         """
-        from PySide6.QtWidgets import QHBoxLayout
+        from PySide6.QtWidgets import QGridLayout, QHBoxLayout
 
         barra = self.menuBar()
         # Mesma ideia do rodapé (Fatia 95): a faixa engole a margem que era do
@@ -843,13 +843,22 @@ class MainWindow(QMainWindow):
         marca = QWidget()
         marca_layout = QHBoxLayout(marca)
         marca_layout.setContentsMargins(10, 0, 12, 0)
-        marca_layout.setSpacing(7)
-        ponto = QFrame()
-        ponto.setObjectName("brandDot")
-        ponto.setFixedSize(8, 8)
+        marca_layout.setSpacing(8)
+        simbolo = QWidget()
+        simbolo.setObjectName("brandMark")
+        simbolo.setFixedSize(14, 14)
+        simbolo_layout = QGridLayout(simbolo)
+        simbolo_layout.setContentsMargins(0, 0, 0, 0)
+        simbolo_layout.setHorizontalSpacing(2)
+        simbolo_layout.setVerticalSpacing(2)
+        for linha, coluna in ((0, 0), (0, 1), (1, 0), (1, 1)):
+            glifo = QFrame(simbolo)
+            glifo.setObjectName("brandGlyph")
+            glifo.setFixedSize(6, 6)
+            simbolo_layout.addWidget(glifo, linha, coluna)
         rotulo = QLabel("AssetDeck")
         rotulo.setObjectName("brandName")
-        marca_layout.addWidget(ponto)
+        marca_layout.addWidget(simbolo)
         marca_layout.addWidget(rotulo)
 
         # A referência em `self` é OBRIGATÓRIA. A documentação do Qt diz que a

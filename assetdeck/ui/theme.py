@@ -514,8 +514,9 @@ def build_tokens(variant: Variant = DEFAULT) -> dict[str, str]:
 
         "font_family": f'"{familia}"' if familia else "inherit",
         "font_size": "13px",
-        "font_size_small": "12px",
-        "font_size_title": "15px",
+        "font_size_small": "11px",
+        "font_size_title": "17px",
+        "font_size_brand": "19px",
 
         "check_icon": str(icon_asset_path("check", pal["on_accent"], 12)),
         "chevron_icon": str(icon_asset_path("chevron-down", pal["text_muted"], 12)),

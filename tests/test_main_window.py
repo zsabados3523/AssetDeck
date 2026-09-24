@@ -520,6 +520,17 @@ def test_size_slider_mora_na_faixa_de_navegacao_com_os_filtros(janela):
     assert janela.size_value.text() == f"{janela.size_slider.value()} px"
 
 
+def test_marca_assetdeck_tem_simbolo_proprio_e_nome_visivel(janela):
+    from PySide6.QtWidgets import QFrame, QLabel, QWidget
+
+    simbolo = janela.findChild(QWidget, "brandMark")
+    nome = janela.findChild(QLabel, "brandName")
+
+    assert simbolo is not None
+    assert nome is not None and nome.text() == "AssetDeck"
+    assert len(simbolo.findChildren(QFrame, "brandGlyph")) == 4
+
+
 def test_o_topo_tem_duas_faixas_separadas(janela, qapp):
     """Fatia 46 empilhou em 3 faixas (a linha única, com tudo junto, estava
     "absurdamente atolada" segundo o Rafael). Fatia 66 consolidou busca e
