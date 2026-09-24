@@ -981,16 +981,18 @@ QMenuBar {
 
 /* Marca e contexto ocupam os cantos da MESMA faixa dos menus (Fatia 50) —
  * ver `MainWindow._setup_brand_bar` para por que as abas do mockup ficaram
- * de fora. */
-QFrame#brandDot {
+ * de fora. O símbolo de quatro módulos substitui o ponto genérico do
+ * protótipo anterior e mantém o nome AssetDeck como marca principal. */
+QFrame#brandGlyph {
     background-color: $accent;
-    border-radius: 2px;
+    border-radius: 1px;
 }
 
 QLabel#brandName {
     color: $title;
-    font-size: $font_size_title;   /* 13px antes (Fatia 95: "um pouquinho maior") */
+    font-size: $font_size_brand;
     font-weight: 700;
+    letter-spacing: .2px;
 }
 
 /* Contexto (biblioteca aberta e modo) é apoio: apagado de propósito, para não

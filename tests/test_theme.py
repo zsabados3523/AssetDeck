@@ -563,6 +563,16 @@ def test_apply_theme_configura_o_app(tema_isolado):
         assert qapp.font().family() == theme.FONTS["inter"]
 
 
+def test_tokens_tipograficos_tornam_hierarquia_legivel_e_compacta():
+    tokens = theme.build_tokens()
+    qss = theme.build_qss()
+
+    assert tokens["font_size_small"] == "11px"
+    assert tokens["font_size_title"] == "17px"
+    assert tokens["font_size_brand"] == "19px"
+    assert "font-size: 19px" in qss
+
+
 def test_todas_as_variantes_aplicam_sem_erro(tema_isolado, tmp_path, monkeypatch):
     monkeypatch.setenv("ASSETDECK_CACHE_DIR", str(tmp_path))
     for fundo in theme.BACKGROUNDS:
