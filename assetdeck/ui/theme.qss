@@ -426,11 +426,8 @@ QPushButton:pressed, QToolButton:pressed {
     padding-bottom: 7px;
 }
 
-/* Marcado (persistente) é pastilha azul com o texto no destaque — Fatia 44.
- * É o estado que responde "qual filtro está ligado agora": era cinza sobre
- * cinza, e o Rafael não conseguia dizer, olhando a barra de categorias, o que
- * estava ativo. Aqui o azul carrega informação, que é a única condição em que
- * este projeto gasta cor. */
+/* Marcado (persistente) usa pastilha neutra com texto de alto contraste. É o
+ * estado que responde "qual filtro está ligado agora" sem depender de cor. */
 QPushButton:checked, QToolButton:checked {
     background-color: $accent_soft;
     border: 1px solid transparent;
@@ -470,7 +467,7 @@ QPushButton#primary:pressed {
  * ver no painel de detalhes sem asset nenhum selecionado: "Abrir pasta"
  * aparecia corretamente apagado ao lado de um "Abrir com app padrão" que
  * parecia clicável. Achado na revisão visual da Fase 7 — o bug é antigo, só
- * ficou gritante quando o destaque virou laranja. */
+ * ficou gritante quando o destaque anterior dominava a tela. */
 QPushButton#primary:disabled {
     background-color: $surface;
     border: 1px solid $border;
@@ -889,8 +886,8 @@ QTreeView::item:hover, QListWidget::item:hover, QTableView::item:hover {
  * embaixo — lateral, filtros") e o que a direção visual aprovada da Fase 7
  * pedia ("sidebar com item ativo em pastilha preenchida"). Não é a barra
  * sólida reprovada lá atrás: aquela era petróleo cheio ocupando a lista
- * inteira; esta é laranja lavado com o texto no destaque, mesmo par de cores
- * dos filtros ativos — e o contraste dele está travado em `test_theme.py`. */
+ * inteira; esta é uma pastilha neutra com texto contrastante, como nos
+ * filtros ativos — e o contraste está travado em `test_theme.py`. */
 QTreeView::item:selected, QListWidget::item:selected, QTableView::item:selected {
     background-color: $accent_soft;
     color: $accent;
