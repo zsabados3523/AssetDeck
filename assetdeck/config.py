@@ -24,8 +24,8 @@ DEFAULTS = {
     # usa fundo branco; quem já tem um config.json conserva sua preferência,
     # este padrão vale só pra primeira execução.
     "theme_mode": "claro",
-    # Interrompe a animação de hover dos cards; todas as ações continuam
-    # funcionando sem movimento transitório.
+    # Desativa animações transitórias dos cards e do ajuste do grid; as ações
+    # continuam funcionando sem movimento.
     "reduce_motion": False,
     "backup_keep": 14,  # quantos backups diários do .db manter
     # Ao usar uma imagem da biblioteca como preview de um modelo:

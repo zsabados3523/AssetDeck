@@ -260,9 +260,13 @@ QLabel#listCount {
 }
 
 QLabel#gridSizeValue {
-    color: $text_muted;
+    background-color: $field;
+    border: 1px solid $border;
+    border-radius: $radius_pill_small;
+    color: $text;
     font-size: $font_size_small;
     font-weight: 600;
+    padding: 2px 6px;
 }
 
 /* -------------------------------------------------------------- lateral -- */
@@ -1101,14 +1105,10 @@ QProgressBar::chunk {
     border-radius: 5px;
 }
 
-/* Slider de tamanho da miniatura (Fatia 28c): trilho fino, trecho
- * preenchido na cor de destaque — minimalista, sem o relevo 3D padrão do
- * Fusion. Fatia 56: a alça deixou de ser uma bolinha 16×16 flutuando
- * (destoava dos botões ícone-only ao lado, agora que o slider mudou do
- * rodapé pra faixa de nota/resolução/cor) — virou um traço fino e baixo,
- * do mesmo jeito "achatado" da trilha, não um raio de $radius_control
- * (que arredondaria demais numa alça deste tamanho e voltaria a parecer
- * bola). */
+/* Slider contínuo de tamanho da miniatura: trilho fino e trecho preenchido
+ * na cor de destaque, sem o relevo 3D padrão do Fusion. A alça é uma cápsula
+ * curta e larga o bastante para mirar; o valor exato fica ao lado em uma
+ * pastilha com contraste. */
 QSlider::groove:horizontal {
     height: 4px;
     background: $bg_tint;
@@ -1121,17 +1121,22 @@ QSlider::sub-page:horizontal {
 }
 
 QSlider::handle:horizontal {
-    width: 6px;
-    height: 14px;
-    margin: -5px 0;
+    width: 12px;
+    height: 16px;
+    margin: -6px 0;
     background: $surface;
     border: 1px solid $border_strong;
-    border-radius: 2px;
+    border-radius: $radius_slider_handle;
 }
 
 QSlider::handle:horizontal:hover {
     background: $accent;
     border: 1px solid $accent;
+}
+
+QSlider::handle:horizontal:pressed {
+    background: $accent_press;
+    border: 1px solid $accent_press;
 }
 
 QSplitter::handle {
