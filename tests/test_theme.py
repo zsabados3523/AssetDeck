@@ -125,11 +125,11 @@ def test_contraste_do_rotulo_sobre_o_card_sem_miniatura():
     assert theme.contrast_ratio(theme.ON_TYPE_TINT, theme.TYPE_TINT) >= 4.5
 
 
-# ------------------------------------------------- destaque azul (F44) --
+# ------------------------------------------------ destaque monocromático --
 
 def test_contraste_do_destaque_sobre_a_pastilha_suave():
-    """A pastilha suave (`accent_soft`) é o estado ATIVO de filtro/categoria, e
-    o texto dela é o próprio destaque — azul sobre azul lavado.
+    """A pastilha suave (`accent_soft`) é o estado ATIVO de filtro/categoria.
+    Texto e pastilha usam tons neutros com contraste legível.
 
     É o par mais apertado da paleta inteira: quem escurece o `accent` para ele
     caber melhor sobre branco piora aqui, e vice-versa. Travado nos dois modos
@@ -137,6 +137,16 @@ def test_contraste_do_destaque_sobre_a_pastilha_suave():
     """
     assert theme.contrast_ratio(theme.ACCENT, theme.ACCENT_SOFT) >= 4.5
     assert theme.contrast_ratio(theme.ACCENT_DARK, theme.ACCENT_SOFT_DARK) >= 4.5
+
+
+def test_identidade_monocromatica_e_fundo_claro_branco():
+    """A direção visual aprovada usa destaque neutro e branco puro no claro."""
+    for cor in (theme.ACCENT, theme.ACCENT_HOVER, theme.ACCENT_PRESS,
+                theme.ACCENT_SOFT, theme.ACCENT_DARK, theme.ACCENT_HOVER_DARK,
+                theme.ACCENT_PRESS_DARK, theme.ACCENT_SOFT_DARK):
+        r, g, b = theme.hex_to_rgb(cor)
+        assert max(r, g, b) - min(r, g, b) <= 5, f"destaque colorido: {cor}"
+    assert theme.BG == "#FFFFFF"
 
 
 # Quanto dois tons vizinhos precisam diferir para o degrau ser visível.

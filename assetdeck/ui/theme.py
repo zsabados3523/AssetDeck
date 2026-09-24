@@ -37,31 +37,10 @@ QSS_FILE = Path(__file__).parent / "theme.qss"
 # --------------------------------------------------------------------------
 # Paleta base
 # --------------------------------------------------------------------------
-# Fatia 44 (overhaul visual): o Rafael escolheu a direção olhando mockups da
-# janela inteira, não em abstrato. Duas mudanças de fundo em relação ao que
-# havia aqui:
-#
-#  1. **Existe cor de destaque agora: azul.** O monocromático foi vetado na
-#     tela — as três referências que ele mandou têm destaque (roxo numa, azul
-#     em duas). O azul é um token só: trocar a identidade do app inteiro
-#     continua sendo mexer numa linha.
-#  2. **Fundo e superfície deixaram de ser a mesma cor.** Eram os dois brancos,
-#     separados só por uma linha quase invisível — o que sobrava era uma tela
-#     chapada. Agora o fundo é um degrau mais fundo que o painel, nos dois
-#     modos, e a hierarquia aparece sem depender de sombra (que no modo escuro
-#     praticamente não rende).
-#
-# O azul do modo claro NÃO é o mesmo do escuro: o claro precisa ser mais fundo
-# para segurar texto branco por cima e ainda passar em 4.5:1 sobre a pastilha
-# suave. Os dois foram calibrados por `contrast_ratio()`, não por olhômetro —
-# `tests/test_theme.py` falha se algum par cair abaixo do mínimo.
-#
-# Fatia 73 (Fase 7, revisão visual): o AZUL virou LARANJA — pedido do Rafael
-# depois de mandar referências (dashboards SaaS, cards com sombra suave) e
-# perguntar se dava pra deixar o app "mais estiloso". Mesma calibração por
-# `contrast_ratio()`, não só trocado o hex — ver `tests/test_theme.py` pros
-# mínimos que continuam valendo (4.5:1 sobre `surface`, sobre `on_accent`, e
-# entre `accent`/`accent_soft`).
+# Direção visual aprovada nos mockups: branco puro no tema claro e identidade
+# monocromática nos dois modos. A escala neutra serve a foco, seleção e ações
+# ativas; aviso, erro e sucesso mantêm cores semânticas próprias. Contrastes
+# continuam travados em `tests/test_theme.py`.
 
 BG = "#FFFFFF"          # fundo da janela: branco (Fatia 95). Era um cinza
                         # muito claro, pra separar do painel branco por
@@ -72,13 +51,12 @@ SURFACE = "#FFFFFF"     # painel/card/lateral: branco flutuando sobre o fundo
 BG_TINT = "#EDEDF1"     # variação do fundo (trilho de barra de rolagem, cabeçalho)
 FIELD = "#F2F2F6"       # campo de entrada: afunda em vez de sumir no branco
 
-ACCENT = "#B8460D"
-ACCENT_HOVER = "#C9520F"
-ACCENT_PRESS = "#9A3A0A"
+ACCENT = "#202124"
+ACCENT_HOVER = "#38393D"
+ACCENT_PRESS = "#111214"
 ON_ACCENT = "#FFFFFF"
-# Pastilha suave do estado ativo (categoria marcada, item da lateral
-# selecionado): fundo laranja lavado com o próprio ACCENT escrito por cima.
-ACCENT_SOFT = "#FDECDD"
+# Pastilha suave do estado ativo: cinza claro com texto quase preto.
+ACCENT_SOFT = "#E8E8EA"
 
 TITLE = "#101116"       # títulos: mais escuros que o corpo, é o que dá hierarquia
 TEXT = "#1F2024"
@@ -92,7 +70,7 @@ OK = "#1F8A53"          # LED do Blender conectado no rodapé (Fatia 46)
 POPOVER = "#FFFFFF"     # menus e popups são JANELAS separadas: sempre opacos
 BORDER = (0, 0, 0, 0.09)         # contorno de campo/botão
 BORDER_STRONG = (0, 0, 0, 0.28)  # contorno de controle (caixa de checkbox)
-FOCUS = ACCENT                   # foco agora é o destaque, não um cinza
+FOCUS = ACCENT                   # anel de foco segue a identidade monocromática
 
 # Seleção monocromática: pastilha de cinza claro com o texto normal por cima.
 # Continua sem cor de propósito — a seleção da GRADE compete com a miniatura,
@@ -152,18 +130,9 @@ ON_TYPE_TINT = "#FFFFFF"  # texto/glifo sobre a pastilha acima
 # --------------------------------------------------------------------------
 # Paleta escura (Fatia 43)
 # --------------------------------------------------------------------------
-# Nasceu na Fatia 43 como inversão monocromática da paleta clara. A Fatia 44
-# rebaseou os fundos: o modo escuro passou de cinza-chumbo (#1B1B1E) para um
-# quase-preto em camadas, que é o que a referência escolhida pelo Rafael faz —
-# fundo mais fundo que o painel, e o painel mais fundo que o campo. Sem esses
-# degraus, a lateral e a grade viravam uma mancha só.
-#
-# O destaque deixou de inverter polaridade (era um cinza CLARO com texto
-# escuro): agora é o MESMO azul da identidade, num tom mais luminoso porque
-# precisa brilhar sobre quase-preto em vez de sobre branco. O texto que vai por
-# cima dele é escuro — azul claro com branco em cima não passa em 4.5:1.
-# WARNING/DANGER seguem em tom mais claro que a versão clara: os tons escuros
-# ficam ilegíveis invertidos.
+# O modo escuro preserva a hierarquia de quase-preto em camadas. O destaque
+# inverte para cinza muito claro com texto escuro; os tons semânticos ficam
+# mais claros para continuar legíveis sobre superfícies escuras.
 
 BG_DARK = "#101114"
 SURFACE_DARK = "#1A1B1F"
@@ -173,11 +142,11 @@ BG_TINT_DARK = "#232429"
 # é o branco — por isso `field` é token próprio e não um apelido de `bg`.
 FIELD_DARK = "#131417"
 
-ACCENT_DARK = "#FF8A4C"
-ACCENT_HOVER_DARK = "#FF9C68"
-ACCENT_PRESS_DARK = "#E67638"
-ON_ACCENT_DARK = "#241000"
-ACCENT_SOFT_DARK = "#3A2417"
+ACCENT_DARK = "#F0F0F2"
+ACCENT_HOVER_DARK = "#FFFFFF"
+ACCENT_PRESS_DARK = "#D5D5D8"
+ON_ACCENT_DARK = "#17181B"
+ACCENT_SOFT_DARK = "#38393D"
 
 TITLE_DARK = "#FFFFFF"
 TEXT_DARK = "#DEDEE3"
@@ -250,9 +219,7 @@ def _paleta(mode: str) -> dict:
 SEPARATION = {"sutil": 0.05, "media": 0.075, "forte": 0.11}
 RADII = {  # (painel, card, controle)
     "discreto": (10, 8, 6),
-    # "marcante" cresceu na Fatia 73 (16,12,9 → 20,16,10) — parte do mesmo
-    # pedido do laranja: cantos maiores é um dos ingredientes do visual
-    # "mais estiloso" que as referências do Rafael mostravam.
+    # Cantos marcantes compõem a identidade aprovada nos mockups.
     "marcante": (20, 16, 10),
 }
 FONTS = {
