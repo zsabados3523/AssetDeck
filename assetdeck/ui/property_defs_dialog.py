@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
 )
 
 from assetdeck.db.repos import properties as properties_repo
+from assetdeck.ui import dialog_chrome
 
 log = logging.getLogger(__name__)
 
@@ -44,14 +45,18 @@ class PropertyDefsDialog(QDialog):
         nova_btn.clicked.connect(self._nova)
 
         botoes = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        botoes.addButton(nova_btn, QDialogButtonBox.ButtonRole.ActionRole)
         botoes.rejected.connect(self.accept)
         botoes.accepted.connect(self.accept)
+        dialog_chrome.prepare_actions(botoes)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(10)
+        dialog_chrome.add_heading(
+            layout, "Propriedades dos assets",
+            "Gerencie os campos personalizados da biblioteca.")
         layout.addWidget(self.list)
-        layout.addWidget(nova_btn)
         layout.addWidget(botoes)
 
     def _reload(self) -> None:

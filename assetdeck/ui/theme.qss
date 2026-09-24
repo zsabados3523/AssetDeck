@@ -37,6 +37,22 @@ QDialog {
     background-color: $bg;
 }
 
+QLabel#dialogHeading {
+    color: $title;
+    font-size: $font_size_title;
+    font-weight: 700;
+}
+
+QLabel#dialogDescription {
+    color: $text_muted;
+    font-size: $font_size_small;
+}
+
+QDialogButtonBox#dialogActions {
+    border-top: 1px solid $hairline;
+    padding-top: 8px;
+}
+
 /* Superfície de fundo da janela. É o widget central que recebe o fundo, e não
  * o QMainWindow: o QMainWindow tem tratamento próprio de fundo e deu resultado
  * inconsistente no teste. */

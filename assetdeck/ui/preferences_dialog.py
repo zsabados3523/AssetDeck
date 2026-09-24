@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
 )
 
 from assetdeck import config
+from assetdeck.ui import dialog_chrome
 
 log = logging.getLogger(__name__)
 
@@ -96,10 +97,14 @@ class PreferencesDialog(QDialog):
         )
         botoes.accepted.connect(self._salvar)
         botoes.rejected.connect(self.reject)
+        dialog_chrome.prepare_actions(botoes)
 
         layout = QFormLayout(self)
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(10)
+        dialog_chrome.add_heading(
+            layout, "Iluminação das capas",
+            "Ajuste as luzes usadas na próxima geração de capas.")
         # Fatia 102: o fundo é sempre transparente agora — estes três
         # campos afinam a ILUMINAÇÃO, não mais um fundo visível.
         layout.addRow("Cor da luz ambiente:", self.render_bg_color_btn)
