@@ -27,10 +27,12 @@ QMainWindow {
     background-color: $bg;
 }
 
-/* O topo do corpo de QDialog segue reto para alinhar à moldura nativa; a
- * máscara em theme.py arredonda somente os dois cantos inferiores. */
+/* O topo do corpo de QDialog segue reto para alinhar à moldura nativa. Os
+ * cantos inferiores são desenhados pelo QSS, com antialiasing. */
 QDialog {
     background-color: $bg;
+    border-bottom-left-radius: $radius_panel;
+    border-bottom-right-radius: $radius_panel;
 }
 
 QMessageBox#assetdeckMessageBox {
@@ -913,35 +915,12 @@ QToolButton#pill::menu-indicator {
 
 /* ------------------------------------------ seletor de biblioteca (F77) -- */
 
-/* O Rafael: "o botão de trocar de biblioteca parece meio cru". Era um
- * `#ghost` com o nome da biblioteca em texto pelado — sem ícone, sem
- * contorno, sem nada dizendo que abria um menu. Agora tem ícone à esquerda,
- * seta à direita e os mesmos estados de elevação do resto do app. Fica em
- * pastilha porque mora na faixa da marca, onde não há moldura nenhuma pra
- * apoiá-lo. */
-/* Borda VISÍVEL em repouso (Fatia 79). Na 77 ela só aparecia no hover, e o
- * Rafael voltou a cobrar: "ainda estou esperando a borda do botão de trocar a
- * biblioteca". Ele está certo — este botão mora na faixa da marca, onde não
- * há painel nenhum atrás pra apoiá-lo; sem contorno permanente ele lê como
- * texto, não como controle. É a exceção deliberada à regra dos botões
- * discretos do app (`#ghost`), que vivem DENTRO de painéis. */
-/* O padding é o MESMO dos outros botões de propósito (Fatia 79b). Com os
- * 5px que havia aqui o botão media 31px de altura, e um raio de 18px passa
- * de metade disso — o Qt então DESCARTA o arredondamento inteiro e devolve
- * um retângulo, sem erro nenhum. Foi exatamente o que o Rafael viu ("o botão
- * de selecionar a biblioteca ainda não está arredondado"), e é a mesma
- * armadilha já documentada em `theme.radius_pill`. Com 8px ele vai a 37px,
- * igual ao botão de filtro, e o raio passa a caber. */
+/* O contorno permanente identifica o controle na faixa da marca. O seletor
+ * compartilha raio, fundo e estados com os demais botões. */
 QToolButton#libSwitch {
-    background: transparent;
+    background-color: $surface;
     border: 1px solid $border;
-    /* Raio 13 e não $radius_pill (18): com o padding menor a pastilha tem 26px
-     * de altura, e o Qt DESCARTA um raio maior que a metade da altura — o
-     * botão voltaria a ter canto reto (já aconteceu, Fatia 79b). */
-    border-radius: $radius_pill_small;
-    /* 8px antes. Encolher é o que faz o seletor BOIAR na faixa em vez de
-     * ocupá-la inteira: media 37px numa faixa de 37px, então o AlignVCenter
-     * que já estava lá não tinha o que centralizar. */
+    border-radius: $radius_control;
     padding: 4px 12px;
     color: $text_muted;
     font-weight: 600;
@@ -956,8 +935,6 @@ QToolButton#libSwitch:hover {
 QToolButton#libSwitch:pressed {
     background-color: $surface_sunken;
     border: 1px solid $border;
-    /* Afunda 1px sem mudar a ALTURA (a soma continua 8): altura maior aqui
-     * estouraria o raio de 13 e o canto ficaria reto só enquanto clicado. */
     padding-top: 5px;
     padding-bottom: 3px;
 }
@@ -1237,19 +1214,25 @@ QTreeView::item:focus, QListWidget::item:focus, QTableView::item:focus {
     border: 1px solid $focus;
 }
 
-QTreeWidget#tagTree::item, QTreeWidget#inspectorTagsTree::item {
+/* Pastas e tags dividem a mesma altura de linha. Os ícones de tag ocupam
+ * 16px, então ambos usam a mesma caixa mínima e o mesmo respiro vertical. */
+QTreeWidget#folderTree::item,
+QTreeWidget#tagTree::item,
+QTreeWidget#inspectorTagsTree::item {
     min-height: 22px;
-    padding: 4px 7px;
+    padding: 2px 5px;
     border: 1px solid transparent;
     border-radius: $radius_control;
 }
 
+QTreeWidget#folderTree::item:hover,
 QTreeWidget#tagTree::item:hover,
 QTreeWidget#inspectorTagsTree::item:hover {
     background-color: $surface_raised;
     border: 1px solid $border;
 }
 
+QTreeWidget#folderTree::item:selected,
 QTreeWidget#tagTree::item:selected,
 QTreeWidget#inspectorTagsTree::item:selected {
     background-color: $accent_soft;
@@ -1258,6 +1241,7 @@ QTreeWidget#inspectorTagsTree::item:selected {
     font-weight: 600;
 }
 
+QTreeWidget#folderTree::item:focus,
 QTreeWidget#tagTree::item:focus,
 QTreeWidget#inspectorTagsTree::item:focus {
     border: 1px solid $focus;
@@ -1380,12 +1364,14 @@ QMenu::separator {
 
 QMenu#filterPopup {
     min-width: 190px;
-    padding: 6px;
+    padding: 6px 0;
 }
 
 QMenu#filterPopup::item {
+    min-width: 190px;
     min-height: 22px;
     padding: 8px 28px 8px 12px;
+    margin: 0;
     border-radius: $radius_control;
 }
 

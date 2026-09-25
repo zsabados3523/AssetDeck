@@ -77,21 +77,41 @@ def test_navegacao_tem_coluna_propria_e_titulo(janela):
     assert sw.nav_panel.width() == 202
 
 
-def test_transicao_de_pagina_respeita_reduzir_movimento(janela):
+def test_troca_de_pagina_nas_configuracoes_e_imediata(janela):
     sw = janela.settings_window
     sw._lista.setCurrentRow(1)
 
     assert sw._paginas.currentIndex() == 1
-    assert sw._page_animation is not None
-    assert sw._page_animation.duration() == 130
-    sw._page_animation.stop()
+    assert not sw._paginas.currentWidget().isHidden()
+    assert all(
+        sw._paginas.widget(i).isHidden()
+        for i in range(sw._paginas.count())
+        if i != 1
+    )
 
     janela.reduce_motion_check.setChecked(True)
-    animacao_atual = sw._page_animation
     sw._lista.setCurrentRow(2)
 
     assert sw._paginas.currentIndex() == 2
-    assert sw._page_animation is animacao_atual
+    assert not sw._paginas.currentWidget().isHidden()
+
+
+def test_trocas_rapidas_nao_deixam_paginas_ou_efeitos_sobrepostos(janela, qapp):
+    sw = janela.settings_window
+    sw._lista.setCurrentRow(1)
+    sw._lista.setCurrentRow(2)
+    sw._lista.setCurrentRow(3)
+    qapp.processEvents()
+
+    visiveis = [
+        sw._paginas.widget(i)
+        for i in range(sw._paginas.count())
+        if not sw._paginas.widget(i).isHidden()
+    ]
+    assert visiveis == [sw._paginas.currentWidget()]
+    for indice in range(sw._paginas.count()):
+        pagina = sw._paginas.widget(indice)
+        assert pagina.graphicsEffect() is None
 
 
 def test_reduzir_movimento_salva_e_aplica_na_grade(janela):

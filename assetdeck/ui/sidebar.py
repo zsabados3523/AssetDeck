@@ -349,6 +349,9 @@ class Sidebar(QWidget):
         self._quick_layout.setContentsMargins(0, 0, 0, 0)
         self._quick_layout.setSpacing(3)
         self._quick_actions_added = False
+        self.quick_actions.setSizePolicy(
+            QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed
+        )
         self._divider = QFrame()
         self._divider.setObjectName("sidebarRule")
         self._divider.setFixedHeight(1)
@@ -368,7 +371,8 @@ class Sidebar(QWidget):
         layout.addWidget(self.heading)
         layout.addWidget(self.quick_actions)
         layout.addWidget(self._divider)
-        layout.addWidget(self.splitter, stretch=1)
+        layout.addWidget(self.splitter, stretch=100)
+        layout.addStretch(1)
         layout.addWidget(self.rail.settings_btn)
 
         self.setMinimumWidth(self._largura_minima())
@@ -437,8 +441,6 @@ class Sidebar(QWidget):
 
     @Slot()
     def rebalance_sections(self) -> None:
-        if self.splitter.height() <= 0:
-            return
         tamanhos_atuais = self.splitter.sizes()
         visiveis = [
             (indice, secao)
@@ -446,6 +448,8 @@ class Sidebar(QWidget):
             if not secao.isHidden()
         ]
         if not visiveis:
+            self.splitter.setMaximumHeight(0)
+            self.splitter.setSizes([0] * len(self.sections))
             return
 
         espaco = max(
@@ -463,8 +467,16 @@ class Sidebar(QWidget):
             else:
                 abertas.append((indice, secao))
 
-        restante = max(0, espaco - sum(tamanhos[i] for i, _ in recolhidas))
         if abertas:
+            # Com pelo menos uma seção aberta, a coluna de árvores volta a
+            # ocupar a altura disponível e entrega o espaço às views abertas.
+            # Se todas estiverem recolhidas, limitar o splitter deixa os
+            # cabeçalhos juntos logo abaixo do divisor, em vez de espalhá-los
+            # pelo espaço vertical vazio.
+            self.splitter.setMaximumHeight(16777215)  # QWIDGETSIZE_MAX
+            restante = max(
+                0, espaco - sum(tamanhos[i] for i, _ in recolhidas)
+            )
             pesos = []
             for indice, secao in abertas:
                 salvo = secao._last_expanded_height
@@ -479,6 +491,11 @@ class Sidebar(QWidget):
                     tamanho = round(restante * peso / peso_total)
                     alocados += tamanho
                 tamanhos[indice] = max(1, tamanho)
+        else:
+            altura_recolhida = sum(
+                tamanhos[indice] for indice, _secao in recolhidas
+            ) + max(0, len(recolhidas) - 1) * self.splitter.handleWidth()
+            self.splitter.setMaximumHeight(altura_recolhida)
         self.splitter.setSizes(tamanhos)
 
     def section_widget(self, chave: str) -> SidebarSection | None:

@@ -502,16 +502,10 @@ def tema_isolado(qapp):
     qapp.setFont(fonte)
 
 
-def test_mascara_de_cantos_arredonda_menu_e_base_do_dialogo(tema_isolado):
-    """`install_popup_corner_mask` (aplicado por `apply_theme`) não pode
-    lançar exceção ao mostrar um QMenu — e o QSS continua sendo pintado por
-    baixo da máscara (o offscreen recusa `setMask()` de verdade, então isto
-    é o que dá pra provar automatizado; o corte em si só é verificável na
-    tela real).
-
-    A base de QDialog entra na máscara, enquanto o topo fica reto para se
-    alinhar à barra de título nativa."""
+def test_popups_usam_cantos_do_qss_sem_mascara_serrilhada(tema_isolado):
+    """O tema desenha as curvas com antialiasing, sem recorte binário."""
     from PySide6.QtGui import QColor
+    from PySide6.QtCore import QPoint
     from PySide6.QtWidgets import QDialog, QMenu
 
     theme.apply_theme(tema_isolado)
@@ -522,34 +516,25 @@ def test_mascara_de_cantos_arredonda_menu_e_base_do_dialogo(tema_isolado):
     tema_isolado.processEvents()
     img = dialogo.grab().toImage()
     assert QColor(img.pixelColor(100, 60)).name().upper() == theme.BG.upper()
-    assert dialogo.property("_assetdeck_masked_shape").startswith("dialog-bottom:")
+    assert dialogo.property("_assetdeck_corner_renderer") == "qss"
+    assert dialogo.mask().isEmpty()
     dialogo.close()
 
     menu = QMenu()
     menu.addAction("Item de teste")
-    menu.popup(dialogo.mapToGlobal(dialogo.rect().center()))
+    menu.popup(QPoint(20, 20))
     tema_isolado.processEvents()
+    assert menu.property("_assetdeck_corner_renderer") == "qss"
+    assert menu.mask().isEmpty()
     menu.close()  # não travou, não lançou exceção
 
 
-def test_qdialog_nao_define_raio_no_qss(tema_isolado):
-    """A geometria fica na máscara, sem borda/raio CSS que afete o topo."""
+def test_qdialog_arredonda_a_base_no_qss(tema_isolado):
     theme.apply_theme(tema_isolado)
     qss_dialog = [b for b in theme.build_qss().split("}") if "QDialog {" in b][0]
-    assert "border-radius" not in qss_dialog
+    assert "border-bottom-left-radius:" in qss_dialog
+    assert "border-bottom-right-radius:" in qss_dialog
     assert "border:" not in qss_dialog
-
-
-def test_regiao_do_dialogo_arredonda_apenas_os_cantos_inferiores():
-    from PySide6.QtCore import QPoint
-
-    regiao = theme._dialog_bottom_rounded_region(100, 60, 12)
-
-    assert regiao.contains(QPoint(0, 0))
-    assert regiao.contains(QPoint(99, 0))
-    assert regiao.contains(QPoint(50, 59))
-    assert not regiao.contains(QPoint(0, 59))
-    assert not regiao.contains(QPoint(99, 59))
 
 
 def test_apply_theme_configura_o_app(tema_isolado):
@@ -771,19 +756,7 @@ def test_o_raio_da_pastilha_cabe_na_altura_do_botao(qapp, fonte, tmp_path):
         ("CategoryButton", CategoryButton(CATEGORIES[0]), "radius_control"),
         ("FilterButton", FilterButton("palette", PALETA_CORES, swatch=True,
                                        caption="Cor"), "radius_control"),
-        # O seletor de biblioteca entrou aqui DEPOIS de escapar: ele usa o
-        # mesmo `$radius_pill`, mas tinha padding próprio e menor, então
-        # media 31px — abaixo do dobro do raio. O Qt descartou o
-        # arredondamento em silêncio e o botão ficou quadrado na tela até o
-        # Rafael reclamar. Um teste que cobre só dois dos três usuários do
-        # token não protege o token.
-        # O seletor encolheu na Fatia 95 (pedido do Rafael: ele ocupava a
-        # faixa inteira e não tinha como parecer centralizado), então passou a
-        # usar um token de raio PRÓPRIO — 18px não caberia mais nos 26px de
-        # altura. Cada botão é conferido contra o token QUE ELE USA: um teste
-        # que cobrisse todos contra o mesmo token voltaria a mentir na
-        # primeira vez que um deles mudasse de tamanho.
-        ("LibrarySwitcher", LibrarySwitcher(conn, 1), "radius_pill_small"),
+        ("LibrarySwitcher", LibrarySwitcher(conn, 1), "radius_control"),
     ]
     for nome, b, token in botoes:
         b.show()

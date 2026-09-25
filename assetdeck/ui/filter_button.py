@@ -14,7 +14,7 @@ from PySide6.QtWidgets import QMenu, QToolButton
 
 from assetdeck.ui import icons, theme
 
-_SWATCH_SIZE = 12
+_SWATCH_SIZE = 16
 
 
 def _swatch_icon(hex_color: str) -> QIcon:
