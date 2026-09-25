@@ -223,10 +223,15 @@ RADII = {  # (painel, card, controle)
     "marcante": (20, 16, 10),
 }
 FONTS = {
+    "manrope": "Manrope",
     "inter": "Inter",
     "sistema": "",  # vazio = mantém a fonte padrão do sistema
 }
-DISPLAY_FONT = "Space Grotesk"
+DISPLAY_FONT = "Manrope"
+
+# A fonte da prévia aprovada acompanha o app: o resultado não depende de uma
+# Manrope instalada no sistema nem de acesso à rede em runtime.
+MANROPE_FONT_FILE = Path(__file__).parent / "fonts" / "Manrope[wght].ttf"
 
 BACKGROUNDS = ("liso", "grao")
 MODES = ("claro", "escuro")
@@ -237,15 +242,15 @@ class Variant:
     """Uma combinação de escolhas visuais.
 
     O padrão é o que o Rafael pediu: fundo liso, translucidez média, cantos
-    marcantes, fonte Inter, modo claro. A vitrine (`theme_gallery.py`) troca
+    marcantes, fonte Manrope, modo claro. A vitrine (`theme_gallery.py`) troca
     estes campos ao vivo para ele comparar as alternativas na tela antes de
     bater o martelo.
     """
 
     background: str = "liso"      # liso | grao
     separation: str = "media"     # sutil | media | forte (opacidade da linha)
-    radius: str = "marcante"      # discreto | marcante
-    font: str = "inter"           # inter | sistema
+    radius: str = "discreto"     # discreto | marcante
+    font: str = "manrope"         # manrope | inter | sistema
     mode: str = "claro"           # claro | escuro (Fatia 43)
 
     def __post_init__(self) -> None:
@@ -443,7 +448,6 @@ def build_tokens(variant: Variant = DEFAULT) -> dict[str, str]:
     pal = _paleta(variant.mode)
     raio_painel, raio_card, raio_controle = RADII[variant.radius]
     familia = FONTS[variant.font]
-
     ladrilho = background_tile_path(variant)
     bg_image = ""
     if ladrilho is not None:
@@ -466,6 +470,8 @@ def build_tokens(variant: Variant = DEFAULT) -> dict[str, str]:
         # agora também para botões e controles. Ver `SURFACE_RAISED`.
         "surface_raised": pal["surface_raised"],
         "surface_sunken": pal["surface_sunken"],
+        "type_tint": pal["type_tint"],
+        "on_type_tint": pal["on_type_tint"],
         "selection": rgba_css(pal["selection"]),
         "field": pal["field"],
         "popover": pal["popover"],
@@ -508,6 +514,7 @@ def build_tokens(variant: Variant = DEFAULT) -> dict[str, str]:
         # descartar o arredondamento inteiro, sem erro nenhum.
         "radius_pill_small": "13px",
         "radius_chip_small": "9px",
+        "radius_brand_tile": "2px",
         "radius_slider_handle": "6px",
 
         "pad_s": "4px",
@@ -521,7 +528,8 @@ def build_tokens(variant: Variant = DEFAULT) -> dict[str, str]:
         "font_size": "13px",
         "font_size_small": "11px",
         "font_size_title": "17px",
-        "font_size_brand": "19px",
+        "font_size_brand": "16px",
+        "font_size_page_title": "25px",
 
         "check_icon": str(icon_asset_path("check", pal["on_accent"], 12)),
         "chevron_icon": str(icon_asset_path("chevron-down", pal["text_muted"], 12)),
@@ -647,6 +655,22 @@ def apply_theme(app, variant: Variant = DEFAULT) -> None:
         app.setStyle(estilo)
 
     familia = FONTS[variant.font]
+    if variant.font == "manrope" and app.property("assetdeck_manrope_font_id") is None:
+        if not MANROPE_FONT_FILE.is_file():
+            log.error("Fonte Manrope empacotada não encontrada em %s", MANROPE_FONT_FILE)
+        else:
+            font_id = QFontDatabase.addApplicationFont(str(MANROPE_FONT_FILE))
+            if font_id < 0:
+                log.error("Qt não conseguiu registrar a fonte Manrope em %s", MANROPE_FONT_FILE)
+            else:
+                familias_registradas = QFontDatabase.applicationFontFamilies(font_id)
+                if familia not in familias_registradas:
+                    log.error(
+                        "A fonte em %s registrou as famílias %s; esperava %r.",
+                        MANROPE_FONT_FILE, familias_registradas, familia,
+                    )
+                else:
+                    app.setProperty("assetdeck_manrope_font_id", font_id)
     if familia:
         if familia in QFontDatabase.families():
             fonte = QFont(familia)

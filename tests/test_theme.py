@@ -557,10 +557,9 @@ def test_apply_theme_configura_o_app(tema_isolado):
     assert qapp.style().metaObject().className() == "QStyleSheetStyle"
     assert QStyleFactory.create("Fusion") is not None
 
-    # A fonte só é trocada se estiver instalada — em máquina sem Inter o app
-    # tem de seguir com a do sistema, sem quebrar.
-    if theme.FONTS["inter"] in QFontDatabase.families():
-        assert qapp.font().family() == theme.FONTS["inter"]
+    assert theme.MANROPE_FONT_FILE.is_file()
+    assert theme.FONTS["manrope"] in QFontDatabase.families()
+    assert qapp.font().family() == theme.FONTS["manrope"]
 
 
 def test_tokens_tipograficos_tornam_hierarquia_legivel_e_compacta():
@@ -569,10 +568,15 @@ def test_tokens_tipograficos_tornam_hierarquia_legivel_e_compacta():
 
     assert tokens["font_size_small"] == "11px"
     assert tokens["font_size_title"] == "17px"
-    assert tokens["font_size_brand"] == "19px"
-    assert tokens["font_family_display"] == '"Space Grotesk"'
-    assert "font-size: 19px" in qss
-    assert 'font-family: "Space Grotesk"' in qss
+    assert tokens["font_size_brand"] == "16px"
+    assert tokens["font_size_page_title"] == "25px"
+    assert tokens["radius_panel"] == "10px"
+    assert tokens["radius_card"] == "8px"
+    assert tokens["font_family"] == '"Manrope"'
+    assert tokens["font_family_display"] == '"Manrope"'
+    assert "font-size: 16px" in qss
+    assert "font-size: 25px" in qss
+    assert 'font-family: "Manrope"' in qss
     assert theme.build_tokens(theme.Variant(font="sistema"))["font_family_display"] \
         == "inherit"
 
