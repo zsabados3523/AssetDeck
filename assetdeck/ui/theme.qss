@@ -27,12 +27,8 @@ QMainWindow {
     background-color: $bg;
 }
 
-/* QDialog NÃO arredonda (tentado e revertido — ver theme.py). Ao contrário
- * de QMenu, um QDialog normal GANHA barra de título nativa do gerenciador de
- * janelas (minimizar/maximizar/fechar) — cortar cantos por baixo dela deixa
- * uma costura feia onde o retângulo quadrado da barra encontra o corpo
- * arredondado (visto na tela pelo Rafael). QMenu não tem esse problema (é
- * uma janela popup sem decoração nenhuma), então continua arredondado. */
+/* O topo do corpo de QDialog segue reto para alinhar à moldura nativa; a
+ * máscara em theme.py arredonda somente os dois cantos inferiores. */
 QDialog {
     background-color: $bg;
 }
@@ -793,6 +789,43 @@ QToolButton#pill:checked, QToolButton#pillMini:checked {
     font-weight: 600;
 }
 
+/* Filtros finos na faixa das categorias: rótulo e ícone deixam a função
+ * visível sem depender de tooltip; o raio segue o restante dos controles. */
+QToolButton#toolbarFilter {
+    min-height: 32px;
+    padding: 5px 9px;
+    border: 1px solid $border;
+    border-radius: $radius_control;
+    background-color: $surface;
+    color: $text_muted;
+}
+
+QToolButton#toolbarFilter:hover {
+    background-color: $surface_raised;
+    border: 1px solid $border_strong;
+    border-radius: $radius_control;
+}
+
+QToolButton#toolbarFilter:pressed {
+    background-color: $surface_sunken;
+    border: 1px solid $border_strong;
+    border-radius: $radius_control;
+    padding-top: 6px;
+    padding-bottom: 4px;
+}
+
+QToolButton#toolbarFilter:checked {
+    background-color: $accent_soft;
+    border: 1px solid transparent;
+    border-radius: $radius_control;
+    color: $accent;
+    font-weight: 600;
+}
+
+QToolButton#toolbarFilter:focus {
+    border-color: $focus;
+}
+
 
 /* Pastilha MENOR, do visualizador 3D (Fatia 94, pedido do Rafael: "os botões
  * poderiam ser menores"). Herda tudo do #pill acima — só encolhe. Existe como
@@ -1179,6 +1212,32 @@ QTreeView::item:focus, QListWidget::item:focus, QTableView::item:focus {
     border: 1px solid $focus;
 }
 
+QTreeWidget#tagTree::item, QTreeWidget#inspectorTagsTree::item {
+    min-height: 22px;
+    padding: 4px 7px;
+    border: 1px solid transparent;
+    border-radius: $radius_control;
+}
+
+QTreeWidget#tagTree::item:hover,
+QTreeWidget#inspectorTagsTree::item:hover {
+    background-color: $surface_raised;
+    border: 1px solid $border;
+}
+
+QTreeWidget#tagTree::item:selected,
+QTreeWidget#inspectorTagsTree::item:selected {
+    background-color: $accent_soft;
+    color: $accent;
+    border: 1px solid transparent;
+    font-weight: 600;
+}
+
+QTreeWidget#tagTree::item:focus,
+QTreeWidget#inspectorTagsTree::item:focus {
+    border: 1px solid $focus;
+}
+
 QListWidget::item {
     border-radius: $radius_control;
 }
@@ -1294,6 +1353,17 @@ QMenu::separator {
     margin: 5px 8px;
 }
 
+QMenu#filterPopup {
+    min-width: 190px;
+    padding: 6px;
+}
+
+QMenu#filterPopup::item {
+    min-height: 22px;
+    padding: 8px 28px 8px 12px;
+    border-radius: $radius_control;
+}
+
 QToolTip {
     background-color: $popover;
     border: 1px solid $border;
@@ -1355,10 +1425,8 @@ QProgressBar::chunk {
     border-radius: 5px;
 }
 
-/* Slider contínuo de tamanho da miniatura: trilho fino e trecho preenchido
- * na cor de destaque, sem o relevo 3D padrão do Fusion. A alça é uma cápsula
- * curta e larga o bastante para mirar; o valor exato fica ao lado em uma
- * pastilha com contraste. */
+/* Slider contínuo de tamanho da miniatura: trilho fino e alça circular.
+ * Altura explícita no widget e no handle mantém o círculo inteiro visível. */
 QSlider::groove:horizontal {
     height: 4px;
     background: $bg_tint;
@@ -1371,9 +1439,9 @@ QSlider::sub-page:horizontal {
 }
 
 QSlider::handle:horizontal {
-    width: 12px;
-    height: 16px;
-    margin: -6px 0;
+    width: 16px;
+    height: 18px;
+    margin: -7px 0;
     background: $surface;
     border: 1px solid $border_strong;
     border-radius: $radius_slider_handle;

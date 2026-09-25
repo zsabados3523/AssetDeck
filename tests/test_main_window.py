@@ -461,6 +461,7 @@ def test_size_slider_mora_ao_lado_do_titulo_da_grade(janela):
     assert janela.size_value.parentWidget() is janela.size_slider.parentWidget()
     assert janela.grid_size_label.parentWidget() is janela.size_slider.parentWidget()
     assert janela.size_slider.width() == 190
+    assert janela.size_slider.height() == 34
     assert janela.size_slider.minimum() == 96
     assert janela.size_slider.maximum() == 240
     assert janela.size_slider.singleStep() == 1
@@ -495,7 +496,7 @@ def test_marca_assetdeck_tem_simbolo_proprio_e_nome_visivel(janela):
 
 
 def test_as_quatro_faixas_da_biblioteca_ficam_separadas_e_alinhadas(janela, qapp):
-    """Título, barra de busca, categorias e grade seguem a hierarquia da prévia."""
+    """Título, busca, categorias/filtros e grade seguem a hierarquia aprovada."""
     janela.show()
 
     for largura, altura in ((1280, 800), (1600, 900)):
@@ -513,13 +514,45 @@ def test_as_quatro_faixas_da_biblioteca_ficam_separadas_e_alinhadas(janela, qapp
         assert y_titulo < y_caminho < y_categorias < y_grade
         assert abs(linha_do(janela.list_count) - y_titulo) < 5
         assert abs(linha_do(janela.search_box) - y_caminho) < 5
-        assert abs(linha_do(janela.sort_filter) - y_caminho) < 5
-        assert abs(linha_do(janela.res_filter) - y_caminho) < 5
-        assert abs(linha_do(janela.color_filter) - y_caminho) < 5
+        assert abs(linha_do(janela.sort_filter) - y_categorias) < 5
+        assert abs(linha_do(janela.res_filter) - y_categorias) < 5
+        assert abs(linha_do(janela.color_filter) - y_categorias) < 5
+        assert janela.sort_filter.parentWidget().objectName() == "typeFiltersRow"
+        faixa_tipos = janela.sort_filter.parentWidget()
+        controles = (
+            janela.categories, janela.sort_filter,
+            janela.res_filter, janela.color_filter,
+        )
+        for controle in controles:
+            assert controle.geometry().right() < faixa_tipos.width()
+        assert janela.sort_filter.geometry().left() > janela.categories.geometry().right()
+        assert janela.res_filter.geometry().left() > janela.sort_filter.geometry().right()
+        assert janela.color_filter.geometry().left() > janela.res_filter.geometry().right()
         assert abs(linha_do(janela.size_slider) - y_grade) < 5
         assert abs(linha_do(janela.size_value) - y_grade) < 5
         assert janela.size_value.geometry().right() < janela.size_value.parentWidget().width()
         assert janela.size_slider.geometry().right() < janela.size_slider.parentWidget().width()
+
+
+def test_alca_do_slider_e_circular_e_cabe_no_widget(janela, qapp):
+    from PySide6.QtWidgets import QStyle, QStyleOptionSlider
+    from assetdeck.ui import theme
+
+    theme.apply_theme(qapp)
+    janela.show()
+    qapp.processEvents()
+    option = QStyleOptionSlider()
+    janela.size_slider.initStyleOption(option)
+    handle = janela.size_slider.style().subControlRect(
+        QStyle.ComplexControl.CC_Slider,
+        option,
+        QStyle.SubControl.SC_SliderHandle,
+        janela.size_slider,
+    )
+
+    assert (handle.width(), handle.height()) == (18, 18)
+    assert handle.top() >= 0
+    assert handle.bottom() < janela.size_slider.height()
 
 
 def test_o_escopo_da_lista_acompanha_a_pasta(janela, qapp):

@@ -6,7 +6,7 @@ import logging
 import sqlite3
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QUrl, Signal
+from PySide6.QtCore import QSize, Qt, QUrl, Signal
 from PySide6.QtGui import QDesktopServices, QIcon, QPixmap
 from PySide6.QtWidgets import (
     QFormLayout,
@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QPlainTextEdit,
     QPushButton,
+    QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
@@ -202,6 +203,7 @@ class DetailsPanel(QWidget):
         self._current: Path | None = None
         self._current_asset_id: int | None = None
         self._loaded_notes: str = ""
+        self._preview_source = QPixmap()
 
         # Subclasse de QWidget filha IGNORA o `background` do QSS sem isto
         # (medido na Fatia 24) — sem ele o painel fica transparente sobre o
@@ -217,7 +219,10 @@ class DetailsPanel(QWidget):
         self.preview = QLabel("Selecione um asset")
         self.preview.setObjectName("previewTile")
         self.preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.preview.setFixedSize(72, 72)
+        self.preview.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
+        self.preview.setFixedHeight(156)
 
         # Elidido à DIREITA: o começo do nome é o que identifica o asset.
         self.name = _RotuloElidido(Qt.TextElideMode.ElideRight)
@@ -247,11 +252,11 @@ class DetailsPanel(QWidget):
         overview_text.addWidget(self.f_type)
         overview_text_widget = QWidget()
         overview_text_widget.setLayout(overview_text)
-        overview = QHBoxLayout()
+        overview = QVBoxLayout()
         overview.setContentsMargins(0, 0, 0, 0)
-        overview.setSpacing(11)
-        overview.addWidget(self.preview, 0, Qt.AlignmentFlag.AlignTop)
-        overview.addWidget(overview_text_widget, 1, Qt.AlignmentFlag.AlignVCenter)
+        overview.setSpacing(9)
+        overview.addWidget(self.preview)
+        overview.addWidget(overview_text_widget)
         self._overview_row = QWidget()
         self._overview_row.setLayout(overview)
 
@@ -337,6 +342,8 @@ class DetailsPanel(QWidget):
         from PySide6.QtWidgets import QTreeWidget
 
         self.tags_tree = QTreeWidget()
+        self.tags_tree.setObjectName("inspectorTagsTree")
+        self.tags_tree.setIconSize(QSize(16, 16))
         self.tags_tree.setHeaderHidden(True)
         self.tags_tree.setMaximumHeight(150)
         self.tags_tree.itemChanged.connect(self._on_tag_item_changed)
@@ -502,11 +509,11 @@ class DetailsPanel(QWidget):
         self.save_notes_btn.setEnabled(False)
 
         if thumb and not thumb.isNull():
-            self.preview.setPixmap(
-                thumb.scaled(self.preview.size(), Qt.AspectRatioMode.KeepAspectRatio,
-                             Qt.TransformationMode.SmoothTransformation)
-            )
+            self._preview_source = QPixmap(thumb)
+            self.preview.setText("")
+            self._refresh_preview_pixmap()
         else:
+            self._preview_source = QPixmap()
             self.preview.setPixmap(QPixmap())
             self.preview.setText("(sem preview ainda)")
 
@@ -525,6 +532,21 @@ class DetailsPanel(QWidget):
         self.f_path.setText(
             f"{row['rel_path']}  ⚠ ARQUIVO SUMIDO" if sumido else row["rel_path"])
         self._set_buttons(not sumido, path)
+
+    def _refresh_preview_pixmap(self) -> None:
+        if self._preview_source.isNull():
+            return
+        area = self.preview.contentsRect().size()
+        if area.width() <= 0 or area.height() <= 0:
+            return
+        self.preview.setPixmap(self._preview_source.scaled(
+            area, Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation,
+        ))
+
+    def resizeEvent(self, event) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        self._refresh_preview_pixmap()
 
     def _read_dims(self, path: Path) -> str:
         """Resolução lida na hora (só formatos raster; os demais mostram —)."""

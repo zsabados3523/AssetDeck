@@ -173,16 +173,19 @@ class MainWindow(QMainWindow):
             "resolution",
             [("Resolução: todas", None), ("≥ 1K", 1024), ("≥ 2K", 2048),
              ("≥ 4K", 4096), ("≥ 8K", 8192)],
+            caption="Resolução",
         )
         self.res_filter.changed.connect(self._apply_filters)
 
         # Busca por cor dominante (Fatia 39) — cor média do arquivo
         # principal, comparada contra uma paleta fixa de botões.
-        self.color_filter = FilterButton("palette", PALETA_CORES, swatch=True)
+        self.color_filter = FilterButton(
+            "palette", PALETA_CORES, swatch=True, caption="Cor"
+        )
         self.color_filter.changed.connect(self._apply_filters)
 
         # Ordenação (Fatia 63) — mesmo padrão dos filtros acima: um botão
-        # ícone-only com popup de escolha única. O valor é o par
+        # compacto com ícone e rótulo, com popup de escolha única. O valor é o par
         # (coluna, direção) direto, sem widget de direção separado — cada
         # opção do menu já é uma combinação completa e legível.
         self.sort_filter = FilterButton(
@@ -197,6 +200,7 @@ class MainWindow(QMainWindow):
                 ("Resolução (maior)", ("resolution", "desc")),
                 ("Resolução (menor)", ("resolution", "asc")),
             ],
+            caption="Ordenar",
         )
         self.sort_filter.changed.connect(self._apply_filters)
 
@@ -347,6 +351,7 @@ class MainWindow(QMainWindow):
         self.size_slider.setPageStep(8)
         self.size_slider.setValue(asset_grid.DEFAULT_ICON)
         self.size_slider.setFixedWidth(190)
+        self.size_slider.setFixedHeight(34)
         self.size_slider.setToolTip(
             f"Tamanho das miniaturas: {asset_grid.MIN_ICON}–"
             f"{asset_grid.MAX_ICON} px. Use as setas para ajustar de 1 em 1."
@@ -402,17 +407,18 @@ class MainWindow(QMainWindow):
         path_row.addWidget(self.up_btn)
         path_row.addWidget(self.breadcrumb, stretch=1)
         path_row.addWidget(self.search_box, stretch=2)
-        path_row.addWidget(self.sort_filter)
-        path_row.addWidget(self.res_filter)
-        path_row.addWidget(self.color_filter)
         path_row_widget = QWidget()
         path_row_widget.setObjectName("assetToolbar")
         path_row_widget.setLayout(path_row)
 
         category_row = QHBoxLayout()
         category_row.setContentsMargins(0, 0, 0, 0)
+        category_row.setSpacing(7)
         category_row.addWidget(self.categories)
         category_row.addStretch(1)
+        category_row.addWidget(self.sort_filter)
+        category_row.addWidget(self.res_filter)
+        category_row.addWidget(self.color_filter)
         category_row_widget = QWidget()
         category_row_widget.setObjectName("typeFiltersRow")
         category_row_widget.setLayout(category_row)

@@ -76,6 +76,14 @@ def test_item_com_icone_escolhido(qapp, conn):
     assert not _por_nome(t, "Madeira").icon(0).isNull()
 
 
+def test_arvore_usa_icones_maiores_para_tags(qapp):
+    from PySide6.QtCore import QSize
+
+    t = TagTree()
+    assert t.objectName() == "tagTree"
+    assert t.iconSize() == QSize(16, 16)
+
+
 def test_primeira_carga_abre_a_arvore_inteira(qapp, conn):
     materiais = tags_repo.create(conn, "Materiais")
     tags_repo.create(conn, "Madeira", parent_id=materiais)

@@ -502,18 +502,15 @@ def tema_isolado(qapp):
     qapp.setFont(fonte)
 
 
-def test_mascara_de_cantos_nao_quebra_menu_e_dialogo_fica_quadrado(tema_isolado):
+def test_mascara_de_cantos_arredonda_menu_e_base_do_dialogo(tema_isolado):
     """`install_popup_corner_mask` (aplicado por `apply_theme`) não pode
     lançar exceção ao mostrar um QMenu — e o QSS continua sendo pintado por
     baixo da máscara (o offscreen recusa `setMask()` de verdade, então isto
     é o que dá pra provar automatizado; o corte em si só é verificável na
     tela real).
 
-    QDialog é testado aqui também, mas para o oposto: ele NÃO pode ter
-    `border-radius` nem entrar na máscara. Foi tentado e revertido — um
-    QDialog ganha barra de título nativa do gerenciador de janelas, e
-    cortar cantos por baixo dela deixava uma costura feia (visto na tela
-    pelo Rafael)."""
+    A base de QDialog entra na máscara, enquanto o topo fica reto para se
+    alinhar à barra de título nativa."""
     from PySide6.QtGui import QColor
     from PySide6.QtWidgets import QDialog, QMenu
 
@@ -525,6 +522,7 @@ def test_mascara_de_cantos_nao_quebra_menu_e_dialogo_fica_quadrado(tema_isolado)
     tema_isolado.processEvents()
     img = dialogo.grab().toImage()
     assert QColor(img.pixelColor(100, 60)).name().upper() == theme.BG.upper()
+    assert dialogo.property("_assetdeck_masked_shape").startswith("dialog-bottom:")
     dialogo.close()
 
     menu = QMenu()
@@ -534,11 +532,24 @@ def test_mascara_de_cantos_nao_quebra_menu_e_dialogo_fica_quadrado(tema_isolado)
     menu.close()  # não travou, não lançou exceção
 
 
-def test_qdialog_nao_arredonda(tema_isolado):
+def test_qdialog_nao_define_raio_no_qss(tema_isolado):
+    """A geometria fica na máscara, sem borda/raio CSS que afete o topo."""
     theme.apply_theme(tema_isolado)
     qss_dialog = [b for b in theme.build_qss().split("}") if "QDialog {" in b][0]
     assert "border-radius" not in qss_dialog
     assert "border:" not in qss_dialog
+
+
+def test_regiao_do_dialogo_arredonda_apenas_os_cantos_inferiores():
+    from PySide6.QtCore import QPoint
+
+    regiao = theme._dialog_bottom_rounded_region(100, 60, 12)
+
+    assert regiao.contains(QPoint(0, 0))
+    assert regiao.contains(QPoint(99, 0))
+    assert regiao.contains(QPoint(50, 59))
+    assert not regiao.contains(QPoint(0, 59))
+    assert not regiao.contains(QPoint(99, 59))
 
 
 def test_apply_theme_configura_o_app(tema_isolado):
@@ -758,7 +769,8 @@ def test_o_raio_da_pastilha_cabe_na_altura_do_botao(qapp, fonte, tmp_path):
 
     botoes = [
         ("CategoryButton", CategoryButton(CATEGORIES[0]), "radius_pill"),
-        ("FilterButton", FilterButton("palette", PALETA_CORES, swatch=True), "radius_pill"),
+        ("FilterButton", FilterButton("palette", PALETA_CORES, swatch=True,
+                                       caption="Cor"), "radius_control"),
         # O seletor de biblioteca entrou aqui DEPOIS de escapar: ele usa o
         # mesmo `$radius_pill`, mas tinha padding próprio e menor, então
         # media 31px — abaixo do dobro do raio. O Qt descartou o
