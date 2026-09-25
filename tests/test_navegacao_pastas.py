@@ -49,7 +49,7 @@ def test_comeca_sem_para_onde_navegar(janela):
 def test_entrar_numa_pasta_habilita_voltar_e_subir(janela):
     janela._go_to_dir("Modelos")
 
-    assert janela._breadcrumb_full == "BIBLIOTECA › MODELOS"
+    assert janela._breadcrumb_full == "Biblioteca › Modelos"
     assert janela.back_btn.isEnabled() is True
     assert janela.up_btn.isEnabled() is True
     assert janela.fwd_btn.isEnabled() is False  # nada no futuro ainda
@@ -60,15 +60,15 @@ def test_voltar_e_avancar_refazem_o_caminho(janela):
     janela._go_to_dir("Modelos/Cadeiras")
 
     janela._go_back()
-    assert janela._breadcrumb_full == "BIBLIOTECA › MODELOS"
+    assert janela._breadcrumb_full == "Biblioteca › Modelos"
     assert janela.fwd_btn.isEnabled() is True
 
     janela._go_back()
-    assert janela._breadcrumb_full == "BIBLIOTECA (TUDO)"
+    assert janela._breadcrumb_full == "Biblioteca"
     assert janela.back_btn.isEnabled() is False
 
     janela._go_forward()
-    assert janela._breadcrumb_full == "BIBLIOTECA › MODELOS"
+    assert janela._breadcrumb_full == "Biblioteca › Modelos"
 
 
 def test_voltar_refiltra_a_grade_de_verdade(janela):
@@ -84,10 +84,10 @@ def test_subir_um_nivel(janela):
     janela._go_to_dir("Modelos/Cadeiras")
 
     janela._go_up()
-    assert janela._breadcrumb_full == "BIBLIOTECA › MODELOS"
+    assert janela._breadcrumb_full == "Biblioteca › Modelos"
 
     janela._go_up()
-    assert janela._breadcrumb_full == "BIBLIOTECA (TUDO)"
+    assert janela._breadcrumb_full == "Biblioteca"
     assert janela.up_btn.isEnabled() is False
 
 
@@ -108,7 +108,7 @@ def test_navegar_do_meio_descarta_o_futuro(janela):
 
     assert janela.fwd_btn.isEnabled() is False
     janela._go_back()
-    assert janela._breadcrumb_full == "BIBLIOTECA › MODELOS"
+    assert janela._breadcrumb_full == "Biblioteca › Modelos"
 
 
 def test_reindexar_mantem_a_pasta_atual(janela):
@@ -118,7 +118,7 @@ def test_reindexar_mantem_a_pasta_atual(janela):
 
     janela._reload_all()
 
-    assert janela._breadcrumb_full == "BIBLIOTECA › MODELOS › CADEIRAS"
+    assert janela._breadcrumb_full == "Biblioteca › Modelos › Cadeiras"
     assert janela.folders.currentItem().data(0, 32) == "Modelos/Cadeiras"
     assert janela.model.rowCount() == 1
 
@@ -129,7 +129,7 @@ def test_pasta_que_sumiu_cai_na_raiz(janela):
     janela._go_to_dir("Modelos")
     janela._go_to_dir("Pasta/Que/Sumiu")
 
-    assert janela._breadcrumb_full == "BIBLIOTECA (TUDO)"
+    assert janela._breadcrumb_full == "Biblioteca"
     assert janela.folders.currentItem().data(0, 32) == ""
 
 
@@ -142,9 +142,9 @@ def test_caminho_longo_corta_pela_esquerda_mantendo_a_pasta_atual(janela):
 
     texto = janela.breadcrumb.text()
     assert texto != janela._breadcrumb_full  # encurtou mesmo
-    assert texto.endswith("CADEIRAS")        # a pasta atual sobreviveu
+    assert texto.endswith("Cadeiras")        # a pasta atual sobreviveu
     assert texto.startswith("…")
-    assert janela.breadcrumb.toolTip() == "BIBLIOTECA › MODELOS › CADEIRAS"
+    assert janela.breadcrumb.toolTip() == "Biblioteca › Modelos › Cadeiras"
 
 
 def test_smart_collection_entra_no_historico(janela):
@@ -153,6 +153,6 @@ def test_smart_collection_entra_no_historico(janela):
     janela._go_to_dir("Modelos")
     janela._restore_filters({"dir_prefix": "Texturas"})
 
-    assert janela._breadcrumb_full == "BIBLIOTECA › TEXTURAS"
+    assert janela._breadcrumb_full == "Biblioteca › Texturas"
     janela._go_back()
-    assert janela._breadcrumb_full == "BIBLIOTECA › MODELOS"
+    assert janela._breadcrumb_full == "Biblioteca › Modelos"

@@ -69,11 +69,13 @@ def test_troca_de_blend_pra_outro_formato_esconde_de_novo(painel):
 
 # ------------------------------------------------- layout do painel (F48) --
 
-def test_a_moldura_da_miniatura_existe_mesmo_vazia(painel):
-    """Sem asset selecionado, o topo do painel era um buraco de 200px com um
-    texto boiando no meio e nada indicando que ali é o lugar da imagem."""
+def test_a_moldura_da_miniatura_compacta_existe_mesmo_vazia(painel):
+    """O inspetor mantém uma miniatura compacta ao lado do resumo, mesmo
+    antes de selecionar um asset."""
     assert painel.preview.objectName() == "previewTile"
-    assert painel.preview.minimumHeight() >= 180
+    assert painel.preview.size().width() == 72
+    assert painel.preview.size().height() == 72
+    assert painel.preview.parentWidget() is painel._overview_row
 
 
 def test_a_ficha_tecnica_alinha_os_valores_a_direita(painel):
@@ -81,24 +83,19 @@ def test_a_ficha_tecnica_alinha_os_valores_a_direita(painel):
     linhas com o valor em posições diferentes, impossíveis de varrer com o
     olho. Alinhados à direita, viram uma coluna só.
 
-    Desde a Fatia 79 (mockup aprovado pelo Rafael) sobraram só DOIS campos
-    aqui — os que são de fato longos. Tipo, formato e tamanho viraram
-    pastilhas no topo, ver o teste logo abaixo.
+    Os quatro valores da ficha ficam alinhados à direita para leitura rápida.
     """
     from PySide6.QtCore import Qt
 
-    for campo in (painel.f_dims, painel.f_path):
+    for campo in (painel.f_format, painel.f_dims, painel.f_size, painel.f_path):
         assert campo.objectName() == "kvValue"
         assert campo.alignment() & Qt.AlignmentFlag.AlignRight
 
 
-def test_formato_tipo_e_tamanho_sao_pastilhas_no_topo(painel):
-    """Fatia 79: eram três das cinco linhas da ficha técnica — respostas
-    curtas demais pra ocupar uma linha inteira cada. Viraram chips na altura
-    do nome, com o FORMATO em destaque (é o que se procura primeiro)."""
-    assert painel.f_format.objectName() == "chipForte"
-    assert painel.f_type.objectName() == "chip"
-    assert painel.f_size.objectName() == "chip"
+def test_resumo_do_inspetor_mostra_tipo_abaixo_do_nome(painel):
+    """O tipo acompanha o nome como subtítulo; formato e tamanho ficam na ficha."""
+    assert painel.f_type.objectName() == "inspectorCategory"
+    assert painel.f_type.parentWidget().parentWidget() is painel._overview_row
 
 
 def test_tipo_no_detalhe_usa_rotulo_amigavel(painel):

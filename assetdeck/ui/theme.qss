@@ -251,7 +251,8 @@ QPushButton#acaoIcone:checked {
  * lida como "título + apoio" em vez de duas informações concorrendo. */
 QLabel#listScope {
     color: $title;
-    font-size: $font_size;
+    font-family: $font_family_display;
+    font-size: $font_size_title;
     font-weight: 600;
 }
 
@@ -270,6 +271,47 @@ QLabel#gridSizeValue {
     padding: 2px 6px;
 }
 
+QLabel#pageTitle {
+    color: $title;
+    font-family: $font_family_display;
+    font-size: $font_size_page_title;
+    font-weight: 600;
+    letter-spacing: -0.7px;
+}
+
+QLabel#gridSizeLabel {
+    color: $text_muted;
+    font-size: $font_size_small;
+}
+
+QWidget#pageHeader {
+    min-height: 36px;
+}
+
+QWidget#assetWorkspace {
+    background: $bg;
+}
+
+QWidget#assetToolbar {
+    border-top: 1px solid $hairline;
+    border-bottom: 1px solid $hairline;
+    padding: 12px 0;
+}
+
+#assetToolbar QLineEdit {
+    min-height: 34px;
+    padding: 0 10px;
+    border-radius: $radius_control;
+}
+
+QWidget#typeFiltersRow {
+    min-height: 35px;
+}
+
+QWidget#gridHeader {
+    min-height: 32px;
+}
+
 /* -------------------------------------------------------------- lateral -- */
 
 /* Rail: coluna estreita de ícones, um por seção (Fatia 45). Fica no tom do
@@ -277,6 +319,49 @@ QLabel#gridSizeValue {
  * apoiado em cima de alguma coisa em vez de flutuar solto. */
 QWidget#sidebarRail {
     background-color: $bg;
+}
+
+QWidget#sidebarPanel {
+    background: $bg;
+    border-right: 1px solid $hairline;
+}
+
+QLabel#sidebarHeading {
+    color: $title;
+    font-family: $font_family_display;
+    font-size: $font_size_title;
+    font-weight: 600;
+}
+
+QFrame#sidebarRule, QFrame#topContextDivider {
+    background: $hairline;
+    border: none;
+}
+
+QToolButton#sidebarNavItem, QToolButton#sidebarSettings {
+    min-height: 34px;
+    padding: 0 9px;
+    border: 1px solid transparent;
+    border-radius: $radius_control;
+    background: transparent;
+    text-align: left;
+    color: $text_muted;
+}
+
+QToolButton#sidebarNavItem:hover, QToolButton#sidebarSettings:hover {
+    background: $surface_raised;
+    border-color: $border;
+    color: $text;
+}
+
+QToolButton#sidebarNavItem:checked {
+    background: $accent_soft;
+    color: $title;
+    font-weight: 600;
+}
+
+QToolButton#sidebarSettings:pressed, QToolButton#sidebarNavItem:pressed {
+    background: $surface_sunken;
 }
 
 QToolButton#railButton {
@@ -329,10 +414,9 @@ QWidget#sidebarHeader:focus {
 }
 
 QLabel#sidebarSectionTitle {
-    color: $text_muted;
+    color: $text;
     font-size: $font_size_small;
-    font-weight: 700;
-    letter-spacing: 1px;
+    font-weight: 600;
 }
 
 /* Contador: mais apagado que o título de propósito. É informação de apoio —
@@ -369,6 +453,40 @@ QLabel#title {
     font-family: $font_family_display;
     font-size: $font_size_title;
     font-weight: 600;
+}
+
+QWidget#inspectorPanel {
+    background: $bg;
+    border-left: 1px solid $hairline;
+}
+
+QLabel#inspectorHeading {
+    color: $text_muted;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    padding-bottom: 9px;
+    border-bottom: 1px solid $hairline;
+}
+
+QLabel#inspectorCategory {
+    color: $text_muted;
+    font-size: $font_size_small;
+}
+
+QLabel#themeTypeSample {
+    background-color: $type_tint;
+    border-radius: $radius_card;
+    color: $on_type_tint;
+    font-size: 11px;
+}
+
+QLabel#themeTypeChip {
+    background-color: $accent;
+    border-radius: $radius_chip_small;
+    color: $on_accent;
+    font-size: 9px;
+    padding: 1px 4px;
 }
 
 /* Dica de teclado do rodapé dos visualizadores 3D (Fatia 90). Mais apagada
@@ -981,8 +1099,9 @@ QHeaderView::section {
 /* --------------------------------------------------------------- menus -- */
 
 QMenuBar {
-    background: transparent;
+    background: $bg;
     color: $text;
+    border-bottom: 1px solid $hairline;
 }
 
 /* Marca e contexto ocupam os cantos da MESMA faixa dos menus (Fatia 50) —
@@ -991,7 +1110,7 @@ QMenuBar {
  * protótipo anterior e mantém o nome AssetDeck como marca principal. */
 QFrame#brandGlyph {
     background-color: $accent;
-    border-radius: 1px;
+    border-radius: $radius_brand_tile;
 }
 
 QLabel#brandName {
@@ -1005,6 +1124,11 @@ QLabel#brandName {
 /* Contexto (biblioteca aberta e modo) é apoio: apagado de propósito, para não
  * competir com os menus, que são o que se clica nesta faixa. */
 QLabel#brandContext {
+    color: $text_muted;
+    font-size: $font_size_small;
+}
+
+QLabel#topBlenderStatus {
     color: $text_muted;
     font-size: $font_size_small;
 }

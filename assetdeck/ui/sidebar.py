@@ -1,21 +1,9 @@
-"""Barra lateral do AssetDeck (Fatia 45).
+"""Navegação lateral da biblioteca.
 
-Substitui os quatro cartões empilhados que havia antes — Pastas, Tags,
-Coleções e Smart Collections, todos do mesmo tamanho, com o mesmo peso visual
-e sem contador nenhum. Olhando a tela não dava para dizer qual seção tinha
-conteúdo, qual estava filtrando, nem quantos itens havia em cada uma.
-
-O que muda, seguindo o mockup que o Rafael escolheu (a lateral vinha da
-referência 1):
-
-* **Um painel só**, não quatro flutuando. As seções continuam redimensionáveis
-  entre si (o `QSplitter` segue aqui dentro), mas leem-se como uma coluna.
-* **Contador por seção** no cabeçalho. É o número que responde "tem alguma
-  coisa aqui dentro?" sem precisar expandir.
-* **Seção recolhível**: clicar no cabeçalho fecha a seção e deixa só a linha
-  do título. Quem não usa Smart Collections recupera a altura.
-* **Rail de ícones** à esquerda, uma coluna estreita. Cada botão liga/desliga
-  uma seção — é o mesmo que o menu Janela já fazia, a um clique de distância.
+Pastas, tags, coleções e coleções inteligentes compartilham uma coluna. Cada
+seção tem contador e pode ser recolhida ou redimensionada. O controlador de
+visibilidade continua disponível para a janela de configurações, sem
+acrescentar uma barra de ícones à navegação.
 
 Contagem: cada view tem exatamente UMA linha sintética no topo ("Biblioteca
 (tudo)", "(sem filtro de tag)", "(sem filtro de coleção)", "(nenhuma
@@ -30,10 +18,12 @@ import logging
 
 from PySide6.QtCore import QSize, Qt, QTimer, Signal
 from PySide6.QtWidgets import (
+    QFrame,
     QHBoxLayout,
     QLabel,
     QListWidget,
     QSplitter,
+    QSizePolicy,
     QToolButton,
     QTreeWidget,
     QTreeWidgetItemIterator,
@@ -96,7 +86,7 @@ class SectionHeader(QWidget):
 
         self.chevron = QLabel()
         self.chevron.setFixedWidth(TAM_CHEVRON)
-        self.titulo = QLabel(titulo.upper())
+        self.titulo = QLabel(titulo)
         self.titulo.setObjectName("sidebarSectionTitle")
         self.contador = QLabel("0")
         self.contador.setObjectName("sidebarCount")
@@ -318,13 +308,17 @@ class SidebarRail(QWidget):
 
 
 class Sidebar(QWidget):
-    """Rail + painel único com as seções."""
+    """Navegação compacta com as seções existentes da biblioteca."""
 
     def __init__(self, secoes: list[tuple[str, str, str, QWidget]], parent=None) -> None:
         """`secoes`: (chave, título, nome do ícone, view)."""
         super().__init__(parent)
 
-        self.rail = SidebarRail([(c, ic, t) for c, t, ic, _v in secoes])
+        # Os botões de visibilidade continuam como API interna para
+        # Configurações e compatibilidade, mas o rail vertical saiu da tela:
+        # a navegação agora é feita pelas seções nomeadas da própria lateral.
+        self.rail = SidebarRail([(c, ic, t) for c, t, ic, _v in secoes], self)
+        self.rail.hide()
         self.rail.section_toggled.connect(self._on_rail_toggled)
 
         self.splitter = QSplitter(Qt.Orientation.Vertical)
@@ -336,32 +330,60 @@ class Sidebar(QWidget):
             self.splitter.addWidget(secao)
             self.sections[chave] = secao
 
-        corpo = theme.make_card(self.splitter, sombra=False)
+        self.setObjectName("sidebarPanel")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.heading = QLabel("Biblioteca")
+        self.heading.setObjectName("sidebarHeading")
+        self.quick_actions = QWidget()
+        self._quick_layout = QVBoxLayout(self.quick_actions)
+        self._quick_layout.setContentsMargins(0, 0, 0, 0)
+        self._quick_layout.setSpacing(3)
+        self._quick_actions_added = False
+        self._divider = QFrame()
+        self._divider.setObjectName("sidebarRule")
+        self._divider.setFixedHeight(1)
 
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
-        layout.addWidget(self.rail)
-        layout.addWidget(corpo, stretch=1)
+        self.rail.settings_btn.setText("Configurações")
+        self.rail.settings_btn.setObjectName("sidebarSettings")
+        self.rail.settings_btn.setToolButtonStyle(
+            Qt.ToolButtonStyle.ToolButtonTextBesideIcon
+        )
+        self.rail.settings_btn.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
 
-        self.setMinimumWidth(self._largura_minima(corpo))
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(18, 20, 14, 14)
+        layout.setSpacing(10)
+        layout.addWidget(self.heading)
+        layout.addWidget(self.quick_actions)
+        layout.addWidget(self._divider)
+        layout.addWidget(self.splitter, stretch=1)
+        layout.addWidget(self.rail.settings_btn)
 
-    def _largura_minima(self, corpo: QWidget) -> int:
-        """Piso de largura derivado do CABEÇALHO MAIS LARGO, não de um número
-        escolhido a dedo.
+        self.setMinimumWidth(self._largura_minima())
 
-        "SMART COLLECTIONS" precisa de ~219px e o piso anterior era 200 — o
-        rótulo saía cortado no meio da palavra, e ninguém perceberia até
-        renomear uma seção e o corte mudar de lugar. Derivado assim, renomear
-        uma seção reajusta o piso sozinho.
-        """
-        margens = corpo.layout().contentsMargins()
-        folga = margens.left() + margens.right() + 2  # +2 = a borda do card
+    def _largura_minima(self) -> int:
+        """Piso derivado do cabeçalho mais largo e dos controles da lateral."""
         maior = max(
             (s.header.sizeHint().width() for s in self.sections.values()),
             default=0,
         )
-        return LARGURA_RAIL + maior + folga
+        margens = self.layout().contentsMargins()
+        folga = margens.left() + margens.right() + 2
+        largura_rapida = max(
+            self.heading.sizeHint().width(),
+            self.rail.settings_btn.sizeHint().width(),
+            maior,
+        )
+        return largura_rapida + folga
+
+    def add_quick_action(self, widget: QWidget) -> None:
+        """Insere um atalho nomeado entre o título e as seções da lateral."""
+        self._quick_layout.addWidget(widget)
+        if not self._quick_actions_added:
+            self.quick_actions.setVisible(True)
+            self._quick_actions_added = True
 
     # ---- contagem ----
 

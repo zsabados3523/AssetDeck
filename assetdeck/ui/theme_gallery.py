@@ -2,7 +2,7 @@
 
 Aberta por `python -m assetdeck --theme-preview`. NÃO toca no app: existe para
 o Rafael comparar as variantes ao vivo (fundo liso x com grão, três níveis de
-translucidez, dois raios de canto, Inter x fonte do sistema) e apontar qual
+translucidez, dois raios de canto e Manrope/Inter/fonte do sistema) e apontar qual
 combinação vai valer.
 
 Mostra uma amostra de cada widget que o AssetDeck realmente usa — inclusive os
@@ -45,7 +45,7 @@ OPCOES = {
     "background": [("Liso", "liso"), ("Com grão de papel", "grao")],
     "separation": [("Quase nenhuma", "sutil"), ("Média", "media"), ("Marcada", "forte")],
     "radius": [("Discretos (12px)", "discreto"), ("Marcantes (18px)", "marcante")],
-    "font": [("Inter", "inter"), ("Padrão do sistema", "sistema")],
+    "font": [("Manrope", "manrope"), ("Inter", "inter"), ("Padrão do sistema", "sistema")],
     "mode": [("Claro", "claro"), ("Escuro", "escuro")],  # Fatia 43
 }
 
@@ -256,23 +256,13 @@ class ThemeGallery(QWidget):
         grade.setSpacing(8)
         for i, ext in enumerate((".fbx", ".exr", ".blend", ".png")):
             card = QLabel(ext[1:].upper())
+            card.setObjectName("themeTypeSample")
             card.setAlignment(Qt.AlignmentFlag.AlignCenter)
             card.setFixedHeight(60)
-            # Exceção consciente à regra "nada de setStyleSheet fora do
-            # theme.py": aqui a cor É o conteúdo sendo demonstrado. Limitação
-            # conhecida (Fatia 43): usa sempre TYPE_TINT do modo claro — este
-            # card específico não se redesenha ao trocar pra escuro no
-            # combo "Modo" (só reconstrói uma vez, no __init__).
-            card.setStyleSheet(
-                f"background-color: {theme.TYPE_TINT}; color: {theme.ON_TYPE_TINT};"
-                f" border-radius: 8px; font-size: 11px;"
-            )
             chip = QLabel(ext)
+            chip.setObjectName("themeTypeChip")
             chip.setParent(card)
-            chip.setStyleSheet(
-                "background-color: rgba(0,0,0,0.55); color: white;"
-                " border-radius: 4px; font-size: 9px; padding: 1px 4px;"
-            )
+            chip.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
             chip.move(4, 40)
             chip.adjustSize()
             grade.addWidget(card, i // 2, i % 2)
