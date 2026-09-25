@@ -35,8 +35,10 @@ from PySide6.QtGui import QColor, QFontMetrics, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import (
     QButtonGroup,
     QDialog,
+    QFrame,
     QHBoxLayout,
     QLabel,
+    QScrollArea,
     QStackedWidget,
     QToolButton,
     QVBoxLayout,
@@ -130,7 +132,7 @@ class VisualizadorWindow(QDialog):
 
         # ---- cabeçalho ----
         self.titulo = QLabel("—")
-        self.titulo.setObjectName("title")  # mesmo estilo do título do preview
+        self.titulo.setObjectName("pageTitle")
         self.titulo.setAccessibleName("Nome do asset visualizado")
         self.chip = QLabel()
         self.chip.setObjectName("chipMini")
@@ -193,6 +195,69 @@ class VisualizadorWindow(QDialog):
         self._cantos = _CantosDoPalco(self._palco)
         self._palco.installEventFilter(self)
 
+        # Inspetor lateral com estatísticas e os materiais realmente lidos
+        # pelo loader. Não transforma isso em um bloco de texto no rodapé:
+        # números e nomes continuam visíveis enquanto se orbita o modelo.
+        self.info_heading = QLabel("INFORMAÇÕES")
+        self.info_heading.setObjectName("viewerInfoHeading")
+        self.stat_values: dict[str, QLabel] = {}
+        stats = QVBoxLayout()
+        stats.setContentsMargins(0, 0, 0, 0)
+        stats.setSpacing(2)
+        stats.addWidget(self.info_heading)
+        for chave, rotulo in (
+            ("format", "Formato"), ("resolution", "Resolução"),
+            ("vertices", "Vértices"), ("triangles", "Triângulos"),
+            ("materials", "Materiais"), ("textures", "Texturas"),
+        ):
+            valor = QLabel("—")
+            self.stat_values[chave] = valor
+            stats.addWidget(self._info_row(rotulo, valor))
+
+        self.materials_heading = QLabel("MATERIAIS")
+        self.materials_heading.setObjectName("viewerInfoHeading")
+        self.materials_list = QWidget()
+        self.materials_list.setObjectName("viewerMaterialsList")
+        self.materials_layout = QVBoxLayout(self.materials_list)
+        self.materials_layout.setContentsMargins(0, 0, 0, 0)
+        self.materials_layout.setSpacing(5)
+        self.materials_placeholder = QLabel("Nenhum material carregado")
+        self.materials_placeholder.setObjectName("muted")
+        self.materials_placeholder.setWordWrap(True)
+        self.materials_layout.addWidget(self.materials_placeholder)
+        self.materials_layout.addStretch(1)
+
+        materials_scroll = QScrollArea()
+        materials_scroll.setWidgetResizable(True)
+        materials_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        materials_scroll.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        materials_scroll.setWidget(self.materials_list)
+        self.materials_scroll = materials_scroll
+
+        inspector = QWidget()
+        inspector.setObjectName("viewerInspector")
+        inspector.setMinimumWidth(228)
+        inspector.setMaximumWidth(276)
+        inspector_layout = QVBoxLayout(inspector)
+        inspector_layout.setContentsMargins(0, 2, 0, 0)
+        inspector_layout.setSpacing(10)
+        inspector_layout.addLayout(stats)
+        inspector_layout.addWidget(self.materials_heading)
+        inspector_layout.addWidget(materials_scroll, 1)
+        self.inspector = inspector
+
+        palco_divider = QFrame()
+        palco_divider.setObjectName("viewerDivider")
+        palco_divider.setFrameShape(QFrame.Shape.VLine)
+        palco_divider.setFixedWidth(1)
+        workspace = QHBoxLayout()
+        workspace.setContentsMargins(0, 0, 0, 0)
+        workspace.setSpacing(18)
+        workspace.addWidget(self._palco, 1)
+        workspace.addWidget(palco_divider)
+        workspace.addWidget(inspector)
+
         # ---- rodapé ----
         self.status = QLabel("Carregando…")
         self.status.setObjectName("muted")
@@ -209,7 +274,7 @@ class VisualizadorWindow(QDialog):
         raiz.setSpacing(12)
         raiz.addLayout(cabecalho)
         raiz.addLayout(controles)
-        raiz.addWidget(self._palco, stretch=1)
+        raiz.addLayout(workspace, stretch=1)
         raiz.addLayout(rodape)
 
         # Um emissor POR TIPO, criado uma vez: a carga roda em thread e
@@ -224,6 +289,64 @@ class VisualizadorWindow(QDialog):
         self._sig_modelo.failed.connect(self._falhou)
 
         self.refresh_theme()
+
+    @staticmethod
+    def _info_row(rotulo: str, valor: QLabel) -> QWidget:
+        texto = QLabel(rotulo)
+        texto.setObjectName("viewerInfoLabel")
+        valor.setObjectName("viewerInfoValue")
+        valor.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        linha = QWidget()
+        layout = QHBoxLayout(linha)
+        layout.setContentsMargins(0, 3, 0, 3)
+        layout.setSpacing(8)
+        layout.addWidget(texto)
+        layout.addStretch(1)
+        layout.addWidget(valor)
+        linha.setFixedHeight(30)
+        return linha
+
+    def _clear_material_rows(self) -> None:
+        while self.materials_layout.count():
+            item = self.materials_layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+
+    def _show_materials(self, materials) -> None:
+        self._clear_material_rows()
+        self.materials_heading.setVisible(bool(materials))
+        if not materials:
+            empty = QLabel("Nenhum material carregado")
+            empty.setObjectName("muted")
+            self.materials_layout.addWidget(empty)
+            self.materials_layout.addStretch(1)
+            return
+
+        vistos: set[tuple] = set()
+        for material in materials:
+            textura = material.texture
+            chave = (material.name, str(textura) if textura else None, material.color)
+            if chave in vistos:
+                continue
+            vistos.add(chave)
+            nome = material.name or f"Material {len(vistos)}"
+            item = QWidget()
+            item.setObjectName("viewerMaterialRow")
+            item_layout = QVBoxLayout(item)
+            item_layout.setContentsMargins(8, 6, 8, 6)
+            item_layout.setSpacing(2)
+            name_label = QLabel(nome)
+            name_label.setObjectName("viewerMaterialName")
+            name_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+            item_layout.addWidget(name_label)
+            source = textura.name if textura else "Cor sólida"
+            source_label = QLabel(source)
+            source_label.setObjectName("viewerMaterialSource")
+            source_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+            item_layout.addWidget(source_label)
+            self.materials_layout.addWidget(item)
+        self.materials_layout.addStretch(1)
 
     # ---- abertura ----
 
@@ -249,6 +372,10 @@ class VisualizadorWindow(QDialog):
             metricas.elidedText(path.stem, Qt.TextElideMode.ElideRight, LARGURA_NOME))
         self.titulo.setToolTip(path.name)
         self.chip.setText(path.suffix.upper().lstrip("."))
+        self.stat_values["format"].setText(path.suffix.upper().lstrip(".") or "—")
+        for key in ("resolution", "vertices", "triangles", "materials", "textures"):
+            self.stat_values[key].setText("—")
+        self._show_materials([])
         self.stack.setCurrentIndex(pagina)
         self.btn_ambiente.setVisible(pagina == PAGINA_HDRI)
         self.btn_esfera.setVisible(pagina == PAGINA_HDRI)
@@ -326,6 +453,9 @@ class VisualizadorWindow(QDialog):
         log.info("HDRI pronto na tela: %s (%d × %d)",
                  getattr(self._alvo, "name", "?"), imagem.width(), imagem.height())
         self.hdri.set_image(imagem)
+        self.stat_values["resolution"].setText(
+            f"{imagem.width()} × {imagem.height()} px")
+        self.materials_heading.setVisible(False)
         self.status.setText(
             f"{imagem.width()} × {imagem.height()} px  ·  "
             "arraste para girar, duplo clique centraliza")
@@ -338,6 +468,19 @@ class VisualizadorWindow(QDialog):
         n_tris = (len(malha.indices) if malha.indices is not None
                   else len(malha.positions)) // 3
         n_texturas = len({r.texture for r in malha.materials if r.texture is not None})
+        materials = []
+        vistos = set()
+        for material in malha.materials:
+            chave = (material.name, str(material.texture) if material.texture else None,
+                     material.color)
+            if chave not in vistos:
+                vistos.add(chave)
+                materials.append(material)
+        self.stat_values["vertices"].setText(f"{len(malha.positions):,}".replace(",", "."))
+        self.stat_values["triangles"].setText(f"{n_tris:,}".replace(",", "."))
+        self.stat_values["materials"].setText(str(len(materials)))
+        self.stat_values["textures"].setText(str(n_texturas))
+        self._show_materials(materials)
         info_textura = f"  ·  {n_texturas} textura(s)" if n_texturas else ""
         self.status.setText(
             f"{n_tris:n} triângulos{info_textura}  ·  arraste para orbitar, roda pra zoom")
@@ -346,6 +489,10 @@ class VisualizadorWindow(QDialog):
         log.error("Visualizador não conseguiu abrir %s: %s",
                   getattr(self._alvo, "name", "?"), mensagem)
         self.status.setText(f"Não consegui abrir: {mensagem}")
+        self._show_materials([])
+        for key in self.stat_values:
+            if key != "format":
+                self.stat_values[key].setText("—")
 
     def _enquadrar(self) -> None:
         self.modelo.enquadrar()

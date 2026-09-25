@@ -30,11 +30,12 @@ distribuiu entre Blender e Sistema.
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QEasingCurve, QPropertyAnimation, Qt
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDialog,
+    QGraphicsOpacityEffect,
     QHBoxLayout,
     QLabel,
     QListWidget,
@@ -47,6 +48,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from assetdeck import config
 from assetdeck.ui import icons, theme
 
 # Reaproveita o mapa que já existia em `preferences_dialog` — "ask" pergunta
@@ -105,7 +107,8 @@ class SettingsWindow(QDialog):
 
         self._lista = QListWidget()
         self._lista.setObjectName("cfgLista")
-        self._lista.setFixedWidth(186)
+        self._reduce_motion = bool(config.load_config().get("reduce_motion", False))
+        self._page_animation: QPropertyAnimation | None = None
         self._paginas = QStackedWidget()
 
         # (rótulo, ícone, construtor). O ícone é tingido à mão, então a
@@ -125,10 +128,54 @@ class SettingsWindow(QDialog):
             self._paginas.addWidget(self._rolavel(builder()))
         self._lista.setCurrentRow(0)
         self._lista.currentRowChanged.connect(self._paginas.setCurrentIndex)
+        self._paginas.currentChanged.connect(self._animate_page)
 
         layout = QHBoxLayout(self)
-        layout.addWidget(self._lista)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        self.nav_panel = QWidget()
+        self.nav_panel.setObjectName("settingsNavPanel")
+        self.nav_panel.setFixedWidth(202)
+        nav_layout = QVBoxLayout(self.nav_panel)
+        nav_layout.setContentsMargins(16, 18, 12, 16)
+        nav_layout.setSpacing(12)
+        nav_title = QLabel("CONFIGURAÇÕES")
+        nav_title.setObjectName("settingsNavTitle")
+        nav_layout.addWidget(nav_title)
+        nav_layout.addWidget(self._lista, 1)
+        layout.addWidget(self.nav_panel)
         layout.addWidget(self._paginas, stretch=1)
+        mw.reduce_motion_check.toggled.connect(self._set_reduce_motion)
+
+    def _set_reduce_motion(self, reduce: bool) -> None:
+        self._reduce_motion = bool(reduce)
+        if self._reduce_motion and self._page_animation is not None:
+            self._page_animation.stop()
+            page = self._paginas.currentWidget()
+            effect = page.graphicsEffect() if page is not None else None
+            if isinstance(effect, QGraphicsOpacityEffect):
+                effect.setOpacity(1.0)
+
+    def _animate_page(self, index: int) -> None:
+        if self._reduce_motion or index < 0:
+            return
+        page = self._paginas.widget(index)
+        if page is None:
+            return
+        if self._page_animation is not None:
+            self._page_animation.stop()
+        effect = page.graphicsEffect()
+        if not isinstance(effect, QGraphicsOpacityEffect):
+            effect = QGraphicsOpacityEffect(page)
+            page.setGraphicsEffect(effect)
+        animation = QPropertyAnimation(effect, b"opacity", self)
+        animation.setDuration(130)
+        animation.setStartValue(0.70)
+        animation.setEndValue(1.0)
+        animation.setEasingCurve(QEasingCurve.Type.OutCubic)
+        animation.finished.connect(lambda e=effect: e.setOpacity(1.0))
+        self._page_animation = animation
+        animation.start()
 
     def refresh_theme(self) -> None:
         """Reaplica os ícones da lateral na cor do modo atual (Fatia 80) —
@@ -156,10 +203,10 @@ class SettingsWindow(QDialog):
     def _pagina(titulo: str, descricao: str = "") -> tuple[QWidget, QVBoxLayout]:
         pagina = QWidget()
         lay = QVBoxLayout(pagina)
-        lay.setContentsMargins(18, 16, 18, 18)
-        lay.setSpacing(4)
+        lay.setContentsMargins(24, 20, 24, 24)
+        lay.setSpacing(6)
         rotulo = QLabel(titulo)
-        rotulo.setObjectName("title")
+        rotulo.setObjectName("pageTitle")
         lay.addWidget(rotulo)
         if descricao:
             sub = QLabel(descricao)
@@ -185,8 +232,7 @@ class SettingsWindow(QDialog):
     # ---- categorias ----
 
     def _pagina_manutencao(self) -> QWidget:
-        pagina, lay = self._pagina(
-            "Manutenção", "Operações que varrem a biblioteca inteira.")
+        pagina, lay = self._pagina("Manutenção", "Indexação e organização.")
         mw = self._mw
 
         from assetdeck import config
@@ -215,42 +261,39 @@ class SettingsWindow(QDialog):
         lay.addWidget(_grupo("Varredura"))
         lay.addWidget(_linha(
             "Varrer a biblioteca ao abrir",
-            "Desligado, a biblioteca só é lida quando você clicar em "
-            "Reindexar. Ligado, o app varre tudo a cada abertura — numa "
-            "biblioteca grande isso ocupa a máquina por alguns minutos.",
+            "Indexa a biblioteca ao iniciar. Pode levar alguns minutos.",
             self.scan_on_startup))
 
         lay.addWidget(_grupo("Arquivos"))
         lay.addWidget(_linha(
             "Relocalizar assets perdidos",
-            "Religa no banco os arquivos que mudaram de pasta.",
+            "Religa arquivos que mudaram de pasta.",
             mw.relocate_action))
         lay.addWidget(_linha(
             "Esquecer assets sumidos",
-            "Tira da grade os assets 100% ausentes (você moveu ou apagou "
-            "fora do AssetDeck). Não mexe no disco, só no que é mostrado.",
+            "Oculta da grade assets ausentes. Não altera o disco.",
             btn_esquecer))
         lay.addWidget(_linha(
             "Duplicados por conteúdo visual",
-            "Acha imagens iguais mesmo com nomes diferentes.",
+            "Encontra imagens iguais com nomes diferentes.",
             mw.duplicates_action))
         lay.addWidget(_linha(
             "Previews órfãos",
-            "Apaga cópias de preview que nenhum asset usa mais.",
+            "Remove previews sem asset associado.",
             mw.purge_previews_action))
 
         lay.addWidget(_grupo("Organização"))
         lay.addWidget(_linha(
             "Template de tags",
-            "Aplica um conjunto pronto de tags à biblioteca.",
+            "Aplica um conjunto de tags à biblioteca.",
             btn_template))
         lay.addWidget(_linha(
             "Assinalar previews por nome",
-            "Casa imagem e modelo que tenham o mesmo nome.",
+            "Associa imagem e modelo com o mesmo nome.",
             btn_previews))
         lay.addWidget(_linha(
             "Propriedades customizadas",
-            "Campos seus — fabricante, coleção, o que precisar.",
+            "Adiciona campos como fabricante e coleção.",
             btn_props))
         lay.addStretch(1)
         return pagina
@@ -258,7 +301,7 @@ class SettingsWindow(QDialog):
     def _pagina_blender(self) -> QWidget:
         from assetdeck import config
 
-        pagina, lay = self._pagina("Blender", "Ponte, add-on e geração de capas.")
+        pagina, lay = self._pagina("Blender", "Ponte e geração de capas.")
         mw = self._mw
         cfg = config.load_config()
 
@@ -294,20 +337,20 @@ class SettingsWindow(QDialog):
         lay.addWidget(_linha("Porta da ponte", "", self.bridge_port))
         lay.addWidget(_linha(
             "Add-on no Blender",
-            "Instala ou atualiza o add-on que recebe os assets.",
+            "Instala ou atualiza o add-on receptor.",
             btn_addon))
         lay.addWidget(_linha("Como a ponte funciona", "", btn_ajuda))
 
         lay.addWidget(_grupo("Capas dos modelos"))
         lay.addWidget(_linha(
             "Gerar capas (render)",
-            "Renderiza uma prévia de cada modelo que ainda não tem.",
+            "Renderiza modelos sem capa.",
             mw.render_action))
         lay.addWidget(_linha(
             "Interromper geração", "", mw.cancel_render_action))
         lay.addWidget(_linha(
             "Cena do render",
-            "Cor do fundo, força do fundo e intensidade do sol.",
+            "Fundo e luz do render.",
             btn_cena))
         lay.addStretch(1)
         return pagina
@@ -315,7 +358,7 @@ class SettingsWindow(QDialog):
     def _pagina_aparencia(self) -> QWidget:
         from assetdeck import config
 
-        pagina, lay = self._pagina("Aparência", "Como o AssetDeck se apresenta.")
+        pagina, lay = self._pagina("Aparência", "Tema e movimento.")
         mw = self._mw
         mw.dark_mode_action = QCheckBox()
         mw.dark_mode_action.setChecked(
@@ -331,18 +374,18 @@ class SettingsWindow(QDialog):
         lay.addWidget(_grupo("Tema"))
         lay.addWidget(_linha(
             "Modo escuro",
-            "Vale na hora, sem reabrir o app.",
+            "Aplicado imediatamente.",
             mw.dark_mode_action))
         lay.addWidget(_linha(
             "Reduzir movimento",
-            "Desliga animações de interação da grade e dos controles.",
+            "Desativa as transições da interface.",
             mw.reduce_motion_check))
         lay.addStretch(1)
         return pagina
 
     def _pagina_paineis(self) -> QWidget:
         pagina, lay = self._pagina(
-            "Painéis", "Quais partes da janela ficam visíveis.")
+            "Painéis", "Áreas visíveis na biblioteca.")
         mw = self._mw
 
         mw._secoes_do_menu = [
@@ -384,7 +427,7 @@ class SettingsWindow(QDialog):
         lay.addWidget(_grupo("Layout"))
         lay.addWidget(_linha(
             "Restaurar layout padrão",
-            "Volta tamanhos, painéis e divisórias ao original.",
+            "Restaura tamanhos e visibilidade padrão.",
             btn_restaurar))
         lay.addStretch(1)
         return pagina
@@ -393,7 +436,7 @@ class SettingsWindow(QDialog):
         from assetdeck import config
 
         pagina, lay = self._pagina(
-            "Filtros", "O que a grade mostra por padrão.")
+            "Filtros", "Preferências de exibição.")
         mw = self._mw
         cfg = config.load_config()
 
@@ -414,23 +457,21 @@ class SettingsWindow(QDialog):
         lay.addWidget(_grupo("O que aparece na grade"))
         lay.addWidget(_linha(
             "Agrupar PBR",
-            "Um set de texturas conta como um card só.",
+            "Agrupa os mapas de cada material.",
             mw.group_check))
         lay.addWidget(_linha(
-            "Só favoritos", "Esconde tudo que não está marcado.", mw.fav_check))
+            "Só favoritos", "Oculta assets não favoritados.", mw.fav_check))
         lay.addWidget(_linha(
             "Mostrar dependências",
-            "Texturas que acompanham um .blend/.fbx irmão.",
+            "Inclui texturas associadas aos modelos.",
             mw.deps_check))
         lay.addWidget(_linha(
             "Mostrar assets sumidos",
-            "Arquivos que a varredura não achou mais no disco. Ligue pra "
-            "usar Manutenção → Relocalizar, que religa o que só mudou de "
-            "pasta.",
+            "Arquivos não encontrados na última varredura.",
             mw.missing_check))
         lay.addWidget(_linha(
             "Mostrar ocultos",
-            "Inclui imagens ocultadas por virarem preview de um modelo.",
+            "Inclui imagens usadas como previews.",
             mw.hidden_check))
 
         # Vindos da antiga janela de Preferências (Fatia 80).
@@ -460,15 +501,15 @@ class SettingsWindow(QDialog):
         lay.addWidget(_grupo("Previews automáticos"))
         lay.addWidget(_linha(
             "Assinalar previews por nome igual",
-            "Toda varredura casa imagem e modelo de mesmo nome.",
+            "Associa imagens e modelos com nomes iguais.",
             self.auto_match_previews))
         lay.addWidget(_linha(
             "Ocultar a imagem usada como preview",
-            "Some da grade a imagem que virou capa de um modelo.",
+            "Oculta da grade a imagem usada como preview.",
             self.auto_match_hide_source))
         lay.addWidget(_linha(
             "Ao usar imagem da biblioteca como preview",
-            "O que fazer com a imagem de origem.",
+            "Pergunta, oculta ou mantém a imagem.",
             self.hide_preview_source))
         lay.addStretch(1)
         return pagina
@@ -481,7 +522,7 @@ class SettingsWindow(QDialog):
         from assetdeck import config
 
         pagina, lay = self._pagina(
-            "Sistema", "Onde o AssetDeck guarda as coisas.")
+            "Sistema", "Pastas e backups.")
         mw = self._mw
         cfg = config.load_config()
 
@@ -506,7 +547,7 @@ class SettingsWindow(QDialog):
         lay.addWidget(_grupo("Backups do banco"))
         lay.addWidget(_linha(
             "Manter backups diários",
-            "Um por dia; os mais antigos são apagados.",
+            "Mantém um por dia e remove os mais antigos.",
             self.backup_keep))
 
         btn_sair = QPushButton("Sair")
@@ -520,7 +561,7 @@ class SettingsWindow(QDialog):
         lay.addWidget(rot_risco)
         lay.addWidget(_linha(
             "Sair do AssetDeck",
-            "Fecha o app. O estado da janela é salvo antes.",
+            "Salva o estado da janela e fecha o app.",
             btn_sair))
         lay.addStretch(1)
         return pagina

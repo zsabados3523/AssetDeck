@@ -557,8 +557,13 @@ def test_apply_theme_configura_o_app(tema_isolado):
     assert qapp.style().metaObject().className() == "QStyleSheetStyle"
     assert QStyleFactory.create("Fusion") is not None
 
-    assert theme.MANROPE_FONT_FILE.is_file()
+    assert all(font_file.is_file() for font_file in theme.MANROPE_FONT_FILES.values())
     assert theme.FONTS["manrope"] in QFontDatabase.families()
+    assert set(theme.MANROPE_FONT_FILES) <= set(QFontDatabase.styles(theme.FONTS["manrope"]))
+    assert {
+        style: QFontDatabase.weight(theme.FONTS["manrope"], style)
+        for style in theme.MANROPE_FONT_FILES
+    } == {"Regular": 400, "Medium": 500, "SemiBold": 600, "Bold": 700}
     assert qapp.font().family() == theme.FONTS["manrope"]
 
 
