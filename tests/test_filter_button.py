@@ -85,3 +85,12 @@ def test_sem_swatch_nenhuma_opcao_ganha_icone(qapp):
     botao = FilterButton("palette", OPCOES_COR, swatch=False)
     for acao, _valor in botao._acoes:
         assert acao.icon().isNull()
+
+
+def test_filtro_da_barra_exibe_rotulo_e_popup_identificavel(qapp):
+    botao = FilterButton("sort", OPCOES, caption="Ordenar")
+
+    assert botao.objectName() == "toolbarFilter"
+    assert botao.text() == "Ordenar"
+    assert botao.accessibleName() == "Ordenar"
+    assert botao._menu.objectName() == "filterPopup"

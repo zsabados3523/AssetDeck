@@ -69,13 +69,30 @@ def test_troca_de_blend_pra_outro_formato_esconde_de_novo(painel):
 
 # ------------------------------------------------- layout do painel (F48) --
 
-def test_a_moldura_da_miniatura_compacta_existe_mesmo_vazia(painel):
-    """O inspetor mantém uma miniatura compacta ao lado do resumo, mesmo
-    antes de selecionar um asset."""
+def test_a_moldura_da_miniatura_ocupa_o_painel_mesmo_vazia(painel):
+    """O inspetor usa a faixa inteira para uma capa grande, mesmo vazio."""
+    from PySide6.QtWidgets import QSizePolicy
+
     assert painel.preview.objectName() == "previewTile"
-    assert painel.preview.size().width() == 72
-    assert painel.preview.size().height() == 72
+    assert painel.preview.minimumHeight() == 156
+    assert painel.preview.sizePolicy().horizontalPolicy() == QSizePolicy.Policy.Expanding
     assert painel.preview.parentWidget() is painel._overview_row
+
+
+def test_preview_acompanha_a_largura_do_inspetor(painel, qapp):
+    from PySide6.QtGui import QPixmap
+
+    painel.resize(260, 720)
+    painel.show()
+    painel.show_asset(_row("modelo.fbx"), QPixmap(400, 200))
+    qapp.processEvents()
+    largura_inicial = painel.preview.pixmap().width()
+
+    painel.resize(360, 720)
+    qapp.processEvents()
+
+    assert painel.preview.pixmap().width() > largura_inicial
+    painel.close()
 
 
 def test_a_ficha_tecnica_alinha_os_valores_a_direita(painel):

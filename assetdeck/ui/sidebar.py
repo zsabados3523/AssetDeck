@@ -353,7 +353,7 @@ class Sidebar(QWidget):
         )
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(18, 20, 14, 14)
+        layout.setContentsMargins(18, 20, 14, 9)
         layout.setSpacing(10)
         layout.addWidget(self.heading)
         layout.addWidget(self.quick_actions)

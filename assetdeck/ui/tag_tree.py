@@ -8,7 +8,7 @@ from __future__ import annotations
 import logging
 import sqlite3
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtWidgets import (
     QColorDialog,
     QInputDialog,
@@ -36,12 +36,14 @@ class TagTree(QTreeWidget):
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
+        self.setObjectName("tagTree")
         self._conn: sqlite3.Connection | None = None
         # Só a PRIMEIRA carga abre tudo (bom padrão pra árvore vazia/nova).
         # Dali em diante, reload() preserva o que o Rafael abriu/fechou —
         # senão criar ou apagar uma tag reabria a árvore inteira.
         self._primeira_carga = True
         self.setHeaderHidden(True)
+        self.setIconSize(QSize(16, 16))
         self.setAcceptDrops(True)
         self.currentItemChanged.connect(self._on_current)
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)

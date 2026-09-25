@@ -520,7 +520,7 @@ def build_tokens(variant: Variant = DEFAULT) -> dict[str, str]:
         "radius_pill_small": "13px",
         "radius_chip_small": "9px",
         "radius_brand_tile": "2px",
-        "radius_slider_handle": "6px",
+        "radius_slider_handle": "9px",
 
         "pad_s": "4px",
         "pad_m": "8px",
@@ -716,8 +716,33 @@ def apply_theme(app, variant: Variant = DEFAULT) -> None:
     )
 
 
+def _dialog_bottom_rounded_region(width: int, height: int, radius: int):
+    """Região retangular com somente os dois cantos inferiores arredondados."""
+    from PySide6.QtCore import QRect
+    from PySide6.QtGui import QRegion
+
+    if width <= 0 or height <= 0:
+        return QRegion()
+    radius = max(0, min(radius, width // 2, height // 2))
+    region = QRegion(QRect(0, 0, width, height))
+    if radius == 0:
+        return region
+
+    region -= QRegion(QRect(0, height - radius, radius, radius))
+    region -= QRegion(QRect(width - radius, height - radius, radius, radius))
+    region |= QRegion(
+        QRect(0, height - 2 * radius, 2 * radius, 2 * radius),
+        QRegion.RegionType.Ellipse,
+    )
+    region |= QRegion(
+        QRect(width - 2 * radius, height - 2 * radius, 2 * radius, 2 * radius),
+        QRegion.RegionType.Ellipse,
+    )
+    return region
+
+
 class _PopupCornerMask:
-    """Recorta QMenu num retângulo arredondado de verdade.
+    """Arredonda QMenu e somente a base de QDialog.
 
     `WA_TranslucentBackground` foi testado e DESCARTADO: com ele ativo, o
     `background-color` do QSS simplesmente parou de ser pintado (sonda
@@ -727,29 +752,28 @@ class _PopupCornerMask:
     arredondado não depende de compositor (usa a X-Shape extension) e,
     testado, manteve o fundo do QSS pintado normalmente.
 
-    Só QMenu — QDialog foi tentado e revertido (ver comentário do QDialog
-    no theme.qss): ele ganha barra de título nativa do gerenciador de
-    janelas, e cortar cantos por baixo dela deixa uma costura feia onde o
-    retângulo da barra encontra o corpo arredondado (visto na tela pelo
-    Rafael). QMenu é uma janela popup sem decoração nenhuma — sem esse
-    problema.
+    A faixa superior de QDialog permanece reta para se encontrar com a barra
+    de título nativa. Os dois cantos inferiores acompanham o raio do painel.
     """
 
-    def __init__(self, radius_menu: int) -> None:
+    def __init__(self, radius_menu: int, radius_dialog: int) -> None:
         self._radius_menu = radius_menu
+        self._radius_dialog = radius_dialog
 
     def __call__(self, obj, event) -> bool:
         from PySide6.QtCore import QEvent
-        from PySide6.QtWidgets import QMenu
+        from PySide6.QtWidgets import QDialog, QMenu
 
         if event.type() not in (QEvent.Type.Show, QEvent.Type.Resize):
             return False
         if isinstance(obj, QMenu):
-            self._mask(obj, self._radius_menu)
+            self._mask(obj, self._radius_menu, "menu")
+        elif isinstance(obj, QDialog):
+            self._mask(obj, self._radius_dialog, "dialog-bottom")
         return False
 
     @staticmethod
-    def _mask(widget, radius: int) -> None:
+    def _mask(widget, radius: int, mode: str) -> None:
         from PySide6.QtCore import QRectF
         from PySide6.QtGui import QPainterPath, QRegion
 
@@ -759,11 +783,15 @@ class _PopupCornerMask:
         # widget (o gerenciador de janelas confirma a mudança de geometria).
         # Sem este corte, isso reentraria no filtro e recalcularia a máscara
         # de novo pro MESMO tamanho, sem necessidade.
-        tamanho = widget.size()
-        if widget.property("_assetdeck_masked_size") == tamanho:
+        chave = f"{mode}:{widget.width()}x{widget.height()}:{radius}"
+        if widget.property("_assetdeck_masked_shape") == chave:
             return
-        widget.setProperty("_assetdeck_masked_size", tamanho)
-
+        widget.setProperty("_assetdeck_masked_shape", chave)
+        if mode == "dialog-bottom":
+            widget.setMask(_dialog_bottom_rounded_region(
+                widget.width(), widget.height(), radius
+            ))
+            return
         path = QPainterPath()
         path.addRoundedRect(QRectF(0, 0, widget.width(), widget.height()), radius, radius)
         widget.setMask(QRegion(path.toFillPolygon().toPolygon()))
@@ -774,8 +802,8 @@ _popup_filter_ref = None  # installEventFilter não segura referência sozinho
 
 def install_popup_corner_mask(app, variant: Variant = DEFAULT) -> None:
     """Instala (ou REINSTALA, se o tema for reaplicado) o recorte de cantos
-    de QMenu. Ver `_PopupCornerMask` para o porquê de `setMask()` em vez de
-    `WA_TranslucentBackground`, e para o porquê de NÃO incluir QDialog.
+    de QMenu e do rodapé de QDialog. Ver `_PopupCornerMask` para o porquê de
+    `setMask()` em vez de `WA_TranslucentBackground`.
 
     Bug pego rodando a suíte inteira: `apply_theme()` é chamado várias vezes
     em sequência em teste (`test_todas_as_variantes_aplicam_sem_erro` chama
@@ -793,8 +821,8 @@ def install_popup_corner_mask(app, variant: Variant = DEFAULT) -> None:
         _popup_filter_ref.deleteLater()
         _popup_filter_ref = None
 
-    _raio_painel, raio_card, _raio_controle = RADII[variant.radius]
-    mask = _PopupCornerMask(radius_menu=raio_card)
+    raio_painel, raio_card, _raio_controle = RADII[variant.radius]
+    mask = _PopupCornerMask(radius_menu=raio_card, radius_dialog=raio_painel)
 
     class _Filter(QObject):
         def eventFilter(self, obj, event) -> bool:  # noqa: N802

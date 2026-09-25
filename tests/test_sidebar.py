@@ -200,6 +200,14 @@ def test_sincronizar_o_rail_nao_dispara_o_sinal(lateral):
     assert recebidos == []
 
 
+def test_configuracoes_fica_ancorado_no_fim_com_margem(lateral):
+    layout = lateral.layout()
+    margens = layout.contentsMargins()
+
+    assert layout.itemAt(layout.count() - 1).widget() is lateral.rail.settings_btn
+    assert margens.bottom() == 9
+
+
 def test_secao_desconhecida_e_erro_logado_nao_excecao(lateral, caplog):
     """Regra do projeto: nada de `except` silencioso, mas a lateral também não
     pode derrubar a janela por causa de uma chave errada."""
