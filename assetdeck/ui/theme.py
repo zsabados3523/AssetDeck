@@ -716,62 +716,25 @@ def apply_theme(app, variant: Variant = DEFAULT) -> None:
     )
 
 
-def _dialog_bottom_rounded_region(width: int, height: int, radius: int):
-    """Região retangular com somente os dois cantos inferiores arredondados."""
-    from PySide6.QtCore import QRect
-    from PySide6.QtGui import QRegion
-
-    if width <= 0 or height <= 0:
-        return QRegion()
-    radius = max(0, min(radius, width // 2, height // 2))
-    region = QRegion(QRect(0, 0, width, height))
-    if radius == 0:
-        return region
-
-    region -= QRegion(QRect(0, height - radius, radius, radius))
-    region -= QRegion(QRect(width - radius, height - radius, radius, radius))
-    region |= QRegion(
-        QRect(0, height - 2 * radius, 2 * radius, 2 * radius),
-        QRegion.RegionType.Ellipse,
-    )
-    region |= QRegion(
-        QRect(width - 2 * radius, height - 2 * radius, 2 * radius, 2 * radius),
-        QRegion.RegionType.Ellipse,
-    )
-    return region
-
-
 class _PopupCornerMask:
-    """Arredonda QMenu e somente a base de QDialog.
+    """Prepara diálogos e registra que os cantos são desenhados pelo tema.
 
-    `WA_TranslucentBackground` foi testado e DESCARTADO: com ele ativo, o
-    `background-color` do QSS simplesmente parou de ser pintado (sonda
-    mostrou o meio da janela como `#00000000`) — o mesmo risco de depender
-    do compositor que a Fatia 24 já tinha evitado pra janela principal, só
-    que agora se confirmou na prática. `setMask()` com um `QRegion`
-    arredondado não depende de compositor (usa a X-Shape extension) e,
-    testado, manteve o fundo do QSS pintado normalmente.
-
-    A faixa superior de QDialog permanece reta para se encontrar com a barra
-    de título nativa. Os dois cantos inferiores acompanham o raio do painel.
+    Máscaras de QWidget recortam em pixels inteiros e deixam os cantos
+    serrilhados. O QSS já desenha os raios de QMenu e a base de QDialog com
+    antialiasing; o filtro fica apenas com a padronização das QMessageBox.
     """
-
-    def __init__(self, radius_menu: int, radius_dialog: int) -> None:
-        self._radius_menu = radius_menu
-        self._radius_dialog = radius_dialog
 
     def __call__(self, obj, event) -> bool:
         from PySide6.QtCore import QEvent
         from PySide6.QtWidgets import QDialog, QDialogButtonBox, QMessageBox, QMenu
 
-        if event.type() not in (QEvent.Type.Show, QEvent.Type.Resize):
+        if event.type() != QEvent.Type.Show:
             return False
         if isinstance(obj, QMenu):
-            self._mask(obj, self._radius_menu, "menu")
+            obj.setProperty("_assetdeck_corner_renderer", "qss")
         elif isinstance(obj, QDialog):
-            if event.type() == QEvent.Type.Show:
-                self._prepare_dialog(obj, QDialogButtonBox, QMessageBox)
-            self._mask(obj, self._radius_dialog, "dialog-bottom")
+            self._prepare_dialog(obj, QDialogButtonBox, QMessageBox)
+            obj.setProperty("_assetdeck_corner_renderer", "qss")
         return False
 
     @staticmethod
@@ -813,44 +776,20 @@ class _PopupCornerMask:
                 if texto:
                     botao.setText(texto)
 
-    @staticmethod
-    def _mask(widget, radius: int, mode: str) -> None:
-        from PySide6.QtCore import QRectF
-        from PySide6.QtGui import QPainterPath, QRegion
-
-        if widget.width() <= 0 or widget.height() <= 0:
-            return
-        # Defesa extra: `setMask()` pode disparar outro Resize de volta pro
-        # widget (o gerenciador de janelas confirma a mudança de geometria).
-        # Sem este corte, isso reentraria no filtro e recalcularia a máscara
-        # de novo pro MESMO tamanho, sem necessidade.
-        chave = f"{mode}:{widget.width()}x{widget.height()}:{radius}"
-        if widget.property("_assetdeck_masked_shape") == chave:
-            return
-        widget.setProperty("_assetdeck_masked_shape", chave)
-        if mode == "dialog-bottom":
-            widget.setMask(_dialog_bottom_rounded_region(
-                widget.width(), widget.height(), radius
-            ))
-            return
-        path = QPainterPath()
-        path.addRoundedRect(QRectF(0, 0, widget.width(), widget.height()), radius, radius)
-        widget.setMask(QRegion(path.toFillPolygon().toPolygon()))
-
-
 _popup_filter_ref = None  # installEventFilter não segura referência sozinho
 
 
 def install_popup_corner_mask(app, variant: Variant = DEFAULT) -> None:
-    """Instala (ou REINSTALA, se o tema for reaplicado) o recorte de cantos
-    de QMenu e do rodapé de QDialog. Ver `_PopupCornerMask` para o porquê de
-    `setMask()` em vez de `WA_TranslucentBackground`.
+    """Instala (ou reinstala) a padronização dos popups e caixas de diálogo.
+
+    O nome é mantido para compatibilidade interna; os cantos agora são
+    antisserrilhados pelo QSS e não recebem mais recorte por máscara.
 
     Bug pego rodando a suíte inteira: `apply_theme()` é chamado várias vezes
     em sequência em teste (`test_todas_as_variantes_aplicam_sem_erro` chama
     24x seguidas). Sem remover o filtro ANTERIOR antes de instalar o novo,
     eles se acumulavam no `QApplication` — que dura a sessão inteira de
-    testes — e cada Show/Resize passava a ser reprocessado por dezenas de
+    testes — e cada evento Show passava a ser reprocessado por dezenas de
     filtros ao mesmo tempo, travando a suíte por minutos. Por isso remove o
     filtro velho primeiro: nunca mais de um instalado.
     """
@@ -862,12 +801,12 @@ def install_popup_corner_mask(app, variant: Variant = DEFAULT) -> None:
         _popup_filter_ref.deleteLater()
         _popup_filter_ref = None
 
-    raio_painel, raio_card, _raio_controle = RADII[variant.radius]
-    mask = _PopupCornerMask(radius_menu=raio_card, radius_dialog=raio_painel)
+    _ = variant  # os raios são consumidos diretamente pelo QSS do tema.
+    chrome = _PopupCornerMask()
 
     class _Filter(QObject):
         def eventFilter(self, obj, event) -> bool:  # noqa: N802
-            return mask(obj, event)
+            return chrome(obj, event)
 
     _popup_filter_ref = _Filter(app)
     app.installEventFilter(_popup_filter_ref)

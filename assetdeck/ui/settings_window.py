@@ -30,12 +30,11 @@ distribuiu entre Blender e Sistema.
 
 from __future__ import annotations
 
-from PySide6.QtCore import QEasingCurve, QPropertyAnimation, Qt
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDialog,
-    QGraphicsOpacityEffect,
     QHBoxLayout,
     QLabel,
     QListWidget,
@@ -107,8 +106,6 @@ class SettingsWindow(QDialog):
 
         self._lista = QListWidget()
         self._lista.setObjectName("cfgLista")
-        self._reduce_motion = bool(config.load_config().get("reduce_motion", False))
-        self._page_animation: QPropertyAnimation | None = None
         self._paginas = QStackedWidget()
 
         # (rótulo, ícone, construtor). O ícone é tingido à mão, então a
@@ -128,7 +125,6 @@ class SettingsWindow(QDialog):
             self._paginas.addWidget(self._rolavel(builder()))
         self._lista.setCurrentRow(0)
         self._lista.currentRowChanged.connect(self._paginas.setCurrentIndex)
-        self._paginas.currentChanged.connect(self._animate_page)
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -145,37 +141,6 @@ class SettingsWindow(QDialog):
         nav_layout.addWidget(self._lista, 1)
         layout.addWidget(self.nav_panel)
         layout.addWidget(self._paginas, stretch=1)
-        mw.reduce_motion_check.toggled.connect(self._set_reduce_motion)
-
-    def _set_reduce_motion(self, reduce: bool) -> None:
-        self._reduce_motion = bool(reduce)
-        if self._reduce_motion and self._page_animation is not None:
-            self._page_animation.stop()
-            page = self._paginas.currentWidget()
-            effect = page.graphicsEffect() if page is not None else None
-            if isinstance(effect, QGraphicsOpacityEffect):
-                effect.setOpacity(1.0)
-
-    def _animate_page(self, index: int) -> None:
-        if self._reduce_motion or index < 0:
-            return
-        page = self._paginas.widget(index)
-        if page is None:
-            return
-        if self._page_animation is not None:
-            self._page_animation.stop()
-        effect = page.graphicsEffect()
-        if not isinstance(effect, QGraphicsOpacityEffect):
-            effect = QGraphicsOpacityEffect(page)
-            page.setGraphicsEffect(effect)
-        animation = QPropertyAnimation(effect, b"opacity", self)
-        animation.setDuration(130)
-        animation.setStartValue(0.70)
-        animation.setEndValue(1.0)
-        animation.setEasingCurve(QEasingCurve.Type.OutCubic)
-        animation.finished.connect(lambda e=effect: e.setOpacity(1.0))
-        self._page_animation = animation
-        animation.start()
 
     def refresh_theme(self) -> None:
         """Reaplica os ícones da lateral na cor do modo atual (Fatia 80) —

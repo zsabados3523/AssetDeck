@@ -44,6 +44,7 @@ class TagTree(QTreeWidget):
         self._primeira_carga = True
         self.setHeaderHidden(True)
         self.setIconSize(QSize(16, 16))
+        self.setUniformRowHeights(True)
         self.setAcceptDrops(True)
         self.currentItemChanged.connect(self._on_current)
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)

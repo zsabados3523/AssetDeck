@@ -241,6 +241,32 @@ def test_secoes_recolhidas_ficam_compactas_e_sem_folga_no_splitter(lateral, qapp
     lateral.close()
 
 
+def test_secoes_recolhidas_ficam_no_topo_da_lateral(lateral, qapp):
+    lateral.resize(260, 800)
+    lateral.show()
+    qapp.processEvents()
+
+    for secao in lateral.sections.values():
+        secao.set_collapsed(True)
+    qapp.processEvents()
+    qapp.processEvents()
+
+    primeira = lateral.section_widget("pastas")
+    segunda = lateral.section_widget("tags")
+    altura_esperada = (
+        primeira.header.sizeHint().height()
+        + segunda.header.sizeHint().height()
+        + lateral.splitter.handleWidth()
+    )
+    assert abs(lateral.splitter.maximumHeight() - altura_esperada) <= 2
+    assert primeira.geometry().top() < lateral.height() // 2
+    assert segunda.geometry().top() < lateral.height() // 2
+    assert lateral.heading.geometry().top() < lateral.height() // 4
+    assert lateral.quick_actions.geometry().top() < lateral.height() // 3
+    assert lateral.rail.settings_btn.geometry().bottom() >= lateral.height() - 8
+    lateral.close()
+
+
 def test_secao_desconhecida_e_erro_logado_nao_excecao(lateral, caplog):
     """Regra do projeto: nada de `except` silencioso, mas a lateral também não
     pode derrubar a janela por causa de uma chave errada."""
