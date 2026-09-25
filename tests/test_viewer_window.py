@@ -65,7 +65,7 @@ def _pintar_cantos(qapp, tam=120):
     Magenta como fundo: qualquer pixel que continuar magenta é pixel que o
     widget deixou passar (o miolo, onde o OpenGL aparece).
     """
-    from PySide6.QtWidgets import QWidget
+    from PySide6.QtWidgets import QLabel, QWidget
 
     hospedeiro = QWidget()
     hospedeiro.resize(tam, tam)
@@ -100,3 +100,46 @@ def test_o_que_e_tapado_fica_restrito_ao_raio(qapp):
     o raio de crescer sem querer e comer a imagem."""
     img = _pintar_cantos(qapp)
     assert img.pixelColor(RAIO_PALCO + 6, 2) == QColor("magenta")
+
+
+def test_modelo_apresenta_inspetor_com_materiais_e_contagens(qapp, monkeypatch, tmp_path):
+    """A casca pode ser conferida sem criar contexto OpenGL no pytest."""
+    from PySide6.QtWidgets import QLabel, QWidget
+
+    from assetdeck.model3d.obj_parser import MaterialRange, Mesh
+    from assetdeck.ui import hdri_viewer, model_viewer
+    from assetdeck.ui.viewer_window import VisualizadorWindow
+
+    class OpenGLStub(QWidget):
+        def set_mesh(self, mesh, buffer=None, images=None):
+            self.mesh = mesh
+
+        def enquadrar(self):
+            pass
+
+        def set_image(self, image):
+            self.image = image
+
+        def cleanup(self):
+            pass
+
+    monkeypatch.setattr(hdri_viewer, "HdriGLView", OpenGLStub)
+    monkeypatch.setattr(model_viewer, "ModelGLView", OpenGLStub)
+    window = VisualizadorWindow()
+    textura = tmp_path / "Oak_BaseColor.png"
+    mesh = Mesh(
+        positions=[(0, 0, 0), (1, 0, 0), (0, 1, 0)],
+        normals=[],
+        materials=[MaterialRange(0, 3, texture=textura, name="Carvalho")],
+    )
+    prepared = model_viewer.PreparedModel(mesh=mesh, buffer=object(), images={})
+
+    window._modelo_carregado(prepared)
+
+    assert window.findChild(QWidget, "viewerInspector") is not None
+    assert window.stat_values["triangles"].text() == "1"
+    assert window.stat_values["materials"].text() == "1"
+    assert window.stat_values["textures"].text() == "1"
+    assert window.findChild(QWidget, "viewerMaterialRow") is not None
+    assert "Carvalho" in [label.text() for label in window.findChildren(QLabel)]
+    window.close()

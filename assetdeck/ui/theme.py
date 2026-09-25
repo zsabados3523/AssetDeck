@@ -229,9 +229,14 @@ FONTS = {
 }
 DISPLAY_FONT = "Manrope"
 
-# A fonte da prévia aprovada acompanha o app: o resultado não depende de uma
-# Manrope instalada no sistema nem de acesso à rede em runtime.
-MANROPE_FONT_FILE = Path(__file__).parent / "fonts" / "Manrope[wght].ttf"
+# A fonte da prévia aprovada acompanha o app. Arquivos estáticos separados
+# fazem o Qt reconhecer os pesos que a interface usa, sem síntese de negrito.
+MANROPE_FONT_FILES = {
+    "Regular": Path(__file__).parent / "fonts" / "Manrope-Regular.ttf",
+    "Medium": Path(__file__).parent / "fonts" / "Manrope-Medium.ttf",
+    "SemiBold": Path(__file__).parent / "fonts" / "Manrope-SemiBold.ttf",
+    "Bold": Path(__file__).parent / "fonts" / "Manrope-Bold.ttf",
+}
 
 BACKGROUNDS = ("liso", "grao")
 MODES = ("claro", "escuro")
@@ -655,22 +660,34 @@ def apply_theme(app, variant: Variant = DEFAULT) -> None:
         app.setStyle(estilo)
 
     familia = FONTS[variant.font]
-    if variant.font == "manrope" and app.property("assetdeck_manrope_font_id") is None:
-        if not MANROPE_FONT_FILE.is_file():
-            log.error("Fonte Manrope empacotada não encontrada em %s", MANROPE_FONT_FILE)
-        else:
-            font_id = QFontDatabase.addApplicationFont(str(MANROPE_FONT_FILE))
+    if variant.font == "manrope" and not app.property("assetdeck_manrope_font_registered"):
+        font_ids = []
+        for style, font_file in MANROPE_FONT_FILES.items():
+            if not font_file.is_file():
+                log.error("Fonte Manrope %s não encontrada em %s", style, font_file)
+                continue
+            font_id = QFontDatabase.addApplicationFont(str(font_file))
             if font_id < 0:
-                log.error("Qt não conseguiu registrar a fonte Manrope em %s", MANROPE_FONT_FILE)
-            else:
-                familias_registradas = QFontDatabase.applicationFontFamilies(font_id)
-                if familia not in familias_registradas:
-                    log.error(
-                        "A fonte em %s registrou as famílias %s; esperava %r.",
-                        MANROPE_FONT_FILE, familias_registradas, familia,
-                    )
-                else:
-                    app.setProperty("assetdeck_manrope_font_id", font_id)
+                log.error("Qt não conseguiu registrar a fonte Manrope %s em %s", style, font_file)
+                continue
+            familias_registradas = QFontDatabase.applicationFontFamilies(font_id)
+            if familia not in familias_registradas:
+                log.error(
+                    "A fonte em %s registrou as famílias %s; esperava %r.",
+                    font_file, familias_registradas, familia,
+                )
+                continue
+            font_ids.append(font_id)
+
+        app.setProperty("assetdeck_manrope_font_ids", font_ids)
+        app.setProperty("assetdeck_manrope_font_registered", True)
+        estilos_disponiveis = set(QFontDatabase.styles(familia))
+        estilos_esperados = set(MANROPE_FONT_FILES)
+        if estilos_faltantes := estilos_esperados - estilos_disponiveis:
+            log.error(
+                "Estilos Manrope ausentes após registro: %s (disponíveis: %s)",
+                sorted(estilos_faltantes), sorted(estilos_disponiveis),
+            )
     if familia:
         if familia in QFontDatabase.families():
             fonte = QFont(familia)

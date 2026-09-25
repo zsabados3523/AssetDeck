@@ -69,6 +69,31 @@ def test_cada_categoria_tem_uma_pagina(janela):
     assert sw._paginas.count() == sw._lista.count()
 
 
+def test_navegacao_tem_coluna_propria_e_titulo(janela):
+    sw = janela.settings_window
+
+    assert sw.nav_panel.objectName() == "settingsNavPanel"
+    assert sw._lista.parentWidget() is sw.nav_panel
+    assert sw.nav_panel.width() == 202
+
+
+def test_transicao_de_pagina_respeita_reduzir_movimento(janela):
+    sw = janela.settings_window
+    sw._lista.setCurrentRow(1)
+
+    assert sw._paginas.currentIndex() == 1
+    assert sw._page_animation is not None
+    assert sw._page_animation.duration() == 130
+    sw._page_animation.stop()
+
+    janela.reduce_motion_check.setChecked(True)
+    animacao_atual = sw._page_animation
+    sw._lista.setCurrentRow(2)
+
+    assert sw._paginas.currentIndex() == 2
+    assert sw._page_animation is animacao_atual
+
+
 def test_reduzir_movimento_salva_e_aplica_na_grade(janela):
     check = janela.reduce_motion_check
     delegate = janela.grid.itemDelegate()

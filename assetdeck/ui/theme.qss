@@ -175,13 +175,23 @@ QPushButton#danger:pressed {
     padding-bottom: 7px;
 }
 
-/* Lateral das categorias: mesma pastilha de item ativo da lateral
- * principal (Fatia 76), pra as duas listas do app lerem igual. */
+QWidget#settingsNavPanel {
+    background: $bg;
+    border-right: 1px solid $hairline;
+}
+
+QLabel#settingsNavTitle {
+    color: $text_muted;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1px;
+}
+
+/* Lateral das categorias: usa a mesma pastilha ativa da biblioteca. */
 QListWidget#cfgLista {
     background: transparent;
     border: none;
-    border-right: 1px solid $hairline;
-    padding: 8px 6px;
+    padding: 0;
 }
 
 /* Pastilhas do topo do painel (Fatia 79): formato, tipo e tamanho. Eram três
@@ -474,6 +484,73 @@ QLabel#inspectorCategory {
     font-size: $font_size_small;
 }
 
+/* Preview ampliado: palco e inspetor seguem a mesma divisão da biblioteca. */
+QWidget#previewStage {
+    background: $surface_raised;
+    border: 1px solid $hairline;
+    border-radius: $radius_panel;
+}
+
+QWidget#previewInspector {
+    background: transparent;
+}
+
+QFrame#previewDivider {
+    background: $hairline;
+    border: none;
+}
+
+QLabel#previewSubtitle {
+    color: $text_muted;
+    font-size: $font_size_small;
+}
+
+QLabel#previewSectionTitle {
+    color: $text_muted;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    padding-bottom: 7px;
+    border-bottom: 1px solid $hairline;
+}
+
+QLabel#previewMetaLabel {
+    color: $text_muted;
+    font-size: $font_size_small;
+}
+
+QLabel#previewMetaValue, QLabel#previewMapCount {
+    color: $text;
+    font-size: $font_size_small;
+    font-weight: 600;
+}
+
+QPushButton#previewMapOption {
+    min-height: 30px;
+    padding: 3px 9px;
+    text-align: left;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: $radius_control;
+}
+
+QPushButton#previewMapOption:hover {
+    background: $surface_raised;
+    border-color: $border;
+}
+
+QPushButton#previewMapOption:pressed {
+    background: $accent_soft;
+    border-color: $border;
+}
+
+QPushButton#previewMapOption:checked {
+    background: $accent_soft;
+    border-color: transparent;
+    color: $title;
+    font-weight: 600;
+}
+
 QLabel#themeTypeSample {
     background-color: $type_tint;
     border-radius: $radius_card;
@@ -495,6 +572,52 @@ QLabel#themeTypeChip {
 QLabel#visorDica {
     color: $text_muted;
     font-size: $font_size_small;
+}
+
+QWidget#viewerInspector {
+    background: transparent;
+}
+
+QFrame#viewerDivider {
+    background: $hairline;
+    border: none;
+}
+
+QLabel#viewerInfoHeading {
+    color: $text_muted;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    padding: 0 0 7px 0;
+    border-bottom: 1px solid $hairline;
+}
+
+QLabel#viewerInfoLabel {
+    color: $text_muted;
+    font-size: $font_size_small;
+}
+
+QLabel#viewerInfoValue {
+    color: $text;
+    font-size: $font_size_small;
+    font-weight: 600;
+}
+
+QWidget#viewerMaterialRow {
+    background: transparent;
+    border-bottom: 1px solid $hairline;
+    border-radius: $radius_control;
+}
+
+QLabel#viewerMaterialName {
+    color: $text;
+    font-size: $font_size_small;
+    font-weight: 600;
+}
+
+QLabel#viewerMaterialSource {
+    color: $text_muted;
+    font-size: 10px;
 }
 
 QLabel#muted, QLabel#previewInfo {

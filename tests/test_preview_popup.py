@@ -6,7 +6,7 @@ import pytest
 from PIL import Image
 from PySide6.QtCore import QEvent, QPointF, Qt
 from PySide6.QtGui import QKeyEvent, QMouseEvent, QPixmap
-from PySide6.QtWidgets import QWidget
+from PySide6.QtWidgets import QScrollArea, QSizePolicy, QWidget
 
 from assetdeck.ui.preview_popup import PreviewPopup
 
@@ -29,6 +29,19 @@ def popup(qapp):
 def test_cartao_tem_tamanho_padronizado(popup):
     assert popup._card.width() == popup._win_w == 1100
     assert popup._card.height() == popup._win_h == 800
+
+
+def test_popup_separa_palco_e_inspetor_com_lista_rolavel(popup):
+    palco = popup.findChild(QWidget, "previewStage")
+    inspetor = popup.findChild(QWidget, "previewInspector")
+
+    assert palco is not None
+    assert inspetor is not None
+    assert inspetor.sizePolicy().verticalPolicy() == QSizePolicy.Policy.Expanding
+    assert isinstance(popup.maps_scroll, QScrollArea)
+    assert popup.maps_scroll.widget() is popup.maps_bar
+    assert popup.maps_scroll.horizontalScrollBarPolicy() \
+        == Qt.ScrollBarPolicy.ScrollBarAlwaysOff
 
 
 def test_imagem_gigante_e_reduzida_para_caber(popup):
@@ -129,6 +142,7 @@ def test_material_renderizado_aparece_antes_dos_mapas(popup, tmp_path):
     buttons = popup._maps_group.buttons()
     assert [btn.text() for btn in buttons] == ["Material", "Base Color", "Normal"]
     assert buttons[0].isChecked()
+    assert popup.maps_scroll.isVisible()
     assert popup._loading_for == rendered
     buttons[2].click()
     assert popup._loading_for == root / "Normal.png"
