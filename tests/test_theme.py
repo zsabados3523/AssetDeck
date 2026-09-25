@@ -768,7 +768,7 @@ def test_o_raio_da_pastilha_cabe_na_altura_do_botao(qapp, fonte, tmp_path):
     apply_migrations(conn)
 
     botoes = [
-        ("CategoryButton", CategoryButton(CATEGORIES[0]), "radius_pill"),
+        ("CategoryButton", CategoryButton(CATEGORIES[0]), "radius_control"),
         ("FilterButton", FilterButton("palette", PALETA_CORES, swatch=True,
                                        caption="Cor"), "radius_control"),
         # O seletor de biblioteca entrou aqui DEPOIS de escapar: ele usa o

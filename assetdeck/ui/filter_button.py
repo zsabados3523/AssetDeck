@@ -53,7 +53,7 @@ class FilterButton(QToolButton):
             if caption else Qt.ToolButtonStyle.ToolButtonIconOnly
         )
         self.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
-        self.setMinimumHeight(34)
+        self.setFixedHeight(34)
         self.setAccessibleName(caption or options[0][0])
         self.setCheckable(True)  # reaproveita QToolButton:checked do tema —
         # um filtro ativo já se destaca sozinho, sem QSS novo.
