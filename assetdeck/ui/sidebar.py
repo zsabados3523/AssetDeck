@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import logging
 
-from PySide6.QtCore import QSize, Qt, QTimer, Signal
+from PySide6.QtCore import QSize, Qt, QTimer, Signal, Slot
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -143,6 +143,7 @@ class SidebarSection(QWidget):
         self.chave = chave
         self.view = view
         self._recolhida = False
+        self._last_expanded_height = 0
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -201,6 +202,10 @@ class SidebarSection(QWidget):
     def set_collapsed(self, recolhida: bool) -> None:
         if recolhida == self._recolhida:
             return
+        if recolhida:
+            self._last_expanded_height = max(
+                self.height(), self.view.sizeHint().height()
+            )
         self._recolhida = recolhida
         self.view.setVisible(not recolhida)
         self.header.set_collapsed(recolhida)
@@ -310,7 +315,9 @@ class SidebarRail(QWidget):
 class Sidebar(QWidget):
     """Navegação compacta com as seções existentes da biblioteca."""
 
-    def __init__(self, secoes: list[tuple[str, str, str, QWidget]], parent=None) -> None:
+    def __init__(self, secoes: list[tuple[str, str, str, QWidget]], parent=None,
+                 *, library_name: str = "Biblioteca",
+                 library_path: str | None = None) -> None:
         """`secoes`: (chave, título, nome do ícone, view)."""
         super().__init__(parent)
 
@@ -327,13 +334,16 @@ class Sidebar(QWidget):
         for chave, titulo, _icone, view in secoes:
             secao = SidebarSection(chave, titulo, view)
             secao.collapsed_changed.connect(self.rail.refresh_theme)
+            secao.collapsed_changed.connect(self.schedule_rebalance_sections)
             self.splitter.addWidget(secao)
             self.sections[chave] = secao
 
         self.setObjectName("sidebarPanel")
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        self.heading = QLabel("Biblioteca")
+        self.heading = QLabel(library_name)
         self.heading.setObjectName("sidebarHeading")
+        if library_path:
+            self.heading.setToolTip(library_path)
         self.quick_actions = QWidget()
         self._quick_layout = QVBoxLayout(self.quick_actions)
         self._quick_layout.setContentsMargins(0, 0, 0, 0)
@@ -353,7 +363,7 @@ class Sidebar(QWidget):
         )
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(18, 20, 14, 9)
+        layout.setContentsMargins(18, 20, 14, 6)
         layout.setSpacing(10)
         layout.addWidget(self.heading)
         layout.addWidget(self.quick_actions)
@@ -402,10 +412,74 @@ class Sidebar(QWidget):
         if secao is None:
             log.error("Seção '%s' não existe na lateral.", chave)
             return
+        if secao.isVisible() and not visivel:
+            indice = self.splitter.indexOf(secao)
+            tamanhos = self.splitter.sizes()
+            if 0 <= indice < len(tamanhos):
+                secao._last_expanded_height = max(
+                    tamanhos[indice], secao.header.sizeHint().height()
+                )
         secao.setVisible(visivel)
         if sincronizar_rail:
             self.rail.set_checked(chave, visivel)
         self.rail.refresh_theme()
+        self.schedule_rebalance_sections()
+
+    @Slot()
+    def schedule_rebalance_sections(self) -> None:
+        """Reaproveita o espaço dos painéis recolhidos ou ocultos.
+
+        O QSplitter mantém tamanhos antigos de filhos invisíveis. Reaplicá-los
+        após a mudança fazia as seções abertas ficarem pequenas, deixando um
+        vazio grande no meio da lateral.
+        """
+        QTimer.singleShot(0, self.rebalance_sections)
+
+    @Slot()
+    def rebalance_sections(self) -> None:
+        if self.splitter.height() <= 0:
+            return
+        tamanhos_atuais = self.splitter.sizes()
+        visiveis = [
+            (indice, secao)
+            for indice, secao in enumerate(self.sections.values())
+            if not secao.isHidden()
+        ]
+        if not visiveis:
+            return
+
+        espaco = max(
+            0,
+            self.splitter.height()
+            - max(0, len(visiveis) - 1) * self.splitter.handleWidth(),
+        )
+        tamanhos = [0] * len(self.sections)
+        recolhidas: list[tuple[int, SidebarSection]] = []
+        abertas: list[tuple[int, SidebarSection]] = []
+        for indice, secao in visiveis:
+            if secao.is_collapsed():
+                recolhidas.append((indice, secao))
+                tamanhos[indice] = secao.header.sizeHint().height()
+            else:
+                abertas.append((indice, secao))
+
+        restante = max(0, espaco - sum(tamanhos[i] for i, _ in recolhidas))
+        if abertas:
+            pesos = []
+            for indice, secao in abertas:
+                salvo = secao._last_expanded_height
+                atual = tamanhos_atuais[indice] if indice < len(tamanhos_atuais) else 0
+                pesos.append(max(salvo, atual, 1))
+            peso_total = sum(pesos)
+            alocados = 0
+            for posicao, ((indice, _secao), peso) in enumerate(zip(abertas, pesos)):
+                if posicao == len(abertas) - 1:
+                    tamanho = restante - alocados
+                else:
+                    tamanho = round(restante * peso / peso_total)
+                    alocados += tamanho
+                tamanhos[indice] = max(1, tamanho)
+        self.splitter.setSizes(tamanhos)
 
     def section_widget(self, chave: str) -> SidebarSection | None:
         return self.sections.get(chave)
@@ -414,3 +488,7 @@ class Sidebar(QWidget):
         self.rail.refresh_theme()
         for secao in self.sections.values():
             secao.refresh_theme()
+
+    def showEvent(self, event) -> None:  # noqa: N802
+        super().showEvent(event)
+        self.schedule_rebalance_sections()

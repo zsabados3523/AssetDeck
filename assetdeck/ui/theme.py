@@ -762,15 +762,56 @@ class _PopupCornerMask:
 
     def __call__(self, obj, event) -> bool:
         from PySide6.QtCore import QEvent
-        from PySide6.QtWidgets import QDialog, QMenu
+        from PySide6.QtWidgets import QDialog, QDialogButtonBox, QMessageBox, QMenu
 
         if event.type() not in (QEvent.Type.Show, QEvent.Type.Resize):
             return False
         if isinstance(obj, QMenu):
             self._mask(obj, self._radius_menu, "menu")
         elif isinstance(obj, QDialog):
+            if event.type() == QEvent.Type.Show:
+                self._prepare_dialog(obj, QDialogButtonBox, QMessageBox)
             self._mask(obj, self._radius_dialog, "dialog-bottom")
         return False
+
+    @staticmethod
+    def _prepare_dialog(dialog, button_box_type, message_box_type) -> None:
+        """Aplica a faixa de ações comum e rótulos em português."""
+        from PySide6.QtWidgets import QDialogButtonBox, QMessageBox
+
+        if isinstance(dialog, QMessageBox) and not dialog.objectName():
+            dialog.setObjectName("assetdeckMessageBox")
+
+        textos = {
+            QDialogButtonBox.StandardButton.Ok: "OK",
+            QDialogButtonBox.StandardButton.Cancel: "Cancelar",
+            QDialogButtonBox.StandardButton.Close: "Fechar",
+            QDialogButtonBox.StandardButton.Yes: "Sim",
+            QDialogButtonBox.StandardButton.No: "Não",
+            QDialogButtonBox.StandardButton.Apply: "Aplicar",
+            QDialogButtonBox.StandardButton.Save: "Salvar",
+            QDialogButtonBox.StandardButton.Discard: "Descartar",
+            QDialogButtonBox.StandardButton.Abort: "Interromper",
+            QDialogButtonBox.StandardButton.Retry: "Tentar novamente",
+            QDialogButtonBox.StandardButton.Ignore: "Ignorar",
+            QDialogButtonBox.StandardButton.Open: "Abrir",
+            QDialogButtonBox.StandardButton.Reset: "Redefinir",
+            QDialogButtonBox.StandardButton.RestoreDefaults: "Restaurar padrão",
+        }
+
+        for caixa in dialog.findChildren(button_box_type):
+            if not caixa.objectName():
+                caixa.setObjectName("dialogActions")
+            for botao in caixa.buttons():
+                texto = textos.get(caixa.standardButton(botao))
+                if texto:
+                    botao.setText(texto)
+
+        if isinstance(dialog, message_box_type):
+            for botao in dialog.buttons():
+                texto = textos.get(dialog.standardButton(botao))
+                if texto:
+                    botao.setText(texto)
 
     @staticmethod
     def _mask(widget, radius: int, mode: str) -> None:

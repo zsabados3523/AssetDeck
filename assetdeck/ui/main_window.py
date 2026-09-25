@@ -110,6 +110,9 @@ class MainWindow(QMainWindow):
         super().__init__()
         self._conn = conn  # conexão da thread da UI: SÓ leitura
         self._library_root = Path(library_root)
+        self._library_display_name = (
+            self._library_root.name or str(self._library_root)
+        )
         # Biblioteca ATIVA (Fatia 69) — resolvida uma vez, usada pra
         # restringir grade/árvore de pastas/contagens a ela. Sem isso, um
         # banco com mais de uma biblioteca indexada (ex.: sobra de um
@@ -148,7 +151,7 @@ class MainWindow(QMainWindow):
             "Buscar por nome — ex.: concreto, wood 4k, madeira E rústico, pedra OU metal"
         )
         self.search_box.setMinimumWidth(170)
-        self.search_box.setMaximumWidth(440)
+        self.search_box.setMaximumWidth(320)
         self.search_box.setClearButtonEnabled(True)
         self._search_icon_action = self.search_box.addAction(
             icons.icon("search", theme.current_colors()["text_muted"]),
@@ -268,7 +271,8 @@ class MainWindow(QMainWindow):
             ("tags", "Tags", "nav-tags", self.tags),
             ("colecoes", "Coleções", "nav-colecoes", self.collections),
             ("smart", "Smart Collections", "nav-smart", self.smart_collections),
-        ])
+        ], library_name=self._library_display_name,
+           library_path=str(self._library_root))
         left = self.sidebar
         self._left_default_sizes = [300, 150, 150, 140]
         self.sidebar.splitter.setSizes(self._left_default_sizes)
@@ -333,8 +337,9 @@ class MainWindow(QMainWindow):
         self.list_scope.setObjectName("listScope")
         self.list_count = QLabel()
         self.list_count.setObjectName("listCount")
-        self.page_title = QLabel("Biblioteca")
+        self.page_title = QLabel(self._library_display_name)
         self.page_title.setObjectName("pageTitle")
+        self.page_title.setToolTip(str(self._library_root))
 
         self._update_breadcrumb("")
 
@@ -393,6 +398,7 @@ class MainWindow(QMainWindow):
         page_row.addWidget(self.page_title)
         page_row.addWidget(self.list_count)
         page_row.addStretch(1)
+        page_row.addWidget(self.search_box, stretch=1)
         page_row.addWidget(self.progress)
         page_row.addWidget(self.rescan_btn)
         page_row_widget = QWidget()
@@ -406,7 +412,6 @@ class MainWindow(QMainWindow):
         path_row.addWidget(self.fwd_btn)
         path_row.addWidget(self.up_btn)
         path_row.addWidget(self.breadcrumb, stretch=1)
-        path_row.addWidget(self.search_box, stretch=2)
         path_row_widget = QWidget()
         path_row_widget.setObjectName("assetToolbar")
         path_row_widget.setLayout(path_row)
@@ -635,10 +640,10 @@ class MainWindow(QMainWindow):
     def _update_breadcrumb(self, dir_prefix: str) -> None:
         """"" -> biblioteca inteira; "A/B" -> "Biblioteca › A › B"."""
         if not dir_prefix:
-            self._breadcrumb_full = "Biblioteca"
+            self._breadcrumb_full = self._library_display_name
         else:
             trilha = " › ".join(dir_prefix.split("/"))
-            self._breadcrumb_full = f"Biblioteca › {trilha}"
+            self._breadcrumb_full = f"{self._library_display_name} › {trilha}"
         self._elide_breadcrumb()
         # Escopo da faixa 3 (Fatia 46). O caminho na faixa 1 responde "onde
         # estou"; este responde "o que esta lista contém", que é diferente
@@ -2483,6 +2488,7 @@ class MainWindow(QMainWindow):
         tam_esq = estado.get("left_splitter_sizes")
         if tam_esq:
             self._left_splitter.setSizes(tam_esq)
+        self.sidebar.schedule_rebalance_sections()
         tam_main = estado.get("main_splitter_sizes")
         if tam_main:
             self._main_splitter.setSizes(tam_main)

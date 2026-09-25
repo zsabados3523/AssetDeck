@@ -205,7 +205,40 @@ def test_configuracoes_fica_ancorado_no_fim_com_margem(lateral):
     margens = layout.contentsMargins()
 
     assert layout.itemAt(layout.count() - 1).widget() is lateral.rail.settings_btn
-    assert margens.bottom() == 9
+    assert margens.bottom() == 6
+
+
+def test_painel_aberto_usa_espaco_de_secao_oculta(lateral, qapp):
+    lateral.resize(260, 500)
+    lateral.show()
+    qapp.processEvents()
+
+    lateral.set_section_visible("tags", False)
+    qapp.processEvents()
+    qapp.processEvents()
+
+    tamanhos = lateral.splitter.sizes()
+    assert tamanhos[1] == 0
+    assert tamanhos[0] >= lateral.splitter.height() - lateral.splitter.handleWidth() - 2
+    lateral.close()
+
+
+def test_secoes_recolhidas_ficam_compactas_e_sem_folga_no_splitter(lateral, qapp):
+    lateral.resize(260, 500)
+    lateral.show()
+    qapp.processEvents()
+
+    tags = lateral.section_widget("tags")
+    tags.set_collapsed(True)
+    qapp.processEvents()
+    qapp.processEvents()
+
+    tamanhos = lateral.splitter.sizes()
+    assert abs(tamanhos[1] - tags.header.sizeHint().height()) <= 2
+    assert abs(
+        sum(tamanhos) + lateral.splitter.handleWidth() - lateral.splitter.height()
+    ) <= 2
+    lateral.close()
 
 
 def test_secao_desconhecida_e_erro_logado_nao_excecao(lateral, caplog):

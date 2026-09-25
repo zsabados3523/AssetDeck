@@ -41,16 +41,14 @@ class CategoryButton(QToolButton):
 
     def __init__(self, categoria: Category, parent=None) -> None:
         super().__init__(parent)
-        # Pastilha totalmente arredondada (Fatia 76, pedido do Rafael: "os
-        # botões de filtragem por tipo deveriam ser totalmente arredondados").
-        # O formato vem do QSS via este objectName — nada de setStyleSheet.
-        self.setObjectName("pill")
+        # Compartilha altura, raio e estados com os filtros finos desta faixa.
+        self.setObjectName("toolbarCategory")
         self.categoria = categoria
         self._ext_checks: dict[str, QCheckBox] = {}
         self._total = 0
 
         self.setIcon(icons.icon(categoria.icon, theme.current_colors()["text_muted"]))
-        self.setIconSize(QSize(18, 18))
+        self.setIconSize(QSize(16, 16))
         # Variante V3 (Fatia 46), escolhida pelo Rafael entre três esboços na
         # tela: a CONTAGEM aparece sempre ao lado do ícone, e o NOME só na
         # categoria ativa. A Fatia 31 tinha ido para o extremo oposto (só
@@ -60,6 +58,7 @@ class CategoryButton(QToolButton):
         # repouso, explícita sobre o que está filtrando.
         self.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         self.setPopupMode(QToolButton.ToolButtonPopupMode.MenuButtonPopup)
+        self.setFixedHeight(34)
         self.setCheckable(True)
         self.toggled.connect(self._on_toggled)
 
@@ -169,9 +168,9 @@ class CategoryButton(QToolButton):
         self.setToolTip(f"{self.categoria.label} — {self._total} assets ({detalhe})")
 
         if self.isChecked():
-            self.setText(f"  {self.categoria.label}  {self._total}")
+            self.setText(f"{self.categoria.label}  {self._total}")
         else:
-            self.setText(f"  {self._total}")
+            self.setText(str(self._total))
         self._sync_icon()
 
 

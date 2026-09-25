@@ -33,6 +33,19 @@ QDialog {
     background-color: $bg;
 }
 
+QMessageBox#assetdeckMessageBox {
+    background-color: $bg;
+}
+
+QMessageBox#assetdeckMessageBox QPushButton {
+    min-width: 72px;
+}
+
+QMessageBox#assetdeckMessageBox QDialogButtonBox {
+    border-top: 1px solid $hairline;
+    padding-top: 8px;
+}
+
 QLabel#dialogHeading {
     color: $title;
     font-family: $font_family_display;
@@ -304,7 +317,7 @@ QWidget#assetToolbar {
     padding: 12px 0;
 }
 
-#assetToolbar QLineEdit {
+#pageHeader QLineEdit {
     min-height: 34px;
     padding: 0 10px;
     border-radius: $radius_control;
@@ -789,32 +802,30 @@ QToolButton#pill:checked, QToolButton#pillMini:checked {
     font-weight: 600;
 }
 
-/* Filtros finos na faixa das categorias: rótulo e ícone deixam a função
- * visível sem depender de tooltip; o raio segue o restante dos controles. */
-QToolButton#toolbarFilter {
-    min-height: 32px;
-    padding: 5px 9px;
+/* Categorias e filtros finos compartilham geometria, altura e estados. */
+QToolButton#toolbarFilter, QToolButton#toolbarCategory {
+    padding: 2px 10px;
     border: 1px solid $border;
     border-radius: $radius_control;
     background-color: $surface;
     color: $text_muted;
 }
 
-QToolButton#toolbarFilter:hover {
+QToolButton#toolbarFilter:hover, QToolButton#toolbarCategory:hover {
     background-color: $surface_raised;
     border: 1px solid $border_strong;
     border-radius: $radius_control;
 }
 
-QToolButton#toolbarFilter:pressed {
+QToolButton#toolbarFilter:pressed, QToolButton#toolbarCategory:pressed {
     background-color: $surface_sunken;
     border: 1px solid $border_strong;
     border-radius: $radius_control;
-    padding-top: 6px;
-    padding-bottom: 4px;
+    padding-top: 3px;
+    padding-bottom: 1px;
 }
 
-QToolButton#toolbarFilter:checked {
+QToolButton#toolbarFilter:checked, QToolButton#toolbarCategory:checked {
     background-color: $accent_soft;
     border: 1px solid transparent;
     border-radius: $radius_control;
@@ -822,8 +833,22 @@ QToolButton#toolbarFilter:checked {
     font-weight: 600;
 }
 
-QToolButton#toolbarFilter:focus {
+QToolButton#toolbarFilter:focus, QToolButton#toolbarCategory:focus {
     border-color: $focus;
+}
+
+QToolButton#toolbarFilter::menu-indicator {
+    subcontrol-origin: padding;
+    subcontrol-position: center right;
+    right: 5px;
+    width: 9px;
+}
+
+QToolButton#toolbarCategory::menu-button {
+    border: none;
+    border-top-right-radius: $radius_control;
+    border-bottom-right-radius: $radius_control;
+    width: 14px;
 }
 
 

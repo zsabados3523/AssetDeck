@@ -61,13 +61,20 @@ def test_breadcrumb_acompanha_a_pasta_selecionada(janela):
     (testado à parte, na FolderTree). Chamar direto evita depender de uma
     subpasta existir na biblioteca mínima do fixture `janela`.
     """
-    assert janela._breadcrumb_full == "Biblioteca"
+    assert janela._breadcrumb_full == janela._library_root.name == "lib"
 
     janela._on_dir_selected("Modelos/Cadeiras")
-    assert janela._breadcrumb_full == "Biblioteca › Modelos › Cadeiras"
+    assert janela._breadcrumb_full == "lib › Modelos › Cadeiras"
 
     janela._on_dir_selected("")
-    assert janela._breadcrumb_full == "Biblioteca"
+    assert janela._breadcrumb_full == "lib"
+
+
+def test_nome_da_biblioteca_usa_a_pasta_raiz(janela):
+    assert janela.page_title.text() == "lib"
+    assert janela.sidebar.heading.text() == "lib"
+    assert janela.page_title.toolTip() == str(janela._library_root)
+    assert janela.sidebar.heading.toolTip() == str(janela._library_root)
 
 
 def test_footer_mostra_contagem_e_atualiza_com_selecao(janela):
@@ -513,11 +520,23 @@ def test_as_quatro_faixas_da_biblioteca_ficam_separadas_e_alinhadas(janela, qapp
 
         assert y_titulo < y_caminho < y_categorias < y_grade
         assert abs(linha_do(janela.list_count) - y_titulo) < 5
-        assert abs(linha_do(janela.search_box) - y_caminho) < 5
+        assert abs(linha_do(janela.search_box) - y_titulo) < 5
+        assert abs(linha_do(janela.rescan_btn) - y_titulo) < 5
         assert abs(linha_do(janela.sort_filter) - y_categorias) < 5
         assert abs(linha_do(janela.res_filter) - y_categorias) < 5
         assert abs(linha_do(janela.color_filter) - y_categorias) < 5
         assert janela.sort_filter.parentWidget().objectName() == "typeFiltersRow"
+        assert janela.search_box.parentWidget().objectName() == "pageHeader"
+        assert janela.search_box.geometry().right() < janela.rescan_btn.geometry().left()
+        assert all(botao.height() == 34 for botao in janela.categories.buttons.values())
+        assert all(
+            botao.objectName() == "toolbarCategory"
+            for botao in janela.categories.buttons.values()
+        )
+        assert all(
+            botao.height() == 34 and botao.objectName() == "toolbarFilter"
+            for botao in (janela.sort_filter, janela.res_filter, janela.color_filter)
+        )
         faixa_tipos = janela.sort_filter.parentWidget()
         controles = (
             janela.categories, janela.sort_filter,
