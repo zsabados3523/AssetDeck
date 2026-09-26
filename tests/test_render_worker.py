@@ -101,6 +101,27 @@ def test_worker_repassa_asset_ids_pra_models_without_cover(qapp, env, monkeypatc
     assert capturado["asset_ids"] == [7, 8]
 
 
+def test_worker_usa_fila_com_capas_existentes_quando_sobrescrever(qapp, env, monkeypatch):
+    tmp_path, root = env
+    capturado = {}
+
+    def _fake_models_for_render(conn, lib_id, library_root, asset_ids=None,
+                               overwrite_existing=False):
+        capturado["asset_ids"] = asset_ids
+        capturado["overwrite_existing"] = overwrite_existing
+        return []
+
+    monkeypatch.setattr(rw, "models_for_render", _fake_models_for_render)
+
+    worker = rw.RenderWorker(
+        tmp_path / "t.db", root, tmp_path / "previews", asset_ids=[7],
+        overwrite_existing=True,
+    )
+    worker.run()
+
+    assert capturado == {"asset_ids": [7], "overwrite_existing": True}
+
+
 def test_worker_sem_asset_ids_continua_pegando_tudo(qapp, env, monkeypatch):
     """`None` é o comportamento de sempre — o botão geral de Configurações
     não pode virar um recorte por engano."""
@@ -125,6 +146,7 @@ def test_controller_start_repassa_asset_ids_ao_worker(qapp, env, monkeypatch):
 
     def _espiao(self, *a, **kw):
         capturado["asset_ids"] = kw.get("asset_ids")
+        capturado["overwrite_existing"] = kw.get("overwrite_existing")
         orig_init(self, *a, **kw)
 
     monkeypatch.setattr(rw.RenderWorker, "__init__", _espiao)
@@ -132,7 +154,7 @@ def test_controller_start_repassa_asset_ids_ao_worker(qapp, env, monkeypatch):
 
     controller = rw.RenderController(tmp_path / "t.db", root, tmp_path / "previews")
     controller.start(lambda *a: None, lambda *a: None, lambda *a: None,
-                     asset_ids=[3])
+                     asset_ids=[3], overwrite_existing=True)
     controller.shutdown()
 
-    assert capturado["asset_ids"] == [3]
+    assert capturado == {"asset_ids": [3], "overwrite_existing": True}
