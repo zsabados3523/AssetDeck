@@ -161,6 +161,20 @@ def test_asset_ids_ignora_quem_ja_tem_capa(env):
     assert render.models_without_cover(conn, lib_id, root, asset_ids=[alvo]) == []
 
 
+def test_models_for_render_inclui_e_identifica_capa_existente(env):
+    conn, lib_id, root, tmp_path = env
+    alvo = render.models_without_cover(conn, lib_id, root)[0][0]
+    previews_repo.add(conn, alvo, _png_valido(tmp_path), tmp_path / "previews")
+
+    jobs = render.models_for_render(
+        conn, lib_id, root, asset_ids=[alvo], overwrite_existing=True,
+    )
+
+    assert len(jobs) == 1
+    assert jobs[0][0] == alvo
+    assert jobs[0][3] is True
+
+
 def _png_valido(tmp_path):
     from PIL import Image
 

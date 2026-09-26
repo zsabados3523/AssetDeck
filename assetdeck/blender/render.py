@@ -167,24 +167,28 @@ def export_to_obj(blend_path: Path, dest: Path,
     return RenderResult(False, erro=_motivo(proc))
 
 
-def models_without_cover(conn, library_id: int, library_root: Path,
-                         asset_ids: list[int] | None = None) -> list[tuple]:
-    """(asset_id, nome, caminho absoluto) dos modelos que ainda não têm capa.
+def models_for_render(conn, library_id: int, library_root: Path,
+                      asset_ids: list[int] | None = None,
+                      overwrite_existing: bool = False) -> list[tuple]:
+    """(id, nome, caminho absoluto, já tem capa) dos modelos elegíveis.
 
-    `asset_ids` (Fatia 101, pedido do Rafael): restringe a um subconjunto —
-    "gerar preview só de alguns assets", via botão direito na grade, em vez
-    do lote inteiro da biblioteca. `None` continua sendo "todos", igual
-    sempre foi.
+    `asset_ids` restringe a fila à seleção da grade. Por padrão, retorna só
+    modelos sem capa; `overwrite_existing=True` também inclui os cobertos e
+    informa esse estado para a confirmação antes de iniciar o render.
     """
-    sql = """SELECT a.id, a.name, f.rel_path
+    sql = """SELECT a.id, a.name, f.rel_path,
+                    EXISTS (SELECT 1 FROM previews p
+                            WHERE p.asset_id = a.id AND p.is_cover = 1
+                              AND p.deleted_at IS NULL) AS has_cover
              FROM assets a JOIN files f ON f.asset_id = a.id AND f.is_primary = 1
              WHERE a.library_id = ? AND a.deleted_at IS NULL AND f.deleted_at IS NULL
                AND a.asset_type IN ('model', 'scene')
                AND f.missing_since IS NULL
-               AND LOWER(f.rel_path) LIKE '%.blend'
-               AND NOT EXISTS (SELECT 1 FROM previews p
-                               WHERE p.asset_id = a.id AND p.is_cover = 1
-                                 AND p.deleted_at IS NULL)"""
+               AND LOWER(f.rel_path) LIKE '%.blend'"""
+    if not overwrite_existing:
+        sql += """ AND NOT EXISTS (SELECT 1 FROM previews p
+                                   WHERE p.asset_id = a.id AND p.is_cover = 1
+                                     AND p.deleted_at IS NULL)"""
     params: list = [library_id]
     if asset_ids is not None:
         if not asset_ids:
@@ -193,4 +197,17 @@ def models_without_cover(conn, library_id: int, library_root: Path,
         params.extend(asset_ids)
     sql += " ORDER BY a.name COLLATE NOCASE"
     linhas = conn.execute(sql, params).fetchall()
-    return [(r["id"], r["name"], library_root / r["rel_path"]) for r in linhas]
+    return [(r["id"], r["name"], library_root / r["rel_path"],
+             bool(r["has_cover"])) for r in linhas]
+
+
+def models_without_cover(conn, library_id: int, library_root: Path,
+                         asset_ids: list[int] | None = None) -> list[tuple]:
+    """(asset_id, nome, caminho absoluto) dos modelos que ainda não têm capa.
+
+    `asset_ids` (Fatia 101) restringe o resultado à seleção da grade; `None`
+    mantém a fila geral da biblioteca.
+    """
+    return [job[:3] for job in models_for_render(
+        conn, library_id, library_root, asset_ids=asset_ids,
+    )]

@@ -1670,27 +1670,32 @@ class MainWindow(QMainWindow):
                 lambda: self._remove_from_current_collection(ids),
             )
 
-        # Gerar capa (Fatia 101, pedido do Rafael: "gerar preview porém
-        # somente de alguns assets"). Candidato = modelo .blend, presente no
-        # disco, sem capa hoje — os mesmos três critérios de
-        # `models_without_cover`, checados aqui em cima dos dados que a
-        # grade JÁ tem (evita uma consulta extra só pra decidir se o item de
-        # menu aparece). A ação some quando ninguém qualifica, em vez de
-        # aparecer desabilitada sem dizer por quê.
-        sem_capa = [
+        # Gerar/substituir capa para modelos selecionados. Candidato = modelo
+        # .blend presente no disco, conforme os mesmos critérios de
+        # `models_for_render`; capas existentes serão substituídas só depois
+        # da confirmação em `_render_covers`.
+        modelos = [
             r for r in selecionados
             if r["asset_type"] in ("model", "scene")
             and r["rel_path"].lower().endswith(".blend")
-            and not r["cover_path"]
             and r["missing_since"] is None
         ]
-        if sem_capa:
+        if modelos:
             menu.addSeparator()
-            n = len(sem_capa)
-            rotulo = f"Gerar capa ({n})…" if n > 1 else "Gerar capa…"
+            n = len(modelos)
+            com_capa = sum(bool(r["cover_path"]) for r in modelos)
+            substantivo = "capas" if n > 1 else "capa"
+            if com_capa and com_capa == n:
+                rotulo = f"Substituir {substantivo} ({n})…" if n > 1 else "Substituir capa…"
+            elif com_capa:
+                rotulo = f"Gerar/substituir {substantivo} ({n})…"
+            else:
+                rotulo = f"Gerar {substantivo} ({n})…" if n > 1 else "Gerar capa…"
             menu.addAction(
                 rotulo,
-                lambda: self._render_covers([r["id"] for r in sem_capa]),
+                lambda: self._render_covers(
+                    [r["id"] for r in modelos], overwrite_existing=True,
+                ),
             )
 
         # Batch rename (Fatia 23) — a única exceção ao somente-leitura
@@ -1812,14 +1817,21 @@ class MainWindow(QMainWindow):
         posicional com o `bool` do sinal, não com uma lista de ids."""
         self._render_covers(None)
 
-    def _render_covers(self, asset_ids: list[int] | None) -> None:
-        """Gera capa dos modelos `.blend` sem capa — todos (`None`, o botão
-        de Configurações) ou só o SUBCONJUNTO selecionado na grade (Fatia
-        101, pedido do Rafael: "gerar preview porém somente de alguns
-        assets", via botão direito)."""
+    def _render_covers(self, asset_ids: list[int] | None,
+                       overwrite_existing: bool = False) -> None:
+        """Gera capas `.blend` sem capa ou substitui as capas da seleção.
+
+        O botão de Configurações mantém a fila geral sem sobrescrita; o menu
+        de contexto passa `overwrite_existing=True` para renderizar a seleção
+        mesmo quando alguns assets já têm capa.
+        """
         from PySide6.QtWidgets import QMessageBox
 
-        from assetdeck.blender.render import blender_command, models_without_cover
+        from assetdeck.blender.render import (
+            blender_command,
+            models_for_render,
+            models_without_cover,
+        )
         from assetdeck.db.repos import libraries as libraries_repo
 
         if self._render.running:
@@ -1839,21 +1851,38 @@ class MainWindow(QMainWindow):
             return
 
         lib_id = libraries_repo.get_or_create(self._conn, self._library_root)
-        pendentes = models_without_cover(self._conn, lib_id, self._library_root,
-                                         asset_ids=asset_ids)
+        if overwrite_existing:
+            jobs = models_for_render(
+                self._conn, lib_id, self._library_root, asset_ids=asset_ids,
+                overwrite_existing=True,
+            )
+            pendentes = [job[:3] for job in jobs]
+            com_capa = sum(job[3] for job in jobs)
+        else:
+            pendentes = models_without_cover(
+                self._conn, lib_id, self._library_root, asset_ids=asset_ids,
+            )
+            com_capa = 0
         if not pendentes:
-            recado = ("Nenhum dos assets selecionados é modelo .blend sem "
-                      "capa." if asset_ids is not None else
-                      "Todos os modelos .blend já têm capa.")
+            if overwrite_existing and asset_ids is not None:
+                recado = "Nenhum asset selecionado é um modelo .blend disponível para renderizar."
+            elif asset_ids is not None:
+                recado = "Nenhum dos assets selecionados é modelo .blend sem capa."
+            else:
+                recado = "Todos os modelos .blend já têm capa."
             QMessageBox.information(self, "Nada a fazer", recado)
             return
 
         if asset_ids is not None:
-            pergunta = (
-                f"{len(pendentes)} modelo(s) selecionado(s) sem capa serão "
-                "renderizados pelo Blender, um por vez, em segundo "
-                "plano.\n\nComeçar?"
-            )
+            pergunta = (f"{len(pendentes)} modelo(s) selecionado(s) serão "
+                        "renderizados pelo Blender, um por vez, em segundo plano.")
+            if com_capa == 1:
+                pergunta += ("\n\nA capa atual de 1 asset será substituída; "
+                             "a capa anterior continuará na galeria.")
+            elif com_capa > 1:
+                pergunta += (f"\n\nAs capas atuais de {com_capa} assets serão "
+                             "substituídas; as capas anteriores continuarão na galeria.")
+            pergunta += "\n\nComeçar?"
         else:
             pergunta = (
                 f"{len(pendentes)} modelo(s) sem capa serão renderizados pelo "
@@ -1870,7 +1899,8 @@ class MainWindow(QMainWindow):
         self.progress.setVisible(True)
         self.progress.setRange(0, len(pendentes))
         self._render.start(self._on_render_progress, self._on_render_finished,
-                           self._on_render_failed, asset_ids=asset_ids)
+                           self._on_render_failed, asset_ids=asset_ids,
+                           overwrite_existing=overwrite_existing)
 
     def _stop_render(self) -> None:
         self._render.shutdown()
