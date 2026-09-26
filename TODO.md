@@ -3939,3 +3939,25 @@ derruba o lote; pasta inexistente dá plano vazio. Suíte completa:
 957 passados, 1 falha pré-existente e alheia (`test_library_root.py::
 test_modo_screenshot_nao_trava_num_dialogo` — `PermissionError` num
 tmp path `/media/root/...`, falha idêntica sem esta fatia).
+
+### ☑ Fatia 111 — Regenerar capa dos assets selecionados
+
+Portada para a versão principal após o redesign. No menu de contexto,
+modelos `.blend` sem capa mostram **"Gerar capa"**; os que já têm capa
+mostram **"Regenerar capa"**. Uma seleção mista oferece as duas ações,
+cada uma restrita aos assets daquele grupo.
+
+- A confirmação da regeneração informa que a capa atual será substituída.
+  A imagem antiga continua na galeria como preview; nenhuma imagem é
+  apagada.
+- A fila continua usando os mesmos critérios de modelo `.blend` presente
+  no disco. O botão geral de Configurações continua renderizando somente
+  modelos sem capa.
+
+**Testes:** 96 passaram nos arquivos de render, worker e janela principal.
+Quatro foram excluídos nesta execução: três integrações que renderizam com
+Blender real e um teste que precisa abrir um socket local.
+
+**Como testar no app:** selecione um modelo que já tenha capa, abra o menu
+do botão direito e escolha **"Regenerar capa…"**. Confirme o aviso e aguarde
+a fila; a nova imagem vira capa e a anterior permanece na galeria.

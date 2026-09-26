@@ -1293,7 +1293,7 @@ def test_gerar_capa_nao_aparece_pra_textura(janela):
     assert not any("Gerar capa" in t for t in textos)
 
 
-def test_gerar_capa_nao_aparece_quando_ja_tem_capa(janela, tmp_path):
+def test_opcao_regenerar_capa_aparece_quando_asset_ja_tem_capa(janela, tmp_path):
     from PIL import Image
 
     from assetdeck.db.repos import previews as previews_repo
@@ -1307,16 +1307,74 @@ def test_gerar_capa_nao_aparece_quando_ja_tem_capa(janela, tmp_path):
     menu = janela._montar_menu_grid([_linha_por_nome(janela, "modelo")])
 
     textos = [a.text() for a in menu.actions()]
+    assert any("Regenerar capa" in t for t in textos)
     assert not any("Gerar capa" in t for t in textos)
 
 
 def test_gerar_capa_chama_render_covers_com_os_ids_certos(janela, monkeypatch):
     linha = _linha_por_nome(janela, "modelo")
     chamadas = []
-    monkeypatch.setattr(janela, "_render_covers", lambda ids: chamadas.append(ids))
+    monkeypatch.setattr(
+        janela, "_render_covers",
+        lambda ids, overwrite_existing=False: chamadas.append((ids, overwrite_existing)),
+    )
 
     menu = janela._montar_menu_grid([linha])
     acao = next(a for a in menu.actions() if "Gerar capa" in a.text())
     acao.trigger()
 
-    assert chamadas == [[linha["id"]]]
+    assert chamadas == [([linha["id"]], False)]
+
+
+def test_regenerar_capa_chama_render_covers_com_os_ids_certos(
+        janela, tmp_path, monkeypatch):
+    from PIL import Image
+
+    from assetdeck.db.repos import previews as previews_repo
+
+    linha = _linha_por_nome(janela, "modelo")
+    capa = tmp_path / "capa.png"
+    Image.new("RGB", (4, 4)).save(capa)
+    previews_repo.add(janela._conn, linha["id"], capa,
+                      janela._thumbs_dir.parent / "previews")
+    janela._reload_grid()
+
+    chamadas = []
+    monkeypatch.setattr(
+        janela, "_render_covers",
+        lambda ids, overwrite_existing=False: chamadas.append((ids, overwrite_existing)),
+    )
+
+    menu = janela._montar_menu_grid([_linha_por_nome(janela, "modelo")])
+    acao = next(a for a in menu.actions() if "Regenerar capa" in a.text())
+    acao.trigger()
+
+    assert chamadas == [([linha["id"]], True)]
+
+
+def test_confirmacao_avisa_quando_capa_atual_sera_substituida(
+        janela, tmp_path, monkeypatch):
+    from PySide6.QtWidgets import QMessageBox
+
+    from assetdeck.blender import render
+    from assetdeck.db.repos import previews as previews_repo
+
+    linha = _linha_por_nome(janela, "modelo")
+    capa = tmp_path / "capa.png"
+    Image.new("RGB", (4, 4)).save(capa)
+    previews_repo.add(janela._conn, linha["id"], capa,
+                      janela._thumbs_dir.parent / "previews")
+
+    capturada = {}
+    monkeypatch.setattr(render, "blender_command", lambda: ["blender"])
+
+    def _pergunta(_parent, _titulo, texto):
+        capturada["texto"] = texto
+        return QMessageBox.StandardButton.No
+
+    monkeypatch.setattr(QMessageBox, "question", staticmethod(_pergunta))
+
+    janela._render_covers([linha["id"]], overwrite_existing=True)
+
+    assert "A capa atual de 1 asset será substituída" in capturada["texto"]
+    assert "continuará na galeria" in capturada["texto"]
