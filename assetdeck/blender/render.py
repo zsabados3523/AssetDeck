@@ -132,7 +132,8 @@ def _motivo(proc) -> str:
 
 
 def export_to_obj(blend_path: Path, dest: Path,
-                  comando: list[str] | None = None) -> RenderResult:
+                  comando: list[str] | None = None,
+                  manifest_only: bool = False) -> RenderResult:
     """Exporta a geometria de um .blend pra .obj, chamando o Blender
     headless — é assim que o visualizador 3D (Fase 6) "lê" um .blend, já
     que o formato binário dele não tem parser de terceiros confiável (só
@@ -151,6 +152,8 @@ def export_to_obj(blend_path: Path, dest: Path,
     dest.parent.mkdir(parents=True, exist_ok=True)
     cmd = [*cmd_base, "-b", "--factory-startup", "-P", str(export_obj_script_path()), "--",
            str(blend_path), str(dest)]
+    if manifest_only:
+        cmd.append("--manifest-only")
     try:
         proc = subprocess.run(cmd, capture_output=True, text=True,
                               timeout=TIMEOUT_S, check=False)
@@ -159,12 +162,19 @@ def export_to_obj(blend_path: Path, dest: Path,
     except OSError as exc:
         return RenderResult(False, erro=f"Falha ao executar o Blender: {exc}")
 
-    if dest.is_file() and dest.stat().st_size > 0:
-        return RenderResult(True, dest=dest)
+    expected = dest.with_suffix(".materials.json") if manifest_only else dest
+    if expected.is_file() and expected.stat().st_size > 0:
+        return RenderResult(True, dest=expected)
 
     log.error("Exportação pra .obj falhou para %s: %s", blend_path.name,
               (proc.stderr or proc.stdout or "").strip()[-1500:])
     return RenderResult(False, erro=_motivo(proc))
+
+
+def export_material_manifest(blend_path: Path, obj_path: Path,
+                             comando: list[str] | None = None) -> RenderResult:
+    """Lê só materiais do .blend; reaproveita a geometria OBJ já cacheada."""
+    return export_to_obj(blend_path, obj_path, comando=comando, manifest_only=True)
 
 
 def models_without_cover(conn, library_id: int, library_root: Path,

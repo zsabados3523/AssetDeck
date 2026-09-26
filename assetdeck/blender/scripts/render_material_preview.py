@@ -12,7 +12,8 @@ from mathutils import Vector
 
 def main():
     args = sys.argv[sys.argv.index("--") + 1:]
-    materials_path, dest, name, maps_json = args
+    materials_path, dest, name, size_arg, maps_json = args
+    size = int(size_arg)
     spec = importlib.util.spec_from_file_location("assetdeck_materials", materials_path)
     materials = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(materials)
@@ -29,9 +30,10 @@ def main():
     scene = bpy.context.scene
     scene.render.engine = "CYCLES"
     scene.cycles.device = "CPU"
-    scene.cycles.samples = 24
-    scene.render.resolution_x = 256
-    scene.render.resolution_y = 256
+    scene.cycles.samples = 12 if size > 256 else 24
+    scene.view_layers[0].cycles.use_denoising = True
+    scene.render.resolution_x = size
+    scene.render.resolution_y = size
     scene.render.resolution_percentage = 100
     scene.render.film_transparent = True
     scene.render.image_settings.file_format = "PNG"

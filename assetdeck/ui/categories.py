@@ -29,6 +29,21 @@ CATEGORIES: tuple[Category, ...] = (
 
 BY_KEY: dict[str, Category] = {c.key: c for c in CATEGORIES}
 
+TYPE_LABELS: dict[str, str] = {
+    "model": "Modelo 3D",
+    "scene": "Cena 3D",
+    "pbr_set": "Material PBR",
+    "other": "Outro material",
+    "texture": "Textura",
+    "cutout": "Recorte",
+    "hdri": "HDRI",
+    "vector": "Vetor",
+    "reference": "Referência",
+    "psd": "Photoshop",
+    "ies": "Perfil IES",
+    "lut": "LUT",
+}
+
 
 def category_of(asset_type: str) -> Category | None:
     """Em qual categoria este asset_type cai (None se for tipo desconhecido)."""
@@ -36,3 +51,8 @@ def category_of(asset_type: str) -> Category | None:
         if asset_type in c.asset_types:
             return c
     return None
+
+
+def type_label_of(asset_type: str) -> str:
+    """Rótulo de tela mais específico que a categoria de filtro."""
+    return TYPE_LABELS.get(asset_type, asset_type)

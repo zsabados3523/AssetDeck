@@ -62,7 +62,7 @@ def _quadradinho(color: str | None, tam: int) -> QPixmap:
     return pix
 
 
-def pixmap_for(icon: str | None, color: str | None, tam: int = 12) -> QPixmap:
+def pixmap_for(icon: str | None, color: str | None, tam: int = 16) -> QPixmap:
     """Como uma tag é desenhada: ícone tingido com a cor dela, ou o
     quadradinho colorido quando não há ícone escolhido."""
     if not icon:

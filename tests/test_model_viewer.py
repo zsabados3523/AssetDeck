@@ -14,14 +14,16 @@ from assetdeck.ui import model_viewer
 from assetdeck.ui.orbit_camera import OrbitCamera
 
 
-def test_mesh_to_buffer_intercala_posicao_e_normal():
+def test_mesh_to_buffer_intercala_posicao_normal_e_uv():
     mesh = Mesh(
         positions=[(1.0, 2.0, 3.0), (4.0, 5.0, 6.0)],
         normals=[(0.0, 0.0, 1.0), (0.0, 1.0, 0.0)],
+        uvs=[(0.25, 0.5), (0.75, 1.0)],
     )
     buf = model_viewer._mesh_to_buffer(mesh)
     esperado = np.array(
-        [1.0, 2.0, 3.0, 0.0, 0.0, 1.0, 4.0, 5.0, 6.0, 0.0, 1.0, 0.0], dtype=np.float32,
+        [1.0, 2.0, 3.0, 0.0, 0.0, 1.0, 0.25, 0.5,
+         4.0, 5.0, 6.0, 0.0, 1.0, 0.0, 0.75, 1.0], dtype=np.float32,
     )
     assert np.array_equal(buf, esperado)
 
@@ -39,9 +41,8 @@ def test_shader_usa_normal_em_view_space():
 
 
 def test_shader_tem_luz_ambiente_minima():
-    """Sem um piso pra `luz`, a face oposta à câmera fica preto absoluto —
-    o `max(..., 0.18)` é o que garante o modelo nunca sumir no fundo escuro."""
-    assert "max(dot(n, vec3(0.0, 0.0, 1.0)), 0.18)" in model_viewer._FS
+    """A face oposta à câmera conserva pelo menos 38% da cor do material."""
+    assert "0.38 + 0.62 * max(dot(n, vec3(0.0, 0.0, 1.0)), 0.0)" in model_viewer._FS
 
 
 def test_fov_da_camera_bate_com_o_da_matriz_de_projecao():

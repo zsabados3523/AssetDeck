@@ -192,6 +192,25 @@ def test_render_que_nao_gera_imagem_e_falha(tmp_path):
     assert r.ok is False
 
 
+def test_manifesto_de_material_reaproveita_obj_e_pede_modo_correto(tmp_path, monkeypatch):
+    blend = tmp_path / "modelo.blend"
+    blend.write_bytes(b"blend")
+    obj = tmp_path / "cache.obj"
+    obj.write_text("v 0 0 0\n")
+    called = []
+
+    def fake_run(cmd, **_kwargs):
+        called.append(cmd)
+        obj.with_suffix(".materials.json").write_text("{}")
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    monkeypatch.setattr(render.subprocess, "run", fake_run)
+    result = render.export_material_manifest(blend, obj, comando=["blender"])
+    assert result.ok
+    assert called[0][-1] == "--manifest-only"
+    assert obj.read_text() == "v 0 0 0\n"
+
+
 def test_motivo_extrai_a_excecao(tmp_path):
     class FakeProc:
         returncode = 1

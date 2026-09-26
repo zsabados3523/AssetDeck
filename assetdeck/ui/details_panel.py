@@ -6,7 +6,7 @@ import logging
 import sqlite3
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QUrl, Signal
+from PySide6.QtCore import QSize, Qt, QUrl, Signal
 from PySide6.QtGui import QDesktopServices, QIcon, QPixmap
 from PySide6.QtWidgets import (
     QFormLayout,
@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QPlainTextEdit,
     QPushButton,
+    QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
@@ -202,12 +203,13 @@ class DetailsPanel(QWidget):
         self._current: Path | None = None
         self._current_asset_id: int | None = None
         self._loaded_notes: str = ""
+        self._preview_source = QPixmap()
 
         # Subclasse de QWidget filha IGNORA o `background` do QSS sem isto
         # (medido na Fatia 24) — sem ele o painel fica transparente sobre o
         # que estiver atrás em vez de virar o cartão branco.
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        self.setObjectName("card")
+        self.setObjectName("inspectorPanel")
 
         # Moldura da miniatura (Fatia 48). Era um QLabel solto: sem asset
         # selecionado sobrava um buraco de 220px de altura no topo do painel,
@@ -217,8 +219,10 @@ class DetailsPanel(QWidget):
         self.preview = QLabel("Selecione um asset")
         self.preview.setObjectName("previewTile")
         self.preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.preview.setMinimumSize(220, 200)
-        self.preview.setMaximumHeight(260)
+        self.preview.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
+        self.preview.setFixedHeight(156)
 
         # Elidido à DIREITA: o começo do nome é o que identifica o asset.
         self.name = _RotuloElidido(Qt.TextElideMode.ElideRight)
@@ -233,22 +237,28 @@ class DetailsPanel(QWidget):
         self.f_path.setText("—")
 
 
-        # PASTILHAS (Fatia 79, mockup aprovado): formato, tipo e tamanho são
-        # três respostas curtas que ocupavam três das cinco linhas da ficha
-        # técnica. Viraram chips na altura do nome — leitura imediata, e a
-        # ficha fica só com o que é longo de verdade (resolução e caminho).
-        for chip in (self.f_format, self.f_type, self.f_size):
-            chip.setObjectName("chip")
-            chip.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.f_format.setObjectName("chipForte")  # o formato é o que se procura
-        chips = QHBoxLayout()
-        chips.setSpacing(5)
-        chips.setContentsMargins(0, 0, 0, 0)
-        for chip in (self.f_format, self.f_type, self.f_size):
-            chips.addWidget(chip, 0, Qt.AlignmentFlag.AlignLeft)
-        chips.addStretch(1)
-        self._chips_row = QWidget()
-        self._chips_row.setLayout(chips)
+        self.f_type.setObjectName("inspectorCategory")
+        self.f_type.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        for valor in (self.f_format, self.f_size):
+            valor.setObjectName("kvValue")
+            valor.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+
+        self.inspector_heading = QLabel("DETALHES")
+        self.inspector_heading.setObjectName("inspectorHeading")
+        overview_text = QVBoxLayout()
+        overview_text.setContentsMargins(0, 0, 0, 0)
+        overview_text.setSpacing(4)
+        overview_text.addWidget(self.name)
+        overview_text.addWidget(self.f_type)
+        overview_text_widget = QWidget()
+        overview_text_widget.setLayout(overview_text)
+        overview = QVBoxLayout()
+        overview.setContentsMargins(0, 0, 0, 0)
+        overview.setSpacing(9)
+        overview.addWidget(self.preview)
+        overview.addWidget(overview_text_widget)
+        self._overview_row = QWidget()
+        self._overview_row.setLayout(overview)
 
         # O que sobra na ficha técnica: rótulo apagado à esquerda, valor à
         # direita. O QFormLayout alinhava os dois à esquerda, com o valor
@@ -257,7 +267,9 @@ class DetailsPanel(QWidget):
         form = QVBoxLayout()
         form.setSpacing(2)
         for rotulo, campo in (
+            ("Formato", self.f_format),
             ("Resolução", self.f_dims),
+            ("Tamanho", self.f_size),
             ("Caminho", self.f_path),
         ):
             form.addWidget(self._kv_row(rotulo, campo))
@@ -330,6 +342,8 @@ class DetailsPanel(QWidget):
         from PySide6.QtWidgets import QTreeWidget
 
         self.tags_tree = QTreeWidget()
+        self.tags_tree.setObjectName("inspectorTagsTree")
+        self.tags_tree.setIconSize(QSize(16, 16))
         self.tags_tree.setHeaderHidden(True)
         self.tags_tree.setMaximumHeight(150)
         self.tags_tree.itemChanged.connect(self._on_tag_item_changed)
@@ -357,11 +371,10 @@ class DetailsPanel(QWidget):
         layout = QVBoxLayout(content)
         # A margem da direita reserva espaço para a barra de rolagem (12px no
         # tema). Estava em 8 e a barra passava por cima do fim dos botões.
-        layout.setContentsMargins(0, 0, 12, 0)
-        layout.setSpacing(8)
-        layout.addWidget(self.preview)
-        layout.addWidget(self.name)
-        layout.addWidget(self._chips_row)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(11)
+        layout.addWidget(self.inspector_heading)
+        layout.addWidget(self._overview_row)
 
         # Linha de ação: principal + dois ícones. Antes eram QUATRO botões de
         # largura cheia empilhados — a hierarquia sumia porque todos tinham o
@@ -440,7 +453,7 @@ class DetailsPanel(QWidget):
         content.setAutoFillBackground(False)
 
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(14, 12, 14, 14)
+        outer.setContentsMargins(18, 18, 16, 14)
         outer.setSpacing(0)
         outer.addWidget(scroll)
 
@@ -496,11 +509,11 @@ class DetailsPanel(QWidget):
         self.save_notes_btn.setEnabled(False)
 
         if thumb and not thumb.isNull():
-            self.preview.setPixmap(
-                thumb.scaled(260, 260, Qt.AspectRatioMode.KeepAspectRatio,
-                             Qt.TransformationMode.SmoothTransformation)
-            )
+            self._preview_source = QPixmap(thumb)
+            self.preview.setText("")
+            self._refresh_preview_pixmap()
         else:
+            self._preview_source = QPixmap()
             self.preview.setPixmap(QPixmap())
             self.preview.setText("(sem preview ainda)")
 
@@ -509,8 +522,7 @@ class DetailsPanel(QWidget):
         # de schema, não de tela — aparecia em minúsculas na ficha. Aqui vira
         # o mesmo rótulo que a barra de categorias usa; tipo desconhecido cai
         # no valor cru em vez de sumir.
-        categoria = categories.category_of(row["asset_type"])
-        self.f_type.setText(categoria.label if categoria else row["asset_type"])
+        self.f_type.setText(categories.type_label_of(row["asset_type"]))
         self.f_dims.setText(self._read_dims(path))
         self.f_size.setText(human_size(row["size_bytes"]))
         self.f_format.setText(path.suffix.lstrip(".").upper() or "—")
@@ -520,6 +532,21 @@ class DetailsPanel(QWidget):
         self.f_path.setText(
             f"{row['rel_path']}  ⚠ ARQUIVO SUMIDO" if sumido else row["rel_path"])
         self._set_buttons(not sumido, path)
+
+    def _refresh_preview_pixmap(self) -> None:
+        if self._preview_source.isNull():
+            return
+        area = self.preview.contentsRect().size()
+        if area.width() <= 0 or area.height() <= 0:
+            return
+        self.preview.setPixmap(self._preview_source.scaled(
+            area, Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation,
+        ))
+
+    def resizeEvent(self, event) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        self._refresh_preview_pixmap()
 
     def _read_dims(self, path: Path) -> str:
         """Resolução lida na hora (só formatos raster; os demais mostram —)."""

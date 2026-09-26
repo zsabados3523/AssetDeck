@@ -17,7 +17,7 @@ from PySide6.QtCore import QElapsedTimer, QRect, QRectF, QSize, Qt, QTimer
 from PySide6.QtGui import QColor, QFont, QFontMetrics, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import QStyle, QStyledItemDelegate
 
-from assetdeck.ui import icons, theme
+from assetdeck.ui import categories, icons, theme
 from assetdeck.ui.asset_grid import (
     CARD_GAP,
     CARD_MARGIN,
@@ -31,6 +31,7 @@ from assetdeck.ui.asset_grid import (
     MIN_ICON,
     NAME_HEIGHT,
     STARRED_ROLE,
+    TYPE_ROLE,
     cell_for_icon,
 )
 
@@ -99,6 +100,10 @@ class AssetCardDelegate(QStyledItemDelegate):
         self._font_name.setPixelSize(12)  # px, não pt: mais previsível entre telas
         self._fm_name = QFontMetrics(self._font_name)
 
+        self._font_type = QFont()
+        self._font_type.setPixelSize(10)
+        self._fm_type = QFontMetrics(self._font_type)
+
         self._font_chip = QFont()
         self._font_chip.setPixelSize(10)
         self._font_chip.setBold(True)
@@ -114,6 +119,7 @@ class AssetCardDelegate(QStyledItemDelegate):
         # INTERAÇÃO, não de tema, por isso mora aqui e não em `refresh_theme`.
         # `AssetGridView` chama `set_pressed()` no mousePress/Release.
         self._pressed_index = None
+        self._reduced_motion = False
 
         # Progresso animado do hover, por LINHA (Fatia 74, ajuste: "a
         # animação poderia ser um pouco mais suave"). 0 = repouso, 1 = mouse
@@ -149,6 +155,7 @@ class AssetCardDelegate(QStyledItemDelegate):
         # compostos, e compor sobre `bg` daria uma pastilha de tom errado.
         base = pal["surface"]
         self._pen_name = QPen(QColor(pal["text"]))
+        self._pen_type = QPen(QColor(pal["text_muted"]))
         self._brush_selected = QColor(theme.blend(pal["selection"], base))
         self._pen_selected_border = QColor(pal["accent"])
         self._type_tint_color = QColor(pal["type_tint"])
@@ -200,6 +207,14 @@ class AssetCardDelegate(QStyledItemDelegate):
         sob o cursor muda (Fatia 74) — dispara a animação de entrada do novo
         índice e de saída do antigo, em vez de o `paint()` ler um booleano e
         saltar direto pro estado final."""
+        if self._reduced_motion:
+            self._hover_progress.clear()
+            self._hover_target.clear()
+            self._hover_timer.stop()
+            view = self.parent()
+            if view is not None:
+                view.viewport().update()
+            return
         if old_index is not None and old_index.isValid():
             self._hover_target[old_index.row()] = 0.0
             self._hover_progress.setdefault(old_index.row(), 1.0)
@@ -209,6 +224,17 @@ class AssetCardDelegate(QStyledItemDelegate):
         if self._hover_target and not self._hover_timer.isActive():
             self._hover_clock.start()
             self._hover_timer.start()
+
+    def set_reduced_motion(self, reduced: bool) -> None:
+        """Liga/desliga a transição de hover sem remover o estado de hover."""
+        self._reduced_motion = bool(reduced)
+        if self._reduced_motion:
+            self._hover_progress.clear()
+            self._hover_target.clear()
+            self._hover_timer.stop()
+        view = self.parent()
+        if view is not None:
+            view.viewport().update()
 
     def clear_hover(self) -> None:
         """Zera a animação de hover (Fatia 74). O progresso é indexado por
@@ -442,7 +468,22 @@ class AssetCardDelegate(QStyledItemDelegate):
         nome = index.data(Qt.ItemDataRole.DisplayRole) or ""
         painter.setFont(self._font_name)
         painter.setPen(self._pen_name)
-        elidido = self._fm_name.elidedText(nome, Qt.TextElideMode.ElideRight, rect.width())
+        linha_nome = QRect(rect.x(), rect.y(), rect.width(), 19)
+        elidido = self._fm_name.elidedText(
+            nome, Qt.TextElideMode.ElideRight, linha_nome.width())
         painter.drawText(
-            rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, elidido
+            linha_nome, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, elidido
         )
+
+        tipo = categories.type_label_of(index.data(TYPE_ROLE) or "")
+        if tipo:
+            linha_tipo = QRect(rect.x(), rect.y() + 18, rect.width(), 15)
+            painter.setFont(self._font_type)
+            painter.setPen(self._pen_type)
+            elidido_tipo = self._fm_type.elidedText(
+                tipo, Qt.TextElideMode.ElideRight, linha_tipo.width())
+            painter.drawText(
+                linha_tipo,
+                Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+                elidido_tipo,
+            )

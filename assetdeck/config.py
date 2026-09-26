@@ -20,11 +20,13 @@ APP_NAME = "assetdeck"
 # A raiz da biblioteca é CONFIGURAÇÃO (editável no json), nunca hardcoded no app.
 DEFAULTS = {
     "library_root": "/home/rafael/00 - PROJETOS/assetdeck-testlib",
-    # claro | escuro — trocado pelo menu Configurações. Padrão virou "escuro"
-    # na Fatia 44: a direção visual que o Rafael escolheu olhando os mockups é
-    # a de base escura. Quem já tem um config.json não é afetado (o valor
-    # gravado ganha do DEFAULT) — isto vale só pra primeira execução.
-    "theme_mode": "escuro",
+    # claro | escuro — trocado pelo menu Configurações. O redesign aprovado
+    # usa fundo branco; quem já tem um config.json conserva sua preferência,
+    # este padrão vale só pra primeira execução.
+    "theme_mode": "claro",
+    # Desativa animações transitórias dos cards e do ajuste do grid; as ações
+    # continuam funcionando sem movimento.
+    "reduce_motion": False,
     "backup_keep": 14,  # quantos backups diários do .db manter
     # Ao usar uma imagem da biblioteca como preview de um modelo:
     # "ask" pergunta se oculta a imagem; "always"/"never" lembram a escolha
