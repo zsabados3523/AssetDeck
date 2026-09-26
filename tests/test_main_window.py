@@ -61,13 +61,20 @@ def test_breadcrumb_acompanha_a_pasta_selecionada(janela):
     (testado à parte, na FolderTree). Chamar direto evita depender de uma
     subpasta existir na biblioteca mínima do fixture `janela`.
     """
-    assert janela._breadcrumb_full == "BIBLIOTECA (TUDO)"
+    assert janela._breadcrumb_full == janela._library_root.name == "lib"
 
     janela._on_dir_selected("Modelos/Cadeiras")
-    assert janela._breadcrumb_full == "BIBLIOTECA › MODELOS › CADEIRAS"
+    assert janela._breadcrumb_full == "lib › Modelos › Cadeiras"
 
     janela._on_dir_selected("")
-    assert janela._breadcrumb_full == "BIBLIOTECA (TUDO)"
+    assert janela._breadcrumb_full == "lib"
+
+
+def test_nome_da_biblioteca_usa_a_pasta_raiz(janela):
+    assert janela.page_title.text() == "lib"
+    assert janela.sidebar.heading.text() == "lib"
+    assert janela.page_title.toolTip() == str(janela._library_root)
+    assert janela.sidebar.heading.toolTip() == str(janela._library_root)
 
 
 def test_footer_mostra_contagem_e_atualiza_com_selecao(janela):
@@ -88,90 +95,36 @@ def test_footer_mostra_contagem_e_atualiza_com_selecao(janela):
     assert "2 selecionados" in janela.footer_count.text()
 
 
-def test_tema_pinta_a_janela_e_os_cards_ficam_arredondados(qapp, janela):
-    """Regressão da Fatia 25: aplicar o QSS global e conferir na janela REAL
-    (não numa sonda isolada) que o cartão da grade tem o canto arredondado —
-    é onde o bug do viewport retangular vazando apareceria de verdade."""
+def test_tema_pinta_a_area_principal_e_separa_o_inspetor(qapp, janela):
+    """A grade usa a superfície contínua da prévia, com inspetor lateral."""
+    from PySide6.QtCore import QPoint
+    from PySide6.QtGui import QColor
+
     from assetdeck.ui import theme
 
     antes = (qapp.styleSheet(), qapp.palette(), qapp.font())
     try:
         theme.apply_theme(qapp)
-        janela.resize(1000, 700)
+        janela.resize(1280, 800)
         janela.show()
         qapp.processEvents()
 
-        # Fatia 28: self.grid mora dentro de um container com o breadcrumb
-        # em cima, e ESSE container é que fica dentro do QFrame#card.
-        grid_card = janela.grid.parentWidget().parentWidget()
-        assert grid_card.objectName() == "card"
+        workspace = janela.grid.parentWidget()
+        assert workspace.objectName() == "assetWorkspace"
+        assert workspace.parentWidget() is janela._main_splitter
+        assert janela._main_splitter.widget(2) is janela.details
+        assert janela.details.objectName() == "inspectorPanel"
+        assert janela.grid.width() > 0
+        assert janela.details.width() >= janela.details.minimumWidth()
 
-        # Grab da JANELA, não do card sozinho. Grabar o card isolado renderiza
-        # só ele: o que aparece na quina de fora do arredondamento é o
-        # preenchimento padrão do pixmap, não o fundo do app. Isso passou
-        # despercebido até a Fatia 44 porque esse preenchimento era branco e o
-        # `$bg` de então também — o teste comparava branco com branco e teria
-        # passado mesmo com o card quadrado. Agora fundo e painel são cores
-        # diferentes, então a quina precisa vir da janela de verdade.
-        img = janela.grab().toImage()
-        from PySide6.QtGui import QColor
-
-        def px(x, y):
-            return QColor(img.pixelColor(x, y)).name().upper()
-
-        def distancia(a: str, b: str) -> int:
-            """Distância entre duas cores, somando os três canais."""
-            ra, ga, ba = theme.hex_to_rgb(a)
-            rb, gb, bb = theme.hex_to_rgb(b)
-            return abs(ra - rb) + abs(ga - gb) + abs(ba - bb)
-
-        quina = grid_card.mapTo(janela, grid_card.rect().topLeft())
-        # EXATAMENTE a quina, não 1px pra dentro: num card quadrado é ali
-        # que as duas linhas de contorno se encontram. Amostrar deslocado
-        # cai dentro do card e lê a superfície nos dois casos — foi assim
-        # que a primeira versão deste teste passou com o card quadrado.
-        cor_quina = px(quina.x(), quina.y())
-        # Meio da aresta de cima: ali passa a LINHA de contorno do card.
-        meio_aresta = px(quina.x() + grid_card.width() // 2, quina.y())
-
-        # A prova de curvatura mudou de forma na Fatia 95, quando o fundo do
-        # modo claro virou branco a pedido do Rafael. Antes bastava ler a cor
-        # da quina e ver que era o `$bg` e não a `$surface`; com os dois
-        # brancos, essa leitura não distingue mais nada — o próprio teste já
-        # avisava que comparar branco com branco passaria até com o card
-        # quadrado.
-        #
-        # O que ainda distingue: a quina de um card QUADRADO cai em cima do
-        # contorno (duas linhas se encontrando ali), e a de um card CURVO cai
-        # fora dele, no fundo limpo. Então a quina tem de ser mais CLARA que o
-        # meio da aresta, onde o contorno passa.
-        def brilho(cor: str) -> int:
-            return sum(theme.hex_to_rgb(cor))
-
-        assert brilho(cor_quina) > brilho(meio_aresta), (
-            f"a quina do card da grade não é curva: leu {cor_quina} na quina "
-            f"e {meio_aresta} no meio da aresta — se a quina não é mais clara "
-            f"que a linha de contorno, ela está EM CIMA do contorno"
-        )
-
-        # E a superfície do card aparece de verdade — prova que os dois tons
-        # diferem na tela, não só na paleta.
-        #
-        # Amostra a MARGEM de cima do card, não o centro: o centro cai sobre a
-        # grade, e ali quem pinta é a miniatura do asset (uma capa preta fazia
-        # este teste falhar dizendo que a superfície era #000000). A margem é
-        # o único ponto do card garantidamente sem filho por cima.
-        margem = grid_card.layout().contentsMargins()
-        topo = grid_card.mapTo(janela, grid_card.rect().topLeft())
-        dentro_x = topo.x() + grid_card.width() // 2
-        dentro_y = topo.y() + max(2, margem.top() // 2)
-        assert px(dentro_x, dentro_y) == theme.SURFACE.upper()
+        imagem = janela.grab().toImage()
+        canto = workspace.mapTo(janela, QPoint(6, 6))
+        assert QColor(imagem.pixelColor(canto)).name().upper() == theme.BG.upper()
     finally:
         qss, paleta, fonte = antes
         qapp.setStyleSheet(qss)
         qapp.setPalette(paleta)
         qapp.setFont(fonte)
-
 
 def test_painel_de_detalhes_tem_sinais_de_propriedades(janela):
     assert hasattr(janela.details, "property_value_changed")
@@ -245,6 +198,36 @@ def test_thumb_from_disk_usa_a_capa_customizada(janela, tmp_path):
 
     pix = janela._thumb_from_disk(linha)
     assert pix is not None and not pix.isNull()
+
+
+def test_duplo_clique_em_set_pbr_abre_material_antes_dos_mapas(
+        janela, tmp_path, monkeypatch):
+    from assetdeck.indexer.grouper import apply_grouping
+
+    root = janela._library_root
+    Image.new("RGB", (16, 16), "red").save(root / "Stone_Color.png")
+    Image.new("RGB", (16, 16), "blue").save(root / "Stone_Normal.png")
+    scan_library(janela._conn, janela._library_id, root)
+    apply_grouping(janela._conn, janela._library_id)
+    janela.group_check.setChecked(True)
+    janela.model.reload()
+    asset_id = janela._conn.execute(
+        "SELECT id FROM assets WHERE asset_type = 'pbr_set' AND deleted_at IS NULL"
+    ).fetchone()["id"]
+
+    requests = []
+    monkeypatch.setattr(
+        janela._pipeline, "get_or_request_material",
+        lambda aid, name, maps, key, **kw: requests.append((aid, kw)) or None,
+    )
+    janela._open_preview(janela.model.index_of_asset(asset_id))
+
+    assert not janela.preview_popup.isHidden()
+    assert [b.text() for b in janela.preview_popup._maps_group.buttons()] == [
+        "Material", "Base Color", "Normal",
+    ]
+    assert any(aid == asset_id and options["size"] == 640
+               and options["priority"] == 2 for aid, options in requests)
 
 
 def test_ponte_e_render_ficam_prontos(janela):
@@ -476,46 +459,119 @@ def test_checks_de_filtro_moraram_na_pagina_paineis_e_filtros(janela):
         assert check.window() is janela.settings_window
 
 
-def test_size_slider_mora_na_faixa_de_navegacao_com_os_filtros(janela):
-    """Fatia 56: o slider saiu do rodapé (longe da grade, alça "bola"
-    destoando dos botões de filtro) — hoje mora na faixa de navegação,
-    junto de busca/ordenar/resolução/cor (Fatia 66 consolidou pra lá)."""
+def test_size_slider_mora_ao_lado_do_titulo_da_grade(janela):
+    """O slider contínuo fica junto do título da grade, como na prévia."""
     from PySide6.QtWidgets import QStatusBar
 
     assert not isinstance(janela.size_slider.parentWidget(), QStatusBar)
-    assert janela.size_slider.parentWidget() is janela.color_filter.parentWidget()
+    assert janela.size_slider.parentWidget().objectName() == "gridHeader"
+    assert janela.size_value.parentWidget() is janela.size_slider.parentWidget()
+    assert janela.grid_size_label.parentWidget() is janela.size_slider.parentWidget()
+    assert janela.size_slider.width() == 190
+    assert janela.size_slider.height() == 34
+    assert janela.size_slider.minimum() == 96
+    assert janela.size_slider.maximum() == 240
+    assert janela.size_slider.singleStep() == 1
+    assert janela.size_value.text() == f"{janela.size_slider.value()} px"
+    janela.size_slider.setValue(janela.size_slider.value() + 1)
+    assert janela.size_value.text() == f"{janela.size_slider.value()} px"
+    assert janela.grid.iconSize().width() == janela.size_slider.value()
 
 
-def test_o_topo_tem_duas_faixas_separadas(janela, qapp):
-    """Fatia 46 empilhou em 3 faixas (a linha única, com tudo junto, estava
-    "absurdamente atolada" segundo o Rafael). Fatia 66 consolidou busca e
-    filtros finos na faixa de navegação, sobrando 2 — mockup aprovado por
-    ele antes de implementar.
+def test_feedback_do_slider_respeita_reducao_de_movimento(janela):
+    from PySide6.QtCore import QAbstractAnimation
 
-    O que este teste protege: as duas faixas continuam SEPARADAS — se
-    alguém voltar a empilhar tudo numa linha, o caminho de pasta funda
-    volta a ser cortado por falta de espaço."""
-    janela.resize(1200, 800)
+    janela.size_slider.setValue(janela.size_slider.value() + 1)
+    assert janela._size_value_animation.state() == QAbstractAnimation.State.Running
+
+    janela._toggle_reduce_motion(True)
+    assert janela._size_value_animation.state() == QAbstractAnimation.State.Stopped
+    janela.size_slider.setValue(janela.size_slider.value() + 1)
+    assert janela._size_value_effect.opacity() == 1.0
+    assert janela.size_value.text() == f"{janela.size_slider.value()} px"
+
+
+def test_marca_assetdeck_tem_simbolo_proprio_e_nome_visivel(janela):
+    from PySide6.QtWidgets import QFrame, QLabel, QWidget
+
+    simbolo = janela.findChild(QWidget, "brandMark")
+    nome = janela.findChild(QLabel, "brandName")
+
+    assert simbolo is not None
+    assert nome is not None and nome.text() == "AssetDeck"
+    assert len(simbolo.findChildren(QFrame, "brandGlyph")) == 4
+
+
+def test_as_quatro_faixas_da_biblioteca_ficam_separadas_e_alinhadas(janela, qapp):
+    """Título, busca, categorias/filtros e grade seguem a hierarquia aprovada."""
+    janela.show()
+
+    for largura, altura in ((1280, 800), (1600, 900)):
+        janela.resize(largura, altura)
+        qapp.processEvents()
+
+        def linha_do(widget):
+            return widget.mapTo(janela, widget.rect().center()).y()
+
+        y_titulo = linha_do(janela.page_title)
+        y_caminho = linha_do(janela.breadcrumb)
+        y_categorias = linha_do(janela.categories)
+        y_grade = linha_do(janela.list_scope)
+
+        assert y_titulo < y_caminho < y_categorias < y_grade
+        assert abs(linha_do(janela.list_count) - y_titulo) < 5
+        assert abs(linha_do(janela.search_box) - y_titulo) < 5
+        assert abs(linha_do(janela.rescan_btn) - y_titulo) < 5
+        assert abs(linha_do(janela.sort_filter) - y_categorias) < 5
+        assert abs(linha_do(janela.res_filter) - y_categorias) < 5
+        assert abs(linha_do(janela.color_filter) - y_categorias) < 5
+        assert janela.sort_filter.parentWidget().objectName() == "typeFiltersRow"
+        assert janela.search_box.parentWidget().objectName() == "pageHeader"
+        assert janela.search_box.geometry().right() < janela.rescan_btn.geometry().left()
+        assert all(botao.height() == 34 for botao in janela.categories.buttons.values())
+        assert all(
+            botao.objectName() == "toolbarCategory"
+            for botao in janela.categories.buttons.values()
+        )
+        assert all(
+            botao.height() == 34 and botao.objectName() == "toolbarFilter"
+            for botao in (janela.sort_filter, janela.res_filter, janela.color_filter)
+        )
+        faixa_tipos = janela.sort_filter.parentWidget()
+        controles = (
+            janela.categories, janela.sort_filter,
+            janela.res_filter, janela.color_filter,
+        )
+        for controle in controles:
+            assert controle.geometry().right() < faixa_tipos.width()
+        assert janela.sort_filter.geometry().left() > janela.categories.geometry().right()
+        assert janela.res_filter.geometry().left() > janela.sort_filter.geometry().right()
+        assert janela.color_filter.geometry().left() > janela.res_filter.geometry().right()
+        assert abs(linha_do(janela.size_slider) - y_grade) < 5
+        assert abs(linha_do(janela.size_value) - y_grade) < 5
+        assert janela.size_value.geometry().right() < janela.size_value.parentWidget().width()
+        assert janela.size_slider.geometry().right() < janela.size_slider.parentWidget().width()
+
+
+def test_alca_do_slider_e_circular_e_cabe_no_widget(janela, qapp):
+    from PySide6.QtWidgets import QStyle, QStyleOptionSlider
+    from assetdeck.ui import theme
+
+    theme.apply_theme(qapp)
     janela.show()
     qapp.processEvents()
-
-    def linha_do(widget):
-        return widget.mapTo(janela, widget.rect().center()).y()
-
-    y_caminho = linha_do(janela.breadcrumb)
-    y_categorias = linha_do(janela.categories)
-
-    assert y_caminho < y_categorias, (
-        "as duas faixas do topo têm de estar empilhadas, não na mesma linha"
+    option = QStyleOptionSlider()
+    janela.size_slider.initStyleOption(option)
+    handle = janela.size_slider.style().subControlRect(
+        QStyle.ComplexControl.CC_Slider,
+        option,
+        QStyle.SubControl.SC_SliderHandle,
+        janela.size_slider,
     )
-    # Busca e filtros finos moram na MESMA faixa da navegação/caminho
-    # (Fatia 66) — não têm mais faixa própria.
-    assert abs(linha_do(janela.search_box) - y_caminho) < 5
-    assert abs(linha_do(janela.res_filter) - y_caminho) < 5
-    assert abs(linha_do(janela.color_filter) - y_caminho) < 5
-    # A contagem de itens desce pra linha das categorias — não sobrou faixa
-    # própria pra ela.
-    assert abs(linha_do(janela.list_scope) - y_categorias) < 5
+
+    assert (handle.width(), handle.height()) == (18, 18)
+    assert handle.top() >= 0
+    assert handle.bottom() < janela.size_slider.height()
 
 
 def test_o_escopo_da_lista_acompanha_a_pasta(janela, qapp):

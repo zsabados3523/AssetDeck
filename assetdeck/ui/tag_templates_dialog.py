@@ -24,7 +24,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-from assetdeck.ui import tag_icons, tag_templates, theme
+from assetdeck.ui import dialog_chrome, tag_icons, tag_templates, theme
 
 log = logging.getLogger(__name__)
 
@@ -69,13 +69,15 @@ class TagTemplateDialog(QDialog):
             "Aplicar", QDialogButtonBox.ButtonRole.AcceptRole)
         self.aplicar_btn.clicked.connect(self._aplicar)
         self.botoes.rejected.connect(self.reject)
+        dialog_chrome.prepare_actions(self.botoes)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(10)
-        layout.addWidget(QLabel(
-            "Cria as tags que faltam. As que você já tem ficam intactas — "
-            "cor, ícone e assets marcados."))
+        dialog_chrome.add_heading(
+            layout, "Aplicar template de tags",
+            "Cria as tags que faltam. As que você já tem ficam intactas, "
+            "incluindo cor, ícone e assets marcados.")
         layout.addWidget(self.template_combo)
         layout.addLayout(linha)
         layout.addWidget(self.arvore, stretch=1)

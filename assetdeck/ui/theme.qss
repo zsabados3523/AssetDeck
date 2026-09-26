@@ -27,14 +27,42 @@ QMainWindow {
     background-color: $bg;
 }
 
-/* QDialog NÃO arredonda (tentado e revertido — ver theme.py). Ao contrário
- * de QMenu, um QDialog normal GANHA barra de título nativa do gerenciador de
- * janelas (minimizar/maximizar/fechar) — cortar cantos por baixo dela deixa
- * uma costura feia onde o retângulo quadrado da barra encontra o corpo
- * arredondado (visto na tela pelo Rafael). QMenu não tem esse problema (é
- * uma janela popup sem decoração nenhuma), então continua arredondado. */
+/* O topo do corpo de QDialog segue reto para alinhar à moldura nativa. Os
+ * cantos inferiores são desenhados pelo QSS, com antialiasing. */
 QDialog {
     background-color: $bg;
+    border-bottom-left-radius: $radius_panel;
+    border-bottom-right-radius: $radius_panel;
+}
+
+QMessageBox#assetdeckMessageBox {
+    background-color: $bg;
+}
+
+QMessageBox#assetdeckMessageBox QPushButton {
+    min-width: 72px;
+}
+
+QMessageBox#assetdeckMessageBox QDialogButtonBox {
+    border-top: 1px solid $hairline;
+    padding-top: 8px;
+}
+
+QLabel#dialogHeading {
+    color: $title;
+    font-family: $font_family_display;
+    font-size: $font_size_title;
+    font-weight: 700;
+}
+
+QLabel#dialogDescription {
+    color: $text_muted;
+    font-size: $font_size_small;
+}
+
+QDialogButtonBox#dialogActions {
+    border-top: 1px solid $hairline;
+    padding-top: 8px;
 }
 
 /* Superfície de fundo da janela. É o widget central que recebe o fundo, e não
@@ -158,13 +186,23 @@ QPushButton#danger:pressed {
     padding-bottom: 7px;
 }
 
-/* Lateral das categorias: mesma pastilha de item ativo da lateral
- * principal (Fatia 76), pra as duas listas do app lerem igual. */
+QWidget#settingsNavPanel {
+    background: $bg;
+    border-right: 1px solid $hairline;
+}
+
+QLabel#settingsNavTitle {
+    color: $text_muted;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1px;
+}
+
+/* Lateral das categorias: usa a mesma pastilha ativa da biblioteca. */
 QListWidget#cfgLista {
     background: transparent;
     border: none;
-    border-right: 1px solid $hairline;
-    padding: 8px 6px;
+    padding: 0;
 }
 
 /* Pastilhas do topo do painel (Fatia 79): formato, tipo e tamanho. Eram três
@@ -234,13 +272,65 @@ QPushButton#acaoIcone:checked {
  * lida como "título + apoio" em vez de duas informações concorrendo. */
 QLabel#listScope {
     color: $title;
-    font-size: $font_size;
+    font-family: $font_family_display;
+    font-size: $font_size_title;
     font-weight: 600;
 }
 
 QLabel#listCount {
     color: $text_muted;
     font-size: $font_size_small;
+}
+
+QLabel#gridSizeValue {
+    background-color: $field;
+    border: 1px solid $border;
+    border-radius: $radius_pill_small;
+    color: $text;
+    font-size: $font_size_small;
+    font-weight: 600;
+    padding: 2px 6px;
+}
+
+QLabel#pageTitle {
+    color: $title;
+    font-family: $font_family_display;
+    font-size: $font_size_page_title;
+    font-weight: 600;
+    letter-spacing: -0.7px;
+}
+
+QLabel#gridSizeLabel {
+    color: $text_muted;
+    font-size: $font_size_small;
+}
+
+QWidget#pageHeader {
+    min-height: 36px;
+}
+
+QWidget#assetWorkspace {
+    background: $bg;
+}
+
+QWidget#assetToolbar {
+    border-top: 1px solid $hairline;
+    border-bottom: 1px solid $hairline;
+    padding: 12px 0;
+}
+
+#pageHeader QLineEdit {
+    min-height: 34px;
+    padding: 0 10px;
+    border-radius: $radius_control;
+}
+
+QWidget#typeFiltersRow {
+    min-height: 35px;
+}
+
+QWidget#gridHeader {
+    min-height: 32px;
 }
 
 /* -------------------------------------------------------------- lateral -- */
@@ -250,6 +340,49 @@ QLabel#listCount {
  * apoiado em cima de alguma coisa em vez de flutuar solto. */
 QWidget#sidebarRail {
     background-color: $bg;
+}
+
+QWidget#sidebarPanel {
+    background: $bg;
+    border-right: 1px solid $hairline;
+}
+
+QLabel#sidebarHeading {
+    color: $title;
+    font-family: $font_family_display;
+    font-size: $font_size_title;
+    font-weight: 600;
+}
+
+QFrame#sidebarRule, QFrame#topContextDivider {
+    background: $hairline;
+    border: none;
+}
+
+QToolButton#sidebarNavItem, QToolButton#sidebarSettings {
+    min-height: 34px;
+    padding: 0 9px;
+    border: 1px solid transparent;
+    border-radius: $radius_control;
+    background: transparent;
+    text-align: left;
+    color: $text_muted;
+}
+
+QToolButton#sidebarNavItem:hover, QToolButton#sidebarSettings:hover {
+    background: $surface_raised;
+    border-color: $border;
+    color: $text;
+}
+
+QToolButton#sidebarNavItem:checked {
+    background: $accent_soft;
+    color: $title;
+    font-weight: 600;
+}
+
+QToolButton#sidebarSettings:pressed, QToolButton#sidebarNavItem:pressed {
+    background: $surface_sunken;
 }
 
 QToolButton#railButton {
@@ -296,11 +429,15 @@ QWidget#sidebarHeader:hover {
     border: 1px solid $border;
 }
 
+QWidget#sidebarHeader:focus {
+    background-color: $surface_raised;
+    border: 1px solid $focus;
+}
+
 QLabel#sidebarSectionTitle {
-    color: $text_muted;
+    color: $text;
     font-size: $font_size_small;
-    font-weight: 700;
-    letter-spacing: 1px;
+    font-weight: 600;
 }
 
 /* Contador: mais apagado que o título de propósito. É informação de apoio —
@@ -334,8 +471,110 @@ QLabel#sectionTitle {
 
 QLabel#title {
     color: $title;
+    font-family: $font_family_display;
     font-size: $font_size_title;
     font-weight: 600;
+}
+
+QWidget#inspectorPanel {
+    background: $bg;
+    border-left: 1px solid $hairline;
+}
+
+QLabel#inspectorHeading {
+    color: $text_muted;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    padding-bottom: 9px;
+    border-bottom: 1px solid $hairline;
+}
+
+QLabel#inspectorCategory {
+    color: $text_muted;
+    font-size: $font_size_small;
+}
+
+/* Preview ampliado: palco e inspetor seguem a mesma divisão da biblioteca. */
+QWidget#previewStage {
+    background: $surface_raised;
+    border: 1px solid $hairline;
+    border-radius: $radius_panel;
+}
+
+QWidget#previewInspector {
+    background: transparent;
+}
+
+QFrame#previewDivider {
+    background: $hairline;
+    border: none;
+}
+
+QLabel#previewSubtitle {
+    color: $text_muted;
+    font-size: $font_size_small;
+}
+
+QLabel#previewSectionTitle {
+    color: $text_muted;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    padding-bottom: 7px;
+    border-bottom: 1px solid $hairline;
+}
+
+QLabel#previewMetaLabel {
+    color: $text_muted;
+    font-size: $font_size_small;
+}
+
+QLabel#previewMetaValue, QLabel#previewMapCount {
+    color: $text;
+    font-size: $font_size_small;
+    font-weight: 600;
+}
+
+QPushButton#previewMapOption {
+    min-height: 30px;
+    padding: 3px 9px;
+    text-align: left;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: $radius_control;
+}
+
+QPushButton#previewMapOption:hover {
+    background: $surface_raised;
+    border-color: $border;
+}
+
+QPushButton#previewMapOption:pressed {
+    background: $accent_soft;
+    border-color: $border;
+}
+
+QPushButton#previewMapOption:checked {
+    background: $accent_soft;
+    border-color: transparent;
+    color: $title;
+    font-weight: 600;
+}
+
+QLabel#themeTypeSample {
+    background-color: $type_tint;
+    border-radius: $radius_card;
+    color: $on_type_tint;
+    font-size: 11px;
+}
+
+QLabel#themeTypeChip {
+    background-color: $accent;
+    border-radius: $radius_chip_small;
+    color: $on_accent;
+    font-size: 9px;
+    padding: 1px 4px;
 }
 
 /* Dica de teclado do rodapé dos visualizadores 3D (Fatia 90). Mais apagada
@@ -344,6 +583,52 @@ QLabel#title {
 QLabel#visorDica {
     color: $text_muted;
     font-size: $font_size_small;
+}
+
+QWidget#viewerInspector {
+    background: transparent;
+}
+
+QFrame#viewerDivider {
+    background: $hairline;
+    border: none;
+}
+
+QLabel#viewerInfoHeading {
+    color: $text_muted;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    padding: 0 0 7px 0;
+    border-bottom: 1px solid $hairline;
+}
+
+QLabel#viewerInfoLabel {
+    color: $text_muted;
+    font-size: $font_size_small;
+}
+
+QLabel#viewerInfoValue {
+    color: $text;
+    font-size: $font_size_small;
+    font-weight: 600;
+}
+
+QWidget#viewerMaterialRow {
+    background: transparent;
+    border-bottom: 1px solid $hairline;
+    border-radius: $radius_control;
+}
+
+QLabel#viewerMaterialName {
+    color: $text;
+    font-size: $font_size_small;
+    font-weight: 600;
+}
+
+QLabel#viewerMaterialSource {
+    color: $text_muted;
+    font-size: 10px;
 }
 
 QLabel#muted, QLabel#previewInfo {
@@ -426,16 +711,19 @@ QPushButton:pressed, QToolButton:pressed {
     padding-bottom: 7px;
 }
 
-/* Marcado (persistente) é pastilha azul com o texto no destaque — Fatia 44.
- * É o estado que responde "qual filtro está ligado agora": era cinza sobre
- * cinza, e o Rafael não conseguia dizer, olhando a barra de categorias, o que
- * estava ativo. Aqui o azul carrega informação, que é a única condição em que
- * este projeto gasta cor. */
+/* Marcado (persistente) usa pastilha neutra com texto de alto contraste. É o
+ * estado que responde "qual filtro está ligado agora" sem depender de cor. */
 QPushButton:checked, QToolButton:checked {
     background-color: $accent_soft;
     border: 1px solid transparent;
     color: $accent;
     font-weight: 600;
+}
+
+QPushButton:focus, QToolButton:focus,
+QPushButton#primary:focus, QToolButton#pill:focus,
+QToolButton#pillMini:focus {
+    border-color: $focus;
 }
 
 QPushButton:disabled, QToolButton:disabled {
@@ -470,7 +758,7 @@ QPushButton#primary:pressed {
  * ver no painel de detalhes sem asset nenhum selecionado: "Abrir pasta"
  * aparecia corretamente apagado ao lado de um "Abrir com app padrão" que
  * parecia clicável. Achado na revisão visual da Fase 7 — o bug é antigo, só
- * ficou gritante quando o destaque virou laranja. */
+ * ficou gritante quando o destaque anterior dominava a tela. */
 QPushButton#primary:disabled {
     background-color: $surface;
     border: 1px solid $border;
@@ -514,6 +802,55 @@ QToolButton#pill:checked, QToolButton#pillMini:checked {
     border-radius: $radius_pill;
     color: $accent;
     font-weight: 600;
+}
+
+/* Categorias e filtros finos compartilham geometria, altura e estados. */
+QToolButton#toolbarFilter, QToolButton#toolbarCategory {
+    padding: 2px 10px;
+    border: 1px solid $border;
+    border-radius: $radius_control;
+    background-color: $surface;
+    color: $text_muted;
+}
+
+QToolButton#toolbarFilter:hover, QToolButton#toolbarCategory:hover {
+    background-color: $surface_raised;
+    border: 1px solid $border_strong;
+    border-radius: $radius_control;
+}
+
+QToolButton#toolbarFilter:pressed, QToolButton#toolbarCategory:pressed {
+    background-color: $surface_sunken;
+    border: 1px solid $border_strong;
+    border-radius: $radius_control;
+    padding-top: 3px;
+    padding-bottom: 1px;
+}
+
+QToolButton#toolbarFilter:checked, QToolButton#toolbarCategory:checked {
+    background-color: $accent_soft;
+    border: 1px solid transparent;
+    border-radius: $radius_control;
+    color: $accent;
+    font-weight: 600;
+}
+
+QToolButton#toolbarFilter:focus, QToolButton#toolbarCategory:focus {
+    border-color: $focus;
+}
+
+QToolButton#toolbarFilter::menu-indicator {
+    subcontrol-origin: padding;
+    subcontrol-position: center right;
+    right: 5px;
+    width: 9px;
+}
+
+QToolButton#toolbarCategory::menu-button {
+    border: none;
+    border-top-right-radius: $radius_control;
+    border-bottom-right-radius: $radius_control;
+    width: 14px;
 }
 
 
@@ -578,35 +915,12 @@ QToolButton#pill::menu-indicator {
 
 /* ------------------------------------------ seletor de biblioteca (F77) -- */
 
-/* O Rafael: "o botão de trocar de biblioteca parece meio cru". Era um
- * `#ghost` com o nome da biblioteca em texto pelado — sem ícone, sem
- * contorno, sem nada dizendo que abria um menu. Agora tem ícone à esquerda,
- * seta à direita e os mesmos estados de elevação do resto do app. Fica em
- * pastilha porque mora na faixa da marca, onde não há moldura nenhuma pra
- * apoiá-lo. */
-/* Borda VISÍVEL em repouso (Fatia 79). Na 77 ela só aparecia no hover, e o
- * Rafael voltou a cobrar: "ainda estou esperando a borda do botão de trocar a
- * biblioteca". Ele está certo — este botão mora na faixa da marca, onde não
- * há painel nenhum atrás pra apoiá-lo; sem contorno permanente ele lê como
- * texto, não como controle. É a exceção deliberada à regra dos botões
- * discretos do app (`#ghost`), que vivem DENTRO de painéis. */
-/* O padding é o MESMO dos outros botões de propósito (Fatia 79b). Com os
- * 5px que havia aqui o botão media 31px de altura, e um raio de 18px passa
- * de metade disso — o Qt então DESCARTA o arredondamento inteiro e devolve
- * um retângulo, sem erro nenhum. Foi exatamente o que o Rafael viu ("o botão
- * de selecionar a biblioteca ainda não está arredondado"), e é a mesma
- * armadilha já documentada em `theme.radius_pill`. Com 8px ele vai a 37px,
- * igual ao botão de filtro, e o raio passa a caber. */
+/* O contorno permanente identifica o controle na faixa da marca. O seletor
+ * compartilha raio, fundo e estados com os demais botões. */
 QToolButton#libSwitch {
-    background: transparent;
+    background-color: $surface;
     border: 1px solid $border;
-    /* Raio 13 e não $radius_pill (18): com o padding menor a pastilha tem 26px
-     * de altura, e o Qt DESCARTA um raio maior que a metade da altura — o
-     * botão voltaria a ter canto reto (já aconteceu, Fatia 79b). */
-    border-radius: $radius_pill_small;
-    /* 8px antes. Encolher é o que faz o seletor BOIAR na faixa em vez de
-     * ocupá-la inteira: media 37px numa faixa de 37px, então o AlignVCenter
-     * que já estava lá não tinha o que centralizar. */
+    border-radius: $radius_control;
     padding: 4px 12px;
     color: $text_muted;
     font-weight: 600;
@@ -621,8 +935,6 @@ QToolButton#libSwitch:hover {
 QToolButton#libSwitch:pressed {
     background-color: $surface_sunken;
     border: 1px solid $border;
-    /* Afunda 1px sem mudar a ALTURA (a soma continua 8): altura maior aqui
-     * estouraria o raio de 13 e o canto ficaria reto só enquanto clicado. */
     padding-top: 5px;
     padding-bottom: 3px;
 }
@@ -889,13 +1201,50 @@ QTreeView::item:hover, QListWidget::item:hover, QTableView::item:hover {
  * embaixo — lateral, filtros") e o que a direção visual aprovada da Fase 7
  * pedia ("sidebar com item ativo em pastilha preenchida"). Não é a barra
  * sólida reprovada lá atrás: aquela era petróleo cheio ocupando a lista
- * inteira; esta é laranja lavado com o texto no destaque, mesmo par de cores
- * dos filtros ativos — e o contraste dele está travado em `test_theme.py`. */
+ * inteira; esta é uma pastilha neutra com texto contrastante, como nos
+ * filtros ativos — e o contraste está travado em `test_theme.py`. */
 QTreeView::item:selected, QListWidget::item:selected, QTableView::item:selected {
     background-color: $accent_soft;
     color: $accent;
     border: 1px solid transparent;
     font-weight: 600;
+}
+
+QTreeView::item:focus, QListWidget::item:focus, QTableView::item:focus {
+    border: 1px solid $focus;
+}
+
+/* Pastas e tags dividem a mesma altura de linha. Os ícones de tag ocupam
+ * 16px, então ambos usam a mesma caixa mínima e o mesmo respiro vertical. */
+QTreeWidget#folderTree::item,
+QTreeWidget#tagTree::item,
+QTreeWidget#inspectorTagsTree::item {
+    min-height: 22px;
+    padding: 2px 5px;
+    border: 1px solid transparent;
+    border-radius: $radius_control;
+}
+
+QTreeWidget#folderTree::item:hover,
+QTreeWidget#tagTree::item:hover,
+QTreeWidget#inspectorTagsTree::item:hover {
+    background-color: $surface_raised;
+    border: 1px solid $border;
+}
+
+QTreeWidget#folderTree::item:selected,
+QTreeWidget#tagTree::item:selected,
+QTreeWidget#inspectorTagsTree::item:selected {
+    background-color: $accent_soft;
+    color: $accent;
+    border: 1px solid transparent;
+    font-weight: 600;
+}
+
+QTreeWidget#folderTree::item:focus,
+QTreeWidget#tagTree::item:focus,
+QTreeWidget#inspectorTagsTree::item:focus {
+    border: 1px solid $focus;
 }
 
 QListWidget::item {
@@ -941,27 +1290,36 @@ QHeaderView::section {
 /* --------------------------------------------------------------- menus -- */
 
 QMenuBar {
-    background: transparent;
+    background: $bg;
     color: $text;
+    border-bottom: 1px solid $hairline;
 }
 
 /* Marca e contexto ocupam os cantos da MESMA faixa dos menus (Fatia 50) —
  * ver `MainWindow._setup_brand_bar` para por que as abas do mockup ficaram
- * de fora. */
-QFrame#brandDot {
+ * de fora. O símbolo de quatro módulos substitui o ponto genérico do
+ * protótipo anterior e mantém o nome AssetDeck como marca principal. */
+QFrame#brandGlyph {
     background-color: $accent;
-    border-radius: 2px;
+    border-radius: $radius_brand_tile;
 }
 
 QLabel#brandName {
     color: $title;
-    font-size: $font_size_title;   /* 13px antes (Fatia 95: "um pouquinho maior") */
+    font-family: $font_family_display;
+    font-size: $font_size_brand;
     font-weight: 700;
+    letter-spacing: .2px;
 }
 
 /* Contexto (biblioteca aberta e modo) é apoio: apagado de propósito, para não
  * competir com os menus, que são o que se clica nesta faixa. */
 QLabel#brandContext {
+    color: $text_muted;
+    font-size: $font_size_small;
+}
+
+QLabel#topBlenderStatus {
     color: $text_muted;
     font-size: $font_size_small;
 }
@@ -1002,6 +1360,19 @@ QMenu::separator {
     height: 1px;
     background-color: $border;
     margin: 5px 8px;
+}
+
+QMenu#filterPopup {
+    min-width: 190px;
+    padding: 6px 0;
+}
+
+QMenu#filterPopup::item {
+    min-width: 190px;
+    min-height: 22px;
+    padding: 8px 28px 8px 12px;
+    margin: 0;
+    border-radius: $radius_control;
 }
 
 QToolTip {
@@ -1065,14 +1436,8 @@ QProgressBar::chunk {
     border-radius: 5px;
 }
 
-/* Slider de tamanho da miniatura (Fatia 28c): trilho fino, trecho
- * preenchido na cor de destaque — minimalista, sem o relevo 3D padrão do
- * Fusion. Fatia 56: a alça deixou de ser uma bolinha 16×16 flutuando
- * (destoava dos botões ícone-only ao lado, agora que o slider mudou do
- * rodapé pra faixa de nota/resolução/cor) — virou um traço fino e baixo,
- * do mesmo jeito "achatado" da trilha, não um raio de $radius_control
- * (que arredondaria demais numa alça deste tamanho e voltaria a parecer
- * bola). */
+/* Slider contínuo de tamanho da miniatura: trilho fino e alça circular.
+ * Altura explícita no widget e no handle mantém o círculo inteiro visível. */
 QSlider::groove:horizontal {
     height: 4px;
     background: $bg_tint;
@@ -1085,17 +1450,22 @@ QSlider::sub-page:horizontal {
 }
 
 QSlider::handle:horizontal {
-    width: 6px;
-    height: 14px;
-    margin: -5px 0;
+    width: 16px;
+    height: 18px;
+    margin: -7px 0;
     background: $surface;
     border: 1px solid $border_strong;
-    border-radius: 2px;
+    border-radius: $radius_slider_handle;
 }
 
 QSlider::handle:horizontal:hover {
     background: $accent;
     border: 1px solid $accent;
+}
+
+QSlider::handle:horizontal:pressed {
+    background: $accent_press;
+    border: 1px solid $accent_press;
 }
 
 QSplitter::handle {

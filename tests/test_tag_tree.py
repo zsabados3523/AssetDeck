@@ -76,6 +76,40 @@ def test_item_com_icone_escolhido(qapp, conn):
     assert not _por_nome(t, "Madeira").icon(0).isNull()
 
 
+def test_arvore_usa_icones_maiores_para_tags(qapp):
+    from PySide6.QtCore import QSize
+
+    t = TagTree()
+    assert t.objectName() == "tagTree"
+    assert t.iconSize() == QSize(16, 16)
+
+
+def test_linhas_de_tags_têm_a_mesma_altura_das_pastas(qapp, conn):
+    from assetdeck.db.repos import tags as tags_repo
+    from assetdeck.ui.folder_tree import FolderTree
+
+    tags_repo.create(conn, "Madeira", color="#6b4f3a", icon="tag-madeira")
+    pastas = FolderTree()
+    tags = TagTree()
+    pastas.reload(conn)
+    tags.reload(conn)
+    pastas.resize(240, 180)
+    tags.resize(240, 180)
+    pastas.show()
+    tags.show()
+    qapp.processEvents()
+
+    pasta_item = pastas.topLevelItem(0)
+    tag_item = tags.topLevelItem(1)
+    assert (
+        pastas.visualItemRect(pasta_item).height()
+        == tags.visualItemRect(tag_item).height()
+    )
+    assert pastas.uniformRowHeights() and tags.uniformRowHeights()
+    pastas.close()
+    tags.close()
+
+
 def test_primeira_carga_abre_a_arvore_inteira(qapp, conn):
     materiais = tags_repo.create(conn, "Materiais")
     tags_repo.create(conn, "Madeira", parent_id=materiais)

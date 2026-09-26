@@ -22,6 +22,7 @@ def test_primeira_execucao_cria_config_com_padroes(tmp_path, monkeypatch):
     assert cfg["library_root"] == config.DEFAULTS["library_root"]
     salvo = json.loads((tmp_path / "config.json").read_text(encoding="utf-8"))
     assert salvo == config.DEFAULTS
+    assert cfg["theme_mode"] == "claro"
 
 
 def test_config_corrompido_e_preservado_e_recriado(tmp_path, monkeypatch):

@@ -13,6 +13,8 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
+from assetdeck.ui import dialog_chrome
+
 
 class RelocateDialog(QDialog):
     """Tabela de candidatos a religar, todos marcados por padrão. O Rafael
@@ -27,11 +29,10 @@ class RelocateDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(10)
-        layout.addWidget(QLabel(
+        dialog_chrome.add_heading(layout, "Relocalizar assets perdidos",
             f"{len(candidatos)} asset(s) sumido(s) batem com um arquivo "
             "encontrado em outro lugar (mesmo conteúdo). Desmarque o que não "
-            "quiser religar — nada é apagado do disco, só o banco é ajustado."
-        ))
+            "quiser religar — nada é apagado do disco; só o banco é ajustado.")
 
         self.table = QTableWidget(len(candidatos), 3)
         self.table.setObjectName("cardFlat")
@@ -59,6 +60,7 @@ class RelocateDialog(QDialog):
         botoes.addButton(QDialogButtonBox.StandardButton.Cancel)
         religar.clicked.connect(self.accept)
         botoes.rejected.connect(self.reject)
+        dialog_chrome.prepare_actions(botoes)
         layout.addWidget(botoes)
 
     def selected_pairs(self) -> list[tuple[int, int]]:

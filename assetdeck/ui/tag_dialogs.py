@@ -26,7 +26,7 @@ from PySide6.QtWidgets import (
 )
 
 from assetdeck.db.repos import tags as tags_repo
-from assetdeck.ui import tag_icons
+from assetdeck.ui import dialog_chrome, tag_icons
 
 log = logging.getLogger(__name__)
 
@@ -87,8 +87,12 @@ class QuickTagDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(10)
+        dialog_chrome.add_heading(
+            layout, "Tags", f"{len(asset_ids)} assets selecionados"
+        )
         layout.addWidget(self.search)
         layout.addWidget(self.tree)
+        dialog_chrome.prepare_actions(botoes)
         layout.addWidget(botoes)
 
     def _filter(self, texto: str) -> None:
@@ -164,10 +168,14 @@ class AliasDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(10)
-        layout.addWidget(QLabel("Buscar por qualquer um destes acha a tag:"))
+        dialog_chrome.add_heading(
+            layout, "Aliases",
+            f"Sinônimos de {tags_repo.tag_path(conn, tag_id)}.",
+        )
         layout.addWidget(self.lista)
         layout.addLayout(linha)
         layout.addWidget(remover)
+        dialog_chrome.prepare_actions(fechar)
         layout.addWidget(fechar)
         self._reload()
 
@@ -221,6 +229,10 @@ class TagIconDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(10)
+        self.resize(460, 620)
+        dialog_chrome.add_heading(
+            layout, "Ícone da tag", tags_repo.tag_path(conn, tag_id)
+        )
 
         for secao in tag_icons.SECOES:
             titulo = QLabel(secao.titulo)
@@ -250,6 +262,7 @@ class TagIconDialog(QDialog):
                                   | QDialogButtonBox.StandardButton.Cancel)
         botoes.accepted.connect(self._confirmar)
         botoes.rejected.connect(self.reject)
+        dialog_chrome.prepare_actions(botoes)
         layout.addWidget(botoes)
 
     def _escolher(self, key: str) -> None:

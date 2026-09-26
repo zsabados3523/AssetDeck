@@ -18,6 +18,8 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
+from assetdeck.ui import dialog_chrome
+
 
 def _resolucao(membro: dict) -> str:
     if membro["width"] and membro["height"]:
@@ -36,11 +38,11 @@ class DuplicatesDialog(QDialog):
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(10)
         total_itens = sum(len(g) for g in grupos)
-        layout.addWidget(QLabel(
-            f"{len(grupos)} grupo(s) de mesma textura ({total_itens} asset(s) no total). "
-            "Marcado = fica OCULTO da grade (reversível em 'Mostrar ocultos'); nada é "
-            "apagado do disco. Por padrão, mantém visível o de maior resolução."
-        ))
+        dialog_chrome.add_heading(
+            layout, "Revisar duplicados",
+            f"{len(grupos)} grupo(s), {total_itens} asset(s). Marcado = fica oculto "
+            "da grade (reversível em 'Mostrar ocultos'); nada é apagado do disco. "
+            "Por padrão, mantém visível o de maior resolução.")
 
         self.table = QTableWidget(total_itens + len(grupos), 3)
         self.table.setObjectName("cardFlat")
@@ -81,6 +83,7 @@ class DuplicatesDialog(QDialog):
         botoes.addButton(QDialogButtonBox.StandardButton.Cancel)
         ocultar.clicked.connect(self.accept)
         botoes.rejected.connect(self.reject)
+        dialog_chrome.prepare_actions(botoes)
         layout.addWidget(botoes)
 
     def selected_asset_ids(self) -> list[int]:

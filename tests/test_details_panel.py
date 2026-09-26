@@ -69,11 +69,30 @@ def test_troca_de_blend_pra_outro_formato_esconde_de_novo(painel):
 
 # ------------------------------------------------- layout do painel (F48) --
 
-def test_a_moldura_da_miniatura_existe_mesmo_vazia(painel):
-    """Sem asset selecionado, o topo do painel era um buraco de 200px com um
-    texto boiando no meio e nada indicando que ali é o lugar da imagem."""
+def test_a_moldura_da_miniatura_ocupa_o_painel_mesmo_vazia(painel):
+    """O inspetor usa a faixa inteira para uma capa grande, mesmo vazio."""
+    from PySide6.QtWidgets import QSizePolicy
+
     assert painel.preview.objectName() == "previewTile"
-    assert painel.preview.minimumHeight() >= 180
+    assert painel.preview.minimumHeight() == 156
+    assert painel.preview.sizePolicy().horizontalPolicy() == QSizePolicy.Policy.Expanding
+    assert painel.preview.parentWidget() is painel._overview_row
+
+
+def test_preview_acompanha_a_largura_do_inspetor(painel, qapp):
+    from PySide6.QtGui import QPixmap
+
+    painel.resize(260, 720)
+    painel.show()
+    painel.show_asset(_row("modelo.fbx"), QPixmap(400, 200))
+    qapp.processEvents()
+    largura_inicial = painel.preview.pixmap().width()
+
+    painel.resize(360, 720)
+    qapp.processEvents()
+
+    assert painel.preview.pixmap().width() > largura_inicial
+    painel.close()
 
 
 def test_a_ficha_tecnica_alinha_os_valores_a_direita(painel):
@@ -81,24 +100,24 @@ def test_a_ficha_tecnica_alinha_os_valores_a_direita(painel):
     linhas com o valor em posições diferentes, impossíveis de varrer com o
     olho. Alinhados à direita, viram uma coluna só.
 
-    Desde a Fatia 79 (mockup aprovado pelo Rafael) sobraram só DOIS campos
-    aqui — os que são de fato longos. Tipo, formato e tamanho viraram
-    pastilhas no topo, ver o teste logo abaixo.
+    Os quatro valores da ficha ficam alinhados à direita para leitura rápida.
     """
     from PySide6.QtCore import Qt
 
-    for campo in (painel.f_dims, painel.f_path):
+    for campo in (painel.f_format, painel.f_dims, painel.f_size, painel.f_path):
         assert campo.objectName() == "kvValue"
         assert campo.alignment() & Qt.AlignmentFlag.AlignRight
 
 
-def test_formato_tipo_e_tamanho_sao_pastilhas_no_topo(painel):
-    """Fatia 79: eram três das cinco linhas da ficha técnica — respostas
-    curtas demais pra ocupar uma linha inteira cada. Viraram chips na altura
-    do nome, com o FORMATO em destaque (é o que se procura primeiro)."""
-    assert painel.f_format.objectName() == "chipForte"
-    assert painel.f_type.objectName() == "chip"
-    assert painel.f_size.objectName() == "chip"
+def test_resumo_do_inspetor_mostra_tipo_abaixo_do_nome(painel):
+    """O tipo acompanha o nome como subtítulo; formato e tamanho ficam na ficha."""
+    assert painel.f_type.objectName() == "inspectorCategory"
+    assert painel.f_type.parentWidget().parentWidget() is painel._overview_row
+
+
+def test_tipo_no_detalhe_usa_rotulo_amigavel(painel):
+    painel.show_asset(_row("material.blend"), None)
+    assert painel.f_type.text() == "Modelo 3D"
 
 
 def test_as_secoes_do_painel_abrem_e_fecham(painel):
@@ -162,15 +181,15 @@ def test_o_favorito_cabe_na_largura_do_painel(painel, qapp):
     painel.close()
 
 
-def test_o_tipo_aparece_com_o_rotulo_da_categoria(painel):
+def test_o_tipo_aparece_com_rotulo_especifico_da_tela(painel):
     """"hdri"/"pbr_set" são vocabulário de SCHEMA, não de tela — apareciam em
-    minúsculas na ficha técnica. A ficha usa o mesmo rótulo da barra de
-    categorias; tipo desconhecido cai no valor cru em vez de sumir."""
+    minúsculas na ficha técnica. O detalhe usa o mesmo rótulo específico do
+    subtítulo do card; tipo desconhecido cai no valor cru em vez de sumir."""
     painel.show_asset(dict(_row("ceu.exr"), asset_type="hdri"), None)
-    assert painel.f_type.text() == "HDRIs"
+    assert painel.f_type.text() == "HDRI"
 
     painel.show_asset(dict(_row("parede.blend"), asset_type="pbr_set"), None)
-    assert painel.f_type.text() == "Materiais"
+    assert painel.f_type.text() == "Material PBR"
 
     painel.show_asset(dict(_row("x.zzz"), asset_type="tipo_novo"), None)
     assert painel.f_type.text() == "tipo_novo"
