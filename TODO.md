@@ -3940,6 +3940,26 @@ derruba o lote; pasta inexistente dá plano vazio. Suíte completa:
 test_modo_screenshot_nao_trava_num_dialogo` — `PermissionError` num
 tmp path `/media/root/...`, falha idêntica sem esta fatia).
 
+### ☑ Fatia 110 — Iluminação Area Light nos previews
+
+Portada para a versão principal: quando o `.blend` não tem luz própria,
+o render automático usa uma Area Light em disco, lateral a 45° e elevada
+40°, com diâmetro proporcional ao maior lado do asset e potência ajustada
+à escala. O World usa as preferências de cor e intensidade como luz de
+preenchimento. Câmeras e luzes próprias continuam respeitadas.
+
+- O enquadramento automático acompanha a escala do maior lado, com margem
+  1,15; é uma estimativa, não uma garantia contra cortes para toda geometria.
+- As preferências existentes foram mantidas: intensidade ambiente 1,8
+  corresponde a World strength 1,0; luz principal 3,0 é a potência padrão.
+- `tests/test_render_area.py` valida o setup e faz render de integração
+  com Blender quando disponível. `test_render_worker.py` verifica que as
+  preferências chegam intactas ao comando do Blender.
+
+**Como testar no app:** abrir Preferências de iluminação, ajustar cor,
+intensidade ambiente e luz principal, e gerar um preview de um `.blend`
+sem luz própria. Um arquivo que já tenha luz própria deve manter seu setup.
+
 ### ☑ Fatia 111 — Regenerar capa dos assets selecionados
 
 Portada para a versão principal após o redesign. No menu de contexto,
