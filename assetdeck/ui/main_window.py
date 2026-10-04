@@ -122,6 +122,7 @@ class MainWindow(QMainWindow):
         self._db_path = db_path
         self._scan = ScanController(db_path, self._library_root, parent=self)
         self._closing_after_scan = False
+        self._scan_calc_total = 0
         self._pipeline = ThumbnailPipeline(thumbs_dir, parent=self)
 
         # Maximização (Fatia 94). `_maximizada_desejada` é o que veio do
@@ -2338,21 +2339,34 @@ class MainWindow(QMainWindow):
     def _on_progress(self, done: int, total: int, live_count: int) -> None:
         if total == -1:
             message = f"Descobrindo arquivos… {done} encontrados"
+            self._scan_calc_total = 0
         elif total == -2:
             message = f"Processando arquivos… {done} processados"
+            self._scan_calc_total = 0
         elif total == -3:
-            message = f"Calculando fingerprints… {done} neste lote"
+            self._scan_calc_total = done
+            message = f"Calculando fingerprints… 0/{done} neste lote"
+            self.progress.setRange(0, max(done, 1))
+            self.progress.setValue(0)
+        elif total == -4:
+            limite = max(self._scan_calc_total, 1)
+            message = f"Calculando fingerprints… {done}/{self._scan_calc_total} neste lote"
+            self.progress.setRange(0, limite)
+            self.progress.setValue(min(done, limite))
         elif total <= 0:
             message = f"Varredura em andamento… {done} arquivos percorridos"
+            self._scan_calc_total = 0
         else:
             message = f"Indexando… {done}/{total} arquivos"
+            self._scan_calc_total = 0
 
-        if total <= 0:
+        if total <= 0 and total not in (-3, -4):
             if self.progress.maximum() != 0:
                 self.progress.setRange(0, 0)
-        elif self.progress.maximum() != total:
+        elif total > 0 and self.progress.maximum() != total:
             self.progress.setRange(0, total)
-        self.progress.setValue(done)
+        if total > 0:
+            self.progress.setValue(done)
         self.footer_count.setText(f"{live_count} assets")
         self.statusBar().showMessage(message)
 
