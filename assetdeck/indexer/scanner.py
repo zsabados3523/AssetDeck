@@ -16,8 +16,10 @@ import os
 import sqlite3
 import time
 import uuid as uuid_mod
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from functools import partial
 from pathlib import Path
 from typing import Callable
 
@@ -161,6 +163,11 @@ WORKERS_PADRAO = 4
 # progresso continuem respondendo: com um único `map` sobre a biblioteca
 # inteira, cancelar no meio não teria efeito nenhum até o fim.
 _BLOCO = 100
+
+# `stat()` em caminhos SMB/GVFS espera resposta da rede e quase não consome
+# CPU. Sobrepor algumas consultas reduz o tempo ocioso sem abrir conteúdo em
+# paralelo nem multiplicar a carga de leitura do NAS.
+_STAT_WORKERS = 4
 
 
 def calcular_pesado(path: Path) -> tuple:
@@ -361,6 +368,8 @@ def scan_library(
     walk_had_errors = False
     pool = None
     pool_attempted = False
+    stat_pool = ThreadPoolExecutor(max_workers=_STAT_WORKERS,
+                                   thread_name_prefix="assetdeck-stat")
     bloco: list[Path] = []
     started_at = time.monotonic()
 
@@ -409,8 +418,8 @@ def scan_library(
         # Arquivos conhecidos e intocados são resolvidos logo após um único
         # stat. Além de cortar uma ida de metadados ao NAS, não ficam esperando
         # o hash de outros arquivos do mesmo bloco terminar.
-        for path in paths:
-            precisa, st = _avaliar_calculo(root, path, known)
+        avaliar = partial(_avaliar_calculo, root, known=known)
+        for path, (precisa, st) in zip(paths, stat_pool.map(avaliar, paths)):
             if precisa:
                 candidatos.append(path)
             else:
@@ -469,6 +478,7 @@ def scan_library(
             # `cancel_futures` descarta o que ainda não começou — sem isso,
             # fechar no meio da varredura esperava a fila inteira.
             pool.shutdown(wait=True, cancel_futures=True)
+        stat_pool.shutdown(wait=True, cancel_futures=True)
 
     log.info("Varredura de %s: %d arquivos encontrados, %d já no banco.",
              root, discovered, len(known))
