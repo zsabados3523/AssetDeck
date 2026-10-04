@@ -121,6 +121,7 @@ class MainWindow(QMainWindow):
         self._thumbs_dir = thumbs_dir
         self._db_path = db_path
         self._scan = ScanController(db_path, self._library_root, parent=self)
+        self._closing_after_scan = False
         self._pipeline = ThumbnailPipeline(thumbs_dir, parent=self)
 
         # Maximização (Fatia 94). `_maximizada_desejada` é o que veio do
@@ -2569,11 +2570,34 @@ class MainWindow(QMainWindow):
     # ---- encerramento limpo ----
 
     def closeEvent(self, event) -> None:  # noqa: N802 (nome vem do Qt)
+        if self._closing_after_scan:
+            event.ignore()
+            return
+        if not self._scan.shutdown():
+            event.ignore()
+            self._closing_after_scan = True
+            self.statusBar().showMessage(
+                "Encerrando a varredura antes de fechar… aguarde."
+            )
+            self._scan.stopped.connect(self._close_after_scan_stops)
+            # A thread pode terminar entre o timeout e a conexão do sinal.
+            if not self._scan.running:
+                self._close_after_scan_stops()
+            return
         self._save_ui_state()
-        self._scan.shutdown()
         self._pipeline.shutdown()
         if getattr(self, "_bridge", None) is not None:
             self._bridge.stop()
         if getattr(self, "_render", None) is not None:
             self._render.shutdown()
         super().closeEvent(event)
+
+    def _close_after_scan_stops(self) -> None:
+        if not self._closing_after_scan:
+            return
+        self._closing_after_scan = False
+        try:
+            self._scan.stopped.disconnect(self._close_after_scan_stops)
+        except RuntimeError:
+            log.exception("Falha ao desconectar o encerramento adiado da varredura.")
+        self.close()

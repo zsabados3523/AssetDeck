@@ -99,6 +99,8 @@ class ScanWorker(QObject):
 class ScanController(QObject):
     """Dono da QThread: cria, conecta e desmonta com segurança."""
 
+    stopped = Signal()
+
     def __init__(self, db_path: Path, library_root: Path, parent: QObject | None = None) -> None:
         super().__init__(parent)
         self._db_path = db_path
@@ -117,6 +119,7 @@ class ScanController(QObject):
         self._thread = QThread()
         self._worker = ScanWorker(self._db_path, self._library_root)
         self._worker.moveToThread(self._thread)
+        self._thread.finished.connect(self.stopped)
 
         self._thread.started.connect(self._worker.run)
         self._worker.progress.connect(on_progress)
@@ -129,11 +132,16 @@ class ScanController(QObject):
         self._thread.start()
         log.info("Varredura iniciada em background.")
 
-    def shutdown(self, timeout_ms: int = 5000) -> None:
-        """Pede parada e espera a thread morrer (chamado ao fechar a janela)."""
+    def shutdown(self, timeout_ms: int = 5000) -> bool:
+        """Pede parada; False indica que a janela deve aguardar `stopped`."""
         if self._worker:
             self._worker.request_stop()
         if self._thread and self._thread.isRunning():
             self._thread.quit()
             if not self._thread.wait(timeout_ms):
-                log.error("Thread de varredura não terminou em %dms.", timeout_ms)
+                log.warning(
+                    "Varredura ainda encerrando após %dms; mantendo a janela "
+                    "aberta até a thread terminar.", timeout_ms,
+                )
+                return False
+        return True
