@@ -314,6 +314,41 @@ def test_arquivo_intocado_nao_vai_pro_pool(tmp_path):
     conn.close()
 
 
+def test_arquivo_nao_raster_intocado_nao_refaz_fingerprint(tmp_path, monkeypatch):
+    """Campos visuais NULL são normais em modelos e não pedem novo hash."""
+    from assetdeck.indexer import scanner
+
+    raiz = tmp_path / "lib"
+    raiz.mkdir()
+    modelo = raiz / "modelo.blend"
+    modelo.write_bytes(b"blend" * 100)
+    conn = connect(tmp_path / "nao_raster.db")
+    apply_migrations(conn)
+    lib_id = libraries_repo.get_or_create(conn, raiz)
+    primeira = scan_library(conn, lib_id, raiz, workers=1)
+    assert primeira.added == 1
+
+    chamadas_stat = 0
+    stat_original = Path.stat
+
+    def contar_stat(path, *args, **kwargs):
+        nonlocal chamadas_stat
+        if path == modelo:
+            chamadas_stat += 1
+        return stat_original(path, *args, **kwargs)
+
+    def fingerprint_inesperado(_path):
+        raise AssertionError("modelo inalterado não deve refazer fingerprint")
+
+    monkeypatch.setattr(Path, "stat", contar_stat)
+    monkeypatch.setattr(scanner, "calcular_pesado", fingerprint_inesperado)
+    repetida = scan_library(conn, lib_id, raiz, workers=1)
+
+    assert repetida.unchanged == 1
+    assert chamadas_stat == 1
+    conn.close()
+
+
 # ---- os processos da varredura não podem afogar a máquina ----
 
 def test_worker_da_varredura_usa_uma_thread_e_prioridade_baixa():

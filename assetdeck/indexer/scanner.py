@@ -376,22 +376,16 @@ def scan_library(
         if should_stop and should_stop():
             stats.aborted = True
             return
-        candidatos = [p for p in paths if _precisa_calcular(root, p, known)]
-        # Reindexações sem arquivos novos/alterados não precisam iniciar os
-        # processos filhos, que têm custo de inicialização perceptível.
-        if candidatos and not pool_attempted:
-            pool = _abrir_pool(workers)
-            pool_attempted = True
-        cache = _pre_calcular(pool, candidatos, should_stop=should_stop)
-        for path in paths:
+
+        def processar_arquivo(path: Path, *, cached_stat=None, cache=None) -> None:
+            nonlocal since_commit, done
             if should_stop and should_stop():
                 stats.aborted = True
-                log.warning("Varredura interrompida a pedido (%d arquivos processados).", done)
-                break
+                return
             done += 1
             try:
                 _process_file(conn, library_id, root, path, known, seen, stats,
-                              cache=cache)
+                              cache=cache, cached_stat=cached_stat)
             except OSError:
                 # Arquivo ilegível não derruba a varredura, mas fica no log.
                 stats.errors += 1
@@ -401,9 +395,34 @@ def scan_library(
             if since_commit >= batch_size:
                 conn.commit()
                 since_commit = 0
-            if progress and (done % 10 == 0):
+            if progress and done % 10 == 0:
                 # -1 significa que a quantidade total ainda é desconhecida.
                 progress(done, -1, stats)
+
+        candidatos: list[Path] = []
+        # Arquivos conhecidos e intocados são resolvidos logo após um único
+        # stat. Além de cortar uma ida de metadados ao NAS, não ficam esperando
+        # o hash de outros arquivos do mesmo bloco terminar.
+        for path in paths:
+            precisa, st = _avaliar_calculo(root, path, known)
+            if precisa:
+                candidatos.append(path)
+            else:
+                processar_arquivo(path, cached_stat=st)
+                if stats.aborted:
+                    return
+
+        # Reindexações sem arquivos novos/alterados não precisam iniciar os
+        # processos filhos, que têm custo de inicialização perceptível.
+        if candidatos and not pool_attempted:
+            pool = _abrir_pool(workers)
+            pool_attempted = True
+        cache = _pre_calcular(pool, candidatos, should_stop=should_stop)
+        for path in candidatos:
+            processar_arquivo(path, cache=cache)
+            if stats.aborted:
+                log.warning("Varredura interrompida a pedido (%d arquivos processados).", done)
+                break
 
     try:
         for path in iter_library_files(root, on_error=on_walk_error):
@@ -471,7 +490,16 @@ def _pesado(path: Path, cache: dict | None) -> tuple:
     return calcular_pesado(path)
 
 
-def _precisa_calcular(root: Path, path: Path, known: dict) -> bool:
+def _precisa_backfill_imagem(path: Path, row) -> bool:
+    from assetdeck.thumbs.raster import RASTER_EXTS
+
+    if path.suffix.lower().lstrip(".") not in RASTER_EXTS:
+        return False
+    return (row["width"] is None or row["phash"] is None
+            or row["dominant_color"] is None)
+
+
+def _avaliar_calculo(root: Path, path: Path, known: dict):
     """Este arquivo vai exigir hash/metadados nesta passada?
 
     Decide ANTES de mandar pro pool: arquivo já indexado, do mesmo tamanho,
@@ -480,23 +508,29 @@ def _precisa_calcular(root: Path, path: Path, known: dict) -> bool:
     paralelização justamente onde ela não é necessária.
     """
     if classify(path) is None:
-        return False
+        return False, None
     try:
         rel = path.relative_to(root).as_posix()
         st = path.stat()
     except OSError:
-        return False   # ilegível: o laço serial trata e loga
+        return False, None   # ilegível: o laço serial trata e loga
     row = known.get(rel)
     if row is None:
-        return True                                   # novo
+        return True, st                                # novo
     if row["size_bytes"] != st.st_size or row["mtime_ns"] != st.st_mtime_ns:
-        return True                                   # mudou
-    return (row["width"] is None or row["phash"] is None
-            or row["dominant_color"] is None)         # backfill
+        return True, st                                # mudou
+    precisa = _precisa_backfill_imagem(path, row)
+    return precisa, st
+
+
+def _precisa_calcular(root: Path, path: Path, known: dict) -> bool:
+    """Versão booleana mantida para chamadores e testes existentes."""
+    precisa, _st = _avaliar_calculo(root, path, known)
+    return precisa
 
 
 def _process_file(conn, library_id, root, path, known, seen, stats,
-                  cache: dict | None = None) -> None:
+                  cache: dict | None = None, cached_stat=None) -> None:
     asset_type = classify(path)
     if asset_type is None:
         ext = path.suffix.lower().lstrip(".") or "(sem extensão)"
@@ -506,7 +540,7 @@ def _process_file(conn, library_id, root, path, known, seen, stats,
 
     rel_path = path.relative_to(root).as_posix()
     seen.add(rel_path)
-    st = path.stat()
+    st = cached_stat if cached_stat is not None else path.stat()
 
     row = known.get(rel_path)
     if row is None:
@@ -581,7 +615,7 @@ def _process_file(conn, library_id, root, path, known, seen, stats,
         return
 
     if row["size_bytes"] == st.st_size and row["mtime_ns"] == st.st_mtime_ns:
-        if row["width"] is None or row["phash"] is None or row["dominant_color"] is None:
+        if _precisa_backfill_imagem(path, row):
             # Backfill: linhas antigas (pré-Fatia 9 / pré-Fatia 20 / pré-Fatia
             # 39) ainda sem dimensões e/ou sem phash e/ou sem cor média
             _fp, (w, h, alpha, depth, phash, dominant_color) = _pesado(path, cache)
