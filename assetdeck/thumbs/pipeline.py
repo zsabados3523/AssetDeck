@@ -54,15 +54,29 @@ def rebaixar_esta_thread() -> None:
                     exc_info=True)
 
 
+def _aguardar_retomada(resume: threading.Event, cancel: threading.Event) -> bool:
+    """Aguarda o fim da varredura sem manter uma tarefa ativa no fechamento."""
+    while not cancel.is_set():
+        if resume.wait(timeout=0.1):
+            return not cancel.is_set()
+    return False
+
+
 class _ThumbJob(QRunnable):
-    def __init__(self, signaller: _Signaller, asset_id: int, src: Path, dest: Path) -> None:
+    def __init__(self, signaller: _Signaller, asset_id: int, src: Path,
+                 dest: Path, resume: threading.Event,
+                 cancel: threading.Event) -> None:
         super().__init__()
         self._sig = signaller
         self._asset_id = asset_id
         self._src = src
         self._dest = dest
+        self._resume = resume
+        self._cancel = cancel
 
     def run(self) -> None:
+        if not _aguardar_retomada(self._resume, self._cancel):
+            return
         rebaixar_esta_thread()
         try:
             make_any_thumbnail(self._src, self._dest)
@@ -76,7 +90,7 @@ class _ThumbJob(QRunnable):
 class _MaterialJob(QRunnable):
     def __init__(self, signaller: _MaterialSignaller, asset_id: int, name: str,
                  maps: dict[str, Path], dest: Path, cancel: threading.Event,
-                 size: int) -> None:
+                 resume: threading.Event, size: int) -> None:
         super().__init__()
         self._sig = signaller
         self._asset_id = asset_id
@@ -84,9 +98,12 @@ class _MaterialJob(QRunnable):
         self._maps = maps
         self._dest = dest
         self._cancel = cancel
+        self._resume = resume
         self._size = size
 
     def run(self) -> None:
+        if not _aguardar_retomada(self._resume, self._cancel):
+            return
         rebaixar_esta_thread()
         try:
             if self._cancel.is_set():
@@ -128,6 +145,9 @@ class ThumbnailPipeline(QObject):
         self._pool.setMaxThreadCount(self._normal_thread_count)
         self._material_pool = QThreadPool(self)
         self._material_pool.setMaxThreadCount(1)  # um Blender headless por vez
+        self._scan_resume = threading.Event()
+        self._scan_resume.set()
+        self._thumb_cancel = threading.Event()
         self._material_cancel = threading.Event()
         self._sig = _Signaller()
         self._sig.ready.connect(self._on_ready)
@@ -141,21 +161,26 @@ class ThumbnailPipeline(QObject):
         self._material_failed: dict[tuple[int, int], str] = {}
 
     def set_scan_active(self, active: bool) -> None:
-        """Reduz concorrência de leitura de thumbs enquanto a biblioteca varre.
+        """Suspende novos jobs de preview durante a varredura da biblioteca.
 
-        A fila pode conter pedidos da grade e do warmup que já foram
-        agendados; limitar o pool a uma thread preserva esses pedidos e reduz
-        a disputa com os workers do scanner pelo HDD/NAS.
+        Jobs que já começaram podem terminar. Os próximos aguardam no pool
+        sem abrir arquivos, preservando a fila e evitando I/O concorrente no
+        HDD/NAS. Ao terminar ou falhar a varredura, eles são liberados.
         """
+        if active:
+            self._scan_resume.clear()
+        else:
+            self._scan_resume.set()
         thread_count = 1 if active else self._normal_thread_count
         if self._pool.maxThreadCount() == thread_count:
             return
         self._pool.setMaxThreadCount(thread_count)
         if active:
-            log.info("Varredura ativa: thumbnails limitadas a %d thread.", thread_count)
+            log.info("Varredura ativa: novos jobs de preview suspensos; "
+                     "jobs em andamento podem terminar.")
         else:
-            log.info("Varredura encerrada: pool de thumbnails restaurado para %d threads.",
-                     thread_count)
+            log.info("Varredura encerrada: jobs de preview retomados; "
+                     "pool restaurado para %d threads.", thread_count)
 
     def get_or_request_material(self, asset_id: int, name: str,
                                 maps: dict[str, Path], key: str,
@@ -171,7 +196,7 @@ class ThumbnailPipeline(QObject):
         self._material_inflight[request_id] = key
         self._material_pool.start(
             _MaterialJob(self._material_sig, asset_id, name, maps, dest,
-                         self._material_cancel, size), priority)
+                         self._material_cancel, self._scan_resume, size), priority)
         return None
 
     def material_failed_for(self, asset_id: int, key: str, size: int) -> bool:
@@ -190,7 +215,9 @@ class ThumbnailPipeline(QObject):
         if asset_id in self._inflight or asset_id in self._failed:
             return None
         self._inflight.add(asset_id)
-        self._pool.start(_ThumbJob(self._sig, asset_id, src, dest), priority)
+        self._pool.start(_ThumbJob(
+            self._sig, asset_id, src, dest,
+            self._scan_resume, self._thumb_cancel), priority)
         return None
 
     def warmup(self, items: list[tuple[int, Path, str]]) -> int:
@@ -234,7 +261,8 @@ class ThumbnailPipeline(QObject):
             self._inflight.add(asset_id)
             self._pool.start(
                 _ThumbJob(self._sig, asset_id, src,
-                          thumb_path(self._thumbs_dir, content_hash)), 0)
+                          thumb_path(self._thumbs_dir, content_hash),
+                          self._scan_resume, self._thumb_cancel), 0)
             scheduled += 1
 
         if scheduled:
@@ -262,7 +290,9 @@ class ThumbnailPipeline(QObject):
                 asset_id, str(preview_path(self._thumbs_dir, key, size)))
 
     def shutdown(self, timeout_ms: int = 3000) -> None:
+        self._thumb_cancel.set()
         self._material_cancel.set()
+        self._scan_resume.set()
         self._pool.clear()  # descarta jobs ainda não iniciados
         self._material_pool.clear()
         if not self._pool.waitForDone(timeout_ms):
