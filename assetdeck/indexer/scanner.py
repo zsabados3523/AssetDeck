@@ -135,13 +135,13 @@ def classify(path: Path) -> str | None:
     return EXT_MAP.get(path.suffix.lower().lstrip("."))
 
 
-def fingerprint(path: Path) -> str:
+def fingerprint(path: Path, size_bytes: int | None = None) -> str:
     """Impressão digital rápida: blake2b de tamanho + primeiro/último 1MB.
 
     Suficiente para relocalização e barata mesmo em .blend de gigabytes.
     O algoritmo fica registrado em files.hash_algo ('blake2b-fp1m').
     """
-    size = path.stat().st_size
+    size = path.stat().st_size if size_bytes is None else size_bytes
     h = hashlib.blake2b(digest_size=20)
     h.update(str(size).encode())
     with path.open("rb") as f:
@@ -173,7 +173,7 @@ _BLOCO = 100
 _STAT_WORKERS = 2
 
 
-def calcular_pesado(path: Path) -> tuple:
+def calcular_pesado(path: Path, size_bytes: int | None = None) -> tuple:
     """A parte cara de um arquivo: impressão digital + metadados de imagem.
 
     Módulo de nível de topo e sem estado de propósito — é isto que roda nos
@@ -184,7 +184,7 @@ def calcular_pesado(path: Path) -> tuple:
     IGUALDADE EXATA na detecção de duplicados — qualquer mudança no cálculo
     faria arquivos indexados antes e depois pararem de casar entre si.
     """
-    return fingerprint(path), image_meta(path)
+    return fingerprint(path, size_bytes), image_meta(path)
 
 
 def _preparar_worker() -> None:
@@ -260,7 +260,8 @@ def _abrir_pool(workers: int):
 
 
 def _pre_calcular(pool, paths: list[Path], should_stop=None,
-                 on_progress: Callable[[int, int], None] | None = None
+                 on_progress: Callable[[int, int], None] | None = None,
+                 file_sizes: dict[Path, int] | None = None,
                  ) -> dict[Path, tuple]:
     """Calcula o bloco em paralelo (ou em série, se não houver pool).
 
@@ -275,13 +276,18 @@ def _pre_calcular(pool, paths: list[Path], should_stop=None,
         for p in paths:
             if should_stop and should_stop():
                 break
-            saida[p] = calcular_pesado(p)
+            saida[p] = calcular_pesado(
+                p, file_sizes.get(p) if file_sizes is not None else None)
             if on_progress:
                 on_progress(len(saida), len(paths))
         return saida
     saida = {}
     try:
-        futures = {pool.submit(calcular_pesado, path): path for path in paths}
+        futures = {
+            pool.submit(calcular_pesado, path,
+                        file_sizes.get(path) if file_sizes is not None else None): path
+            for path in paths
+        }
         for future in as_completed(futures):
             path = futures[future]
             saida[path] = future.result()
@@ -300,7 +306,8 @@ def _pre_calcular(pool, paths: list[Path], should_stop=None,
         log.warning("Pool falhou neste bloco — calculando em série.", exc_info=True)
         for path in paths:
             if path not in saida:
-                saida[path] = calcular_pesado(path)
+                saida[path] = calcular_pesado(
+                    path, file_sizes.get(path) if file_sizes is not None else None)
             if on_progress:
                 on_progress(len(saida), len(paths))
         return saida
@@ -434,6 +441,7 @@ def scan_library(
                          done, done / elapsed)
 
         candidatos: list[Path] = []
+        candidato_stats: dict[Path, os.stat_result] = {}
         # Arquivos conhecidos e intocados são resolvidos logo após um único
         # stat. Além de cortar uma ida de metadados ao NAS, não ficam esperando
         # o hash de outros arquivos do mesmo bloco terminar.
@@ -441,6 +449,7 @@ def scan_library(
         for path, (precisa, st) in zip(paths, stat_pool.map(avaliar, paths)):
             if precisa:
                 candidatos.append(path)
+                candidato_stats[path] = st
             else:
                 processar_arquivo(path, cached_stat=st)
                 if stats.aborted:
@@ -464,13 +473,16 @@ def scan_library(
                     progress(done, -4, stats)
 
             cache = _pre_calcular(pool, candidatos, should_stop=should_stop,
-                                  on_progress=atualizar_calculo)
+                                  on_progress=atualizar_calculo,
+                                  file_sizes={path: st.st_size
+                                              for path, st in candidato_stats.items()})
             log.info("Varredura: lote de cálculo concluído em %.1fs (%d arquivo(s)).",
                      time.monotonic() - inicio_calculo, len(cache))
         else:
             cache = {}
         for path in candidatos:
-            processar_arquivo(path, cache=cache)
+            processar_arquivo(path, cache=cache,
+                              cached_stat=candidato_stats.get(path))
             if stats.aborted:
                 log.warning("Varredura interrompida a pedido (%d arquivos processados).", done)
                 break
