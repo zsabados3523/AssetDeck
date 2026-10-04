@@ -124,3 +124,25 @@ def test_progress_conta_so_a_biblioteca_sendo_escaneada(tmp_path, monkeypatch, q
         "a contagem deve incluir somente a biblioteca atual e refletir se o lote "
         f"já foi inserido; veio {progresso_recebido}"
     )
+
+
+def test_worker_aplica_quantidade_de_processos_salva_no_config(
+    tmp_path, monkeypatch, qapp,
+):
+    from assetdeck.indexer import scanner
+
+    monkeypatch.setenv("ASSETDECK_CONFIG_DIR", str(tmp_path / "cfg"))
+    monkeypatch.setenv("ASSETDECK_DATA_DIR", str(tmp_path / "data"))
+    config.ensure_dirs()
+    _preparar_banco()
+    cfg = config.load_config()
+    cfg["scan_workers"] = 8
+    config.save_config(cfg)
+    root = _biblioteca_com_par_de_mesmo_nome(tmp_path)
+
+    recebidos = []
+    monkeypatch.setattr(
+        scanner, "_abrir_pool", lambda workers: recebidos.append(workers))
+    ScanWorker(config.db_path(), root).run()
+
+    assert recebidos == [8]

@@ -245,9 +245,11 @@ def _abrir_pool(workers: int):
         from concurrent.futures import ProcessPoolExecutor
 
         os.environ.update(_AMBIENTE_1_THREAD)
-        return ProcessPoolExecutor(
+        pool = ProcessPoolExecutor(
             max_workers=workers, mp_context=multiprocessing.get_context("spawn"),
             initializer=_preparar_worker)
+        log.info("Pool de fingerprints iniciado com %d processo(s).", workers)
+        return pool
     except Exception:
         log.warning("Pool de processos indisponível — varrendo em série.",
                     exc_info=True)

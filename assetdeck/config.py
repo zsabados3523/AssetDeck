@@ -28,6 +28,9 @@ DEFAULTS = {
     # continuam funcionando sem movimento.
     "reduce_motion": False,
     "backup_keep": 14,  # quantos backups diários do .db manter
+    # Processos para calcular fingerprint e metadados de arquivos novos ou
+    # alterados durante a varredura. Ajustável em Configurações > Manutenção.
+    "scan_workers": 4,
     # Ao usar uma imagem da biblioteca como preview de um modelo:
     # "ask" pergunta se oculta a imagem; "always"/"never" lembram a escolha
     "hide_preview_source": "ask",

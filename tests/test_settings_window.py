@@ -232,3 +232,11 @@ def test_o_interruptor_da_varredura_grava_no_config(janela):
 
     sw.scan_on_startup.setChecked(False)
     assert config.load_config().get("scan_on_startup") is False
+
+
+def test_processos_da_varredura_gravam_na_hora(janela):
+    sw = janela.settings_window
+    assert sw.scan_workers.currentData() == 4
+
+    sw.scan_workers.setCurrentIndex(sw.scan_workers.findData(8))
+    assert config.load_config()["scan_workers"] == 8
