@@ -201,6 +201,8 @@ def test_progresso_comeca_antes_de_enumerar_a_biblioteca_inteira(conn, tmp_path)
 
     assert stats.added == 250
     assert any(total == -1 for _done, total in eventos)
+    assert any(total == -2 for _done, total in eventos)
+    assert any(total == -3 for _done, total in eventos)
     assert eventos[-1] == (250, 250)
 
 

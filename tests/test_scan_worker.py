@@ -110,13 +110,17 @@ def test_progress_conta_so_a_biblioteca_sendo_escaneada(tmp_path, monkeypatch, q
 
     root = _biblioteca_com_par_de_mesmo_nome(tmp_path)  # 2 assets só
 
-    contagens_recebidas = []
+    progresso_recebido = []
     worker = ScanWorker(config.db_path(), root)
     worker.progress.connect(
-        lambda _done, _total, ativos: contagens_recebidas.append(ativos))
+        lambda _done, fase, ativos: progresso_recebido.append((fase, ativos)))
     worker.run()
 
-    assert contagens_recebidas, "nenhum sinal de progresso emitido"
-    assert all(n == 2 for n in contagens_recebidas), (
-        f"esperava sempre 2 (só a lib sendo escaneada), veio {contagens_recebidas}"
+    assert progresso_recebido, "nenhum sinal de progresso emitido"
+    assert all(
+        ativos == (0 if fase == -3 else 2)
+        for fase, ativos in progresso_recebido
+    ), (
+        "a contagem deve incluir somente a biblioteca atual e refletir se o lote "
+        f"já foi inserido; veio {progresso_recebido}"
     )

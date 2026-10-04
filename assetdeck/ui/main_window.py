@@ -2327,13 +2327,25 @@ class MainWindow(QMainWindow):
     def start_scan(self) -> None:
         if self._scan.running:
             return
+        self._pipeline.set_scan_active(True)
         self.rescan_btn.setEnabled(False)
         self.progress.setVisible(True)
         self.progress.setRange(0, 0)
-        self.statusBar().showMessage("Indexando biblioteca…")
+        self.statusBar().showMessage("Preparando varredura…")
         self._scan.start(self._on_progress, self._on_finished, self._on_failed)
 
     def _on_progress(self, done: int, total: int, live_count: int) -> None:
+        if total == -1:
+            message = f"Descobrindo arquivos… {done} encontrados"
+        elif total == -2:
+            message = f"Processando arquivos… {done} processados"
+        elif total == -3:
+            message = f"Calculando fingerprints… {done} neste lote"
+        elif total <= 0:
+            message = f"Varredura em andamento… {done} arquivos percorridos"
+        else:
+            message = f"Indexando… {done}/{total} arquivos"
+
         if total <= 0:
             if self.progress.maximum() != 0:
                 self.progress.setRange(0, 0)
@@ -2341,14 +2353,10 @@ class MainWindow(QMainWindow):
             self.progress.setRange(0, total)
         self.progress.setValue(done)
         self.footer_count.setText(f"{live_count} assets")
-        if total <= 0:
-            self.statusBar().showMessage(
-                f"Varredura em andamento… {done} arquivos percorridos"
-            )
-        else:
-            self.statusBar().showMessage(f"Indexando… {done}/{total} arquivos")
+        self.statusBar().showMessage(message)
 
     def _on_finished(self, stats: ScanStats) -> None:
+        self._pipeline.set_scan_active(False)
         self.progress.setVisible(False)
         self.rescan_btn.setEnabled(True)
         # Fatia 64: só `added`/`updated`/`reappeared`/`grouped_sets` podem
@@ -2379,6 +2387,7 @@ class MainWindow(QMainWindow):
         log.info("UI: indexação concluída — %s", stats.summary())
 
     def _on_failed(self, message: str) -> None:
+        self._pipeline.set_scan_active(False)
         self.progress.setVisible(False)
         self.rescan_btn.setEnabled(True)
         self.statusBar().showMessage(f"ERRO na indexação: {message} (detalhes no log)")
