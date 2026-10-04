@@ -42,13 +42,12 @@ class ScanWorker(QObject):
             conn = connect(self._db_path)
             try:
                 library_id = libraries_repo.get_or_create(conn, self._library_root)
+                active_at_start = assets_repo.count_active(conn, library_id=library_id)
 
                 def on_progress(done: int, total: int, _stats: ScanStats) -> None:
-                    # A cada 10 arquivos (e no último) atualiza a UI
-                    if done % 10 == 0 or done == total:
-                        self.progress.emit(
-                            done, total,
-                            assets_repo.count_active(conn, library_id=library_id))
+                    # A contagem muda apenas quando entram assets novos. Uma
+                    # única consulta no início evita COUNT(*) a cada 10 itens.
+                    self.progress.emit(done, total, active_at_start + _stats.added)
 
                 stats = scan_library(
                     conn, library_id, self._library_root,

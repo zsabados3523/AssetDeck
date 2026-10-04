@@ -279,14 +279,44 @@ def _pre_calcular(pool, paths: list[Path], should_stop=None) -> dict[Path, tuple
         return {p: calcular_pesado(p) for p in paths}
 
 
-def iter_library_files(root: Path):
-    """Percorre a biblioteca pulando ocultos e sidecars do próprio AssetDeck."""
-    for dirpath, dirnames, filenames in os.walk(root):
-        dirnames[:] = [d for d in dirnames if not d.startswith(".")]
-        for name in sorted(filenames):
-            if name.startswith(".") or name.endswith(".assetdeck.json"):
-                continue
-            yield Path(dirpath) / name
+def iter_library_files(root: Path, on_error: Callable[[OSError], None] | None = None):
+    """Percorre em fluxo, sem montar/ordenar uma pasta inteira em memória.
+
+    `os.walk` só entrega os arquivos de uma pasta depois de enumerá-los todos.
+    Em pastas enormes sobre NAS isso pode atrasar o primeiro lote. `scandir`
+    permite entregar cada arquivo conforme o servidor o retorna. Diretórios
+    ocultos e links para diretórios continuam fora da árvore, como em `os.walk`
+    com `followlinks=False`.
+    """
+    pendentes = [Path(root)]
+    while pendentes:
+        pasta = pendentes.pop()
+        try:
+            with os.scandir(pasta) as entradas:
+                for entrada in entradas:
+                    if entrada.name.startswith("."):
+                        continue
+                    try:
+                        if entrada.is_dir(follow_symlinks=False):
+                            pendentes.append(Path(entrada.path))
+                            continue
+                        if entrada.is_symlink() and entrada.is_dir(follow_symlinks=True):
+                            continue
+                    except OSError as exc:
+                        if on_error:
+                            on_error(exc)
+                        else:
+                            log.warning("Não consegui inspecionar %s", entrada.path,
+                                        exc_info=True)
+                        continue
+                    if entrada.name.endswith(".assetdeck.json"):
+                        continue
+                    yield Path(entrada.path)
+        except OSError as exc:
+            if on_error:
+                on_error(exc)
+            else:
+                log.warning("Não consegui listar a pasta %s", pasta, exc_info=True)
 
 
 def _now() -> str:
@@ -323,65 +353,86 @@ def scan_library(
         )
     }
 
-    paths = list(iter_library_files(root))
-    total = len(paths)
-    log.info("Varredura de %s: %d arquivos no disco, %d já no banco.",
-             root, total, len(known))
-
     seen: set[str] = set()
     since_commit = 0
     done = 0
-    pool = _abrir_pool(workers)
+    discovered = 0
+    walk_had_errors = False
+    pool = None
+    pool_attempted = False
+    bloco: list[Path] = []
+
+    def on_walk_error(exc: OSError) -> None:
+        nonlocal walk_had_errors
+        walk_had_errors = True
+        stats.errors += 1
+        log.warning("Erro durante a enumeração da biblioteca (%s)", exc,
+                    exc_info=(type(exc), exc, exc.__traceback__))
+
+    def processar_bloco(paths: list[Path]) -> None:
+        nonlocal pool, pool_attempted, since_commit, done
+        if not paths:
+            return
+        if should_stop and should_stop():
+            stats.aborted = True
+            return
+        candidatos = [p for p in paths if _precisa_calcular(root, p, known)]
+        # Reindexações sem arquivos novos/alterados não precisam iniciar os
+        # processos filhos, que têm custo de inicialização perceptível.
+        if candidatos and not pool_attempted:
+            pool = _abrir_pool(workers)
+            pool_attempted = True
+        cache = _pre_calcular(pool, candidatos, should_stop=should_stop)
+        for path in paths:
+            if should_stop and should_stop():
+                stats.aborted = True
+                log.warning("Varredura interrompida a pedido (%d arquivos processados).", done)
+                break
+            done += 1
+            try:
+                _process_file(conn, library_id, root, path, known, seen, stats,
+                              cache=cache)
+            except OSError:
+                # Arquivo ilegível não derruba a varredura, mas fica no log.
+                stats.errors += 1
+                log.exception("Erro ao ler %s — pulando.", path)
+
+            since_commit += 1
+            if since_commit >= batch_size:
+                conn.commit()
+                since_commit = 0
+            if progress and (done % 10 == 0):
+                # -1 significa que a quantidade total ainda é desconhecida.
+                progress(done, -1, stats)
+
     try:
-      for inicio in range(0, total, _BLOCO):
-          if should_stop and should_stop():
-              stats.aborted = True
-              log.warning("Varredura interrompida a pedido (%d/%d processados).",
-                          done, total)
-              break
-
-          bloco = paths[inicio:inicio + _BLOCO]
-          # Pré-calcula em paralelo SÓ o que vai precisar. Arquivo já indexado
-          # e intocado não paga nada — é o caso da maioria numa reindexação.
-          cache = _pre_calcular(
-              pool, [p for p in bloco if _precisa_calcular(root, p, known)],
-              should_stop=should_stop)
-
-          for path in bloco:
-              # Checagem POR ARQUIVO, não só por bloco: com só a do bloco, o
-              # "Parar" levava até 200 arquivos pra surtir efeito — e numa
-              # biblioteca menor que um bloco não surtia efeito nenhum (foi o
-              # que o teste de parada pegou).
-              if should_stop and should_stop():
-                  stats.aborted = True
-                  log.warning("Varredura interrompida a pedido (%d/%d processados).",
-                              done, total)
-                  break
-              done += 1
-              try:
-                  _process_file(conn, library_id, root, path, known, seen, stats,
-                                cache=cache)
-              except OSError:
-                  # Arquivo ilegível não derruba a varredura, mas fica no log.
-                  stats.errors += 1
-                  log.exception("Erro ao ler %s — pulando.", path)
-
-              since_commit += 1
-              if since_commit >= batch_size:
-                  conn.commit()
-                  since_commit = 0
-              if progress:
-                  progress(done, total, stats)
-
-          if stats.aborted:
-              break
+        for path in iter_library_files(root, on_error=on_walk_error):
+            if should_stop and should_stop():
+                stats.aborted = True
+                break
+            discovered += 1
+            bloco.append(path)
+            # Também atualiza a tela durante uma enumeração longa. O total
+            # ainda é desconhecido até a árvore terminar de ser percorrida.
+            if progress and discovered % 100 == 0:
+                progress(discovered, -1, stats)
+            if len(bloco) >= _BLOCO:
+                processar_bloco(bloco)
+                bloco = []
+                if stats.aborted:
+                    break
+        if not stats.aborted:
+            processar_bloco(bloco)
     finally:
         if pool is not None:
             # `cancel_futures` descarta o que ainda não começou — sem isso,
             # fechar no meio da varredura esperava a fila inteira.
             pool.shutdown(wait=True, cancel_futures=True)
 
-    if not stats.aborted:
+    log.info("Varredura de %s: %d arquivos encontrados, %d já no banco.",
+             root, discovered, len(known))
+
+    if not stats.aborted and not walk_had_errors:
         # Quem está no banco mas não no disco: marca sumido (nunca apaga)
         for rel_path, row in known.items():
             if rel_path not in seen and row["missing_since"] is None:
@@ -391,8 +442,13 @@ def scan_library(
                 )
                 stats.missing += 1
                 log.warning("Arquivo sumido da biblioteca: %s", rel_path)
+    elif walk_had_errors:
+        log.warning("Itens sumidos não foram atualizados: a enumeração teve erros.")
 
     conn.commit()
+    if progress:
+        # Sinal final: agora o total é conhecido e a barra pode fechar em 100%.
+        progress(done, discovered, stats)
     # Índice de busca sempre em dia (barato: milissegundos nessa escala)
     from assetdeck.db.repos.assets import rebuild_fts
 

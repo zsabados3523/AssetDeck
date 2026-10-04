@@ -2334,11 +2334,19 @@ class MainWindow(QMainWindow):
         self._scan.start(self._on_progress, self._on_finished, self._on_failed)
 
     def _on_progress(self, done: int, total: int, live_count: int) -> None:
-        if self.progress.maximum() != total:
+        if total <= 0:
+            if self.progress.maximum() != 0:
+                self.progress.setRange(0, 0)
+        elif self.progress.maximum() != total:
             self.progress.setRange(0, total)
         self.progress.setValue(done)
         self.footer_count.setText(f"{live_count} assets")
-        self.statusBar().showMessage(f"Indexando… {done}/{total} arquivos")
+        if total <= 0:
+            self.statusBar().showMessage(
+                f"Varredura em andamento… {done} arquivos percorridos"
+            )
+        else:
+            self.statusBar().showMessage(f"Indexando… {done}/{total} arquivos")
 
     def _on_finished(self, stats: ScanStats) -> None:
         self.progress.setVisible(False)
