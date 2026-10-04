@@ -166,8 +166,11 @@ _BLOCO = 100
 
 # `stat()` em caminhos SMB/GVFS espera resposta da rede e quase não consome
 # CPU. Sobrepor algumas consultas reduz o tempo ocioso sem abrir conteúdo em
-# paralelo nem multiplicar a carga de leitura do NAS.
-_STAT_WORKERS = 4
+# paralelo nem multiplicar a carga de leitura do NAS. Medição com 512 arquivos
+# reais no NAS do Rafael: 1 e 2 threads ficaram praticamente empatadas; 4 levou
+# cerca de 18% mais tempo e 8 cerca de 75% mais tempo que 1. Usamos 2 para
+# manter alguma sobreposição sem saturar a conexão/servidor.
+_STAT_WORKERS = 2
 
 
 def calcular_pesado(path: Path) -> tuple:
