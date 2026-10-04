@@ -15,7 +15,7 @@ from PySide6.QtCore import QObject, QThread, Signal, Slot
 from assetdeck.db.connection import connect
 from assetdeck.db.repos import assets as assets_repo
 from assetdeck.db.repos import libraries as libraries_repo
-from assetdeck.indexer.scanner import ScanStats, scan_library
+from assetdeck.indexer.scanner import WORKERS_PADRAO, ScanStats, scan_library
 
 log = logging.getLogger(__name__)
 
@@ -39,10 +39,20 @@ class ScanWorker(QObject):
     @Slot()
     def run(self) -> None:
         try:
+            from assetdeck import config
+
             conn = connect(self._db_path)
             try:
                 library_id = libraries_repo.get_or_create(conn, self._library_root)
                 active_at_start = assets_repo.count_active(conn, library_id=library_id)
+                scan_workers = config.load_config().get(
+                    "scan_workers", WORKERS_PADRAO)
+                if type(scan_workers) is not int or scan_workers not in (1, 2, 4, 8):
+                    log.warning(
+                        "Config scan_workers inválida (%r); usando %d processos.",
+                        scan_workers, WORKERS_PADRAO,
+                    )
+                    scan_workers = WORKERS_PADRAO
 
                 def on_progress(done: int, total: int, _stats: ScanStats) -> None:
                     # A contagem muda apenas quando entram assets novos. Uma
@@ -53,12 +63,12 @@ class ScanWorker(QObject):
                     conn, library_id, self._library_root,
                     progress=on_progress,
                     should_stop=self._stop.is_set,
+                    workers=scan_workers,
                 )
                 if not stats.aborted:
                     # Pós-processamento, tudo nesta thread (a UI não trava):
                     # agrupar sets PBR → marcar dependências → capas de pack
                     # → capas por nome igual (Fatia 57, opt-in)
-                    from assetdeck import config
                     from assetdeck.indexer.dependencies import (
                         attach_pack_previews,
                         attach_stem_match_previews,

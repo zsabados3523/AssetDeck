@@ -208,6 +208,16 @@ class SettingsWindow(QDialog):
         self.scan_on_startup.toggled.connect(
             lambda v: self._salvar("scan_on_startup", v))
 
+        self.scan_workers = QComboBox()
+        for quantidade in (1, 2, 4, 8):
+            self.scan_workers.addItem(f"{quantidade} processo(s)", quantidade)
+        valor_workers = cfg.get("scan_workers", 4)
+        indice_workers = self.scan_workers.findData(valor_workers)
+        self.scan_workers.setCurrentIndex(indice_workers if indice_workers >= 0 else 2)
+        self.scan_workers.currentIndexChanged.connect(
+            lambda indice: self._salvar(
+                "scan_workers", self.scan_workers.itemData(indice)))
+
         mw.relocate_action = QPushButton("Abrir…")
         mw.relocate_action.clicked.connect(mw._relocate_lost_assets)
         btn_esquecer = QPushButton("Esquecer…")
@@ -228,6 +238,10 @@ class SettingsWindow(QDialog):
             "Varrer a biblioteca ao abrir",
             "Indexa a biblioteca ao iniciar. Pode levar alguns minutos.",
             self.scan_on_startup))
+        lay.addWidget(_linha(
+            "Processos para calcular fingerprints",
+            "Afeta arquivos novos ou alterados; a escolha vale na próxima varredura.",
+            self.scan_workers))
 
         lay.addWidget(_grupo("Arquivos"))
         lay.addWidget(_linha(
