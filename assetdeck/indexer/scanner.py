@@ -16,7 +16,7 @@ import os
 import sqlite3
 import time
 import uuid as uuid_mod
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from functools import partial
@@ -259,13 +259,14 @@ def _abrir_pool(workers: int):
         return None
 
 
-def _pre_calcular(pool, paths: list[Path], should_stop=None) -> dict[Path, tuple]:
+def _pre_calcular(pool, paths: list[Path], should_stop=None,
+                 on_progress: Callable[[int, int], None] | None = None
+                 ) -> dict[Path, tuple]:
     """Calcula o bloco em paralelo (ou em série, se não houver pool).
 
-    Consome o `map` PREGUIÇOSAMENTE e olha `should_stop` a cada resultado.
-    Sem isso, fechar o app no meio de uma varredura esperava o bloco inteiro
-    terminar. Com `chunksize=1`, cada processo termina no máximo o arquivo
-    atual; tarefas que ainda não começaram podem ser canceladas no shutdown.
+    Consome cada resultado assim que seu worker termina e olha `should_stop`
+    entre resultados. Com tarefas individuais, o progresso não fica preso
+    esperando um arquivo lento anterior na ordem do lote.
     """
     if not paths:
         return {}
@@ -275,20 +276,34 @@ def _pre_calcular(pool, paths: list[Path], should_stop=None) -> dict[Path, tuple
             if should_stop and should_stop():
                 break
             saida[p] = calcular_pesado(p)
+            if on_progress:
+                on_progress(len(saida), len(paths))
         return saida
+    saida = {}
     try:
-        saida = {}
-        for path, resultado in zip(paths, pool.map(calcular_pesado, paths, chunksize=1)):
-            saida[path] = resultado
+        futures = {pool.submit(calcular_pesado, path): path for path in paths}
+        for future in as_completed(futures):
+            path = futures[future]
+            saida[path] = future.result()
+            if on_progress:
+                on_progress(len(saida), len(paths))
             if should_stop and should_stop():
                 log.info("Pré-cálculo interrompido a pedido (%d de %d do bloco).",
                          len(saida), len(paths))
+                for pendente in futures:
+                    if not pendente.done():
+                        pendente.cancel()
                 break
         return saida
     except Exception:
         # Um pool que morreu no meio não pode levar a varredura junto.
         log.warning("Pool falhou neste bloco — calculando em série.", exc_info=True)
-        return {p: calcular_pesado(p) for p in paths}
+        for path in paths:
+            if path not in saida:
+                saida[path] = calcular_pesado(path)
+            if on_progress:
+                on_progress(len(saida), len(paths))
+        return saida
 
 
 def iter_library_files(root: Path, on_error: Callable[[OSError], None] | None = None):
@@ -438,13 +453,18 @@ def scan_library(
             pool_attempted = True
         if candidatos:
             if progress:
-                # -3 identifica espera no cálculo do lote; done é o tamanho
-                # do lote, não o total já processado.
+                # -3 inicia a fase; -4 atualiza done/total do pré-cálculo.
                 progress(len(candidatos), -3, stats)
             inicio_calculo = time.monotonic()
             log.info("Varredura: calculando fingerprints/metadados de %d arquivo(s).",
                      len(candidatos))
-            cache = _pre_calcular(pool, candidatos, should_stop=should_stop)
+
+            def atualizar_calculo(done: int, _total: int) -> None:
+                if progress:
+                    progress(done, -4, stats)
+
+            cache = _pre_calcular(pool, candidatos, should_stop=should_stop,
+                                  on_progress=atualizar_calculo)
             log.info("Varredura: lote de cálculo concluído em %.1fs (%d arquivo(s)).",
                      time.monotonic() - inicio_calculo, len(cache))
         else:
