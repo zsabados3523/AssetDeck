@@ -112,6 +112,18 @@ def test_as_miniaturas_deixam_nucleo_sobrando(qapp, tmp_path):
     assert pipeline._pool.maxThreadCount() >= 2
 
 
+def test_as_miniaturas_reduzem_concorrencia_durante_varredura(qapp, tmp_path):
+    pipeline = ThumbnailPipeline(tmp_path)
+    normal = pipeline._normal_thread_count
+    try:
+        pipeline.set_scan_active(True)
+        assert pipeline._pool.maxThreadCount() == 1
+        pipeline.set_scan_active(False)
+        assert pipeline._pool.maxThreadCount() == normal
+    finally:
+        pipeline.shutdown()
+
+
 def test_uma_miniatura_lenta_nao_atrasa_o_visualizador(qapp, tmp_path):
     """O teste que junta tudo: fila de miniaturas cheia E o pool global
     ocupado, e mesmo assim a prévia do visualizador tem thread livre."""

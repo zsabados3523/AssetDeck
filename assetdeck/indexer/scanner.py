@@ -14,6 +14,7 @@ import hashlib
 import logging
 import os
 import sqlite3
+import time
 import uuid as uuid_mod
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -361,6 +362,7 @@ def scan_library(
     pool = None
     pool_attempted = False
     bloco: list[Path] = []
+    started_at = time.monotonic()
 
     def on_walk_error(exc: OSError) -> None:
         nonlocal walk_had_errors
@@ -396,8 +398,12 @@ def scan_library(
                 conn.commit()
                 since_commit = 0
             if progress and done % 10 == 0:
-                # -1 significa que a quantidade total ainda é desconhecida.
-                progress(done, -1, stats)
+                # -2 identifica processamento; o total ainda é desconhecido.
+                progress(done, -2, stats)
+            if done % 500 == 0:
+                elapsed = max(time.monotonic() - started_at, 0.001)
+                log.info("Varredura: %d arquivo(s) processados (%.1f/s).",
+                         done, done / elapsed)
 
         candidatos: list[Path] = []
         # Arquivos conhecidos e intocados são resolvidos logo após um único
@@ -417,7 +423,19 @@ def scan_library(
         if candidatos and not pool_attempted:
             pool = _abrir_pool(workers)
             pool_attempted = True
-        cache = _pre_calcular(pool, candidatos, should_stop=should_stop)
+        if candidatos:
+            if progress:
+                # -3 identifica espera no cálculo do lote; done é o tamanho
+                # do lote, não o total já processado.
+                progress(len(candidatos), -3, stats)
+            inicio_calculo = time.monotonic()
+            log.info("Varredura: calculando fingerprints/metadados de %d arquivo(s).",
+                     len(candidatos))
+            cache = _pre_calcular(pool, candidatos, should_stop=should_stop)
+            log.info("Varredura: lote de cálculo concluído em %.1fs (%d arquivo(s)).",
+                     time.monotonic() - inicio_calculo, len(cache))
+        else:
+            cache = {}
         for path in candidatos:
             processar_arquivo(path, cache=cache)
             if stats.aborted:
@@ -435,6 +453,10 @@ def scan_library(
             # ainda é desconhecido até a árvore terminar de ser percorrida.
             if progress and discovered % 100 == 0:
                 progress(discovered, -1, stats)
+            if discovered % 500 == 0:
+                elapsed = max(time.monotonic() - started_at, 0.001)
+                log.info("Varredura: %d arquivo(s) descobertos (%.1f/s).",
+                         discovered, discovered / elapsed)
             if len(bloco) >= _BLOCO:
                 processar_bloco(bloco)
                 bloco = []

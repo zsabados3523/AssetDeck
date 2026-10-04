@@ -124,7 +124,8 @@ class ThumbnailPipeline(QObject):
         # 2. `shutdown()` chama `clear()`: no pool global isso descartava
         #    também o que o visualizador e a prévia tivessem pendente.
         self._pool = QThreadPool(self)
-        self._pool.setMaxThreadCount(max(2, (os.cpu_count() or 4) // 2))
+        self._normal_thread_count = max(2, (os.cpu_count() or 4) // 2)
+        self._pool.setMaxThreadCount(self._normal_thread_count)
         self._material_pool = QThreadPool(self)
         self._material_pool.setMaxThreadCount(1)  # um Blender headless por vez
         self._material_cancel = threading.Event()
@@ -138,6 +139,23 @@ class ThumbnailPipeline(QObject):
         self._failed: set[int] = set()
         self._material_inflight: dict[tuple[int, int], str] = {}
         self._material_failed: dict[tuple[int, int], str] = {}
+
+    def set_scan_active(self, active: bool) -> None:
+        """Reduz concorrência de leitura de thumbs enquanto a biblioteca varre.
+
+        A fila pode conter pedidos da grade e do warmup que já foram
+        agendados; limitar o pool a uma thread preserva esses pedidos e reduz
+        a disputa com os workers do scanner pelo HDD/NAS.
+        """
+        thread_count = 1 if active else self._normal_thread_count
+        if self._pool.maxThreadCount() == thread_count:
+            return
+        self._pool.setMaxThreadCount(thread_count)
+        if active:
+            log.info("Varredura ativa: thumbnails limitadas a %d thread.", thread_count)
+        else:
+            log.info("Varredura encerrada: pool de thumbnails restaurado para %d threads.",
+                     thread_count)
 
     def get_or_request_material(self, asset_id: int, name: str,
                                 maps: dict[str, Path], key: str,

@@ -95,6 +95,30 @@ def test_footer_mostra_contagem_e_atualiza_com_selecao(janela):
     assert "2 selecionados" in janela.footer_count.text()
 
 
+def test_progresso_mostra_fases_da_varredura(janela):
+    janela._on_progress(2800, -1, 12)
+    assert "Descobrindo" in janela.statusBar().currentMessage()
+
+    janela._on_progress(1700, -2, 12)
+    assert "Processando" in janela.statusBar().currentMessage()
+
+    janela._on_progress(96, -3, 12)
+    assert "fingerprints" in janela.statusBar().currentMessage()
+
+
+def test_start_scan_limita_thumbnails_ate_o_fim(janela, monkeypatch):
+    iniciado = []
+    monkeypatch.setattr(janela._scan, "start", lambda *args: iniciado.append(True))
+    threads_normais = janela._pipeline._normal_thread_count
+
+    janela.start_scan()
+    assert iniciado == [True]
+    assert janela._pipeline._pool.maxThreadCount() == 1
+
+    janela._on_failed("erro de teste")
+    assert janela._pipeline._pool.maxThreadCount() == threads_normais
+
+
 def test_tema_pinta_a_area_principal_e_separa_o_inspetor(qapp, janela):
     """A grade usa a superfície contínua da prévia, com inspetor lateral."""
     from PySide6.QtCore import QPoint

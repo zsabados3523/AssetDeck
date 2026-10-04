@@ -23,7 +23,7 @@ log = logging.getLogger(__name__)
 class ScanWorker(QObject):
     """Executa uma varredura completa e emite sinais de progresso."""
 
-    progress = Signal(int, int, int)   # processados, total, assets ativos agora
+    progress = Signal(int, int, int)   # contagem/fase, total ou marcador, assets ativos
     finished = Signal(object)          # ScanStats
     failed = Signal(str)               # mensagem legível
 
