@@ -264,9 +264,8 @@ def _pre_calcular(pool, paths: list[Path], should_stop=None) -> dict[Path, tuple
 
     Consome o `map` PREGUIÇOSAMENTE e olha `should_stop` a cada resultado.
     Sem isso, fechar o app no meio de uma varredura esperava o bloco inteiro
-    terminar — o `ScanController` reclamava "thread não terminou em 5000ms" e
-    matava a thread na marra. Parar aqui ainda espera as tarefas JÁ em voo
-    (no máximo alguns arquivos por processo), não as 200 do bloco.
+    terminar. Com `chunksize=1`, cada processo termina no máximo o arquivo
+    atual; tarefas que ainda não começaram podem ser canceladas no shutdown.
     """
     if not paths:
         return {}
@@ -279,7 +278,7 @@ def _pre_calcular(pool, paths: list[Path], should_stop=None) -> dict[Path, tuple
         return saida
     try:
         saida = {}
-        for path, resultado in zip(paths, pool.map(calcular_pesado, paths, chunksize=4)):
+        for path, resultado in zip(paths, pool.map(calcular_pesado, paths, chunksize=1)):
             saida[path] = resultado
             if should_stop and should_stop():
                 log.info("Pré-cálculo interrompido a pedido (%d de %d do bloco).",

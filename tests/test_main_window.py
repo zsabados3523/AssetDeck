@@ -1402,3 +1402,25 @@ def test_confirmacao_avisa_quando_capa_atual_sera_substituida(
 
     assert "A capa atual de 1 asset será substituída" in capturada["texto"]
     assert "continuará na galeria" in capturada["texto"]
+
+
+def test_fechar_aguarda_a_thread_da_varredura(janela, monkeypatch):
+    from PySide6.QtGui import QCloseEvent
+
+    from assetdeck.ui.scan_worker import ScanController
+
+    resultados_shutdown = iter((False, True))
+    monkeypatch.setattr(
+        janela._scan, "shutdown", lambda: next(resultados_shutdown, True))
+    monkeypatch.setattr(
+        ScanController, "running", property(lambda _self: True))
+
+    evento = QCloseEvent()
+    janela.closeEvent(evento)
+
+    assert not evento.isAccepted()
+    assert janela._closing_after_scan
+
+    janela._scan.stopped.emit()
+
+    assert not janela._closing_after_scan
