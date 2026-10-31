@@ -34,13 +34,9 @@ def _cleanup_qt_widgets():
         return
 
     for widget in list(app.topLevelWidgets()):
-        if widget not in initial_top_levels:
-            try:
-                if shiboken6.isValid(widget):
-                    widget.close()
-                    widget.deleteLater()
-            except RuntimeError:
-                pass
+        if widget not in initial_top_levels and shiboken6.isValid(widget):
+            widget.close()
+            widget.deleteLater()
 
     QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
     app.processEvents()

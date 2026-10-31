@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import sys
 import threading
 from pathlib import Path
 
@@ -29,8 +30,28 @@ class _MaterialSignaller(QObject):
 _rebaixada = threading.local()
 
 
+def _aplicar_prioridade_baixa_thread() -> None:
+    """Aplica prioridade baixa à thread atual de forma portátil (Windows / POSIX)."""
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            # THREAD_PRIORITY_BELOW_NORMAL = -1
+            handle = ctypes.windll.kernel32.GetCurrentThread()
+            if not ctypes.windll.kernel32.SetThreadPriority(handle, -1):
+                log.warning("SetThreadPriority falhou no Windows: %s", ctypes.WinError())
+        except Exception:
+            log.warning("Não consegui baixar a prioridade da thread no Windows.",
+                        exc_info=True)
+    elif hasattr(os, "nice"):
+        try:
+            os.nice(5)
+        except OSError:
+            log.warning("Não consegui baixar a prioridade da thread de miniaturas.",
+                        exc_info=True)
+
+
 def rebaixar_esta_thread() -> None:
-    """Põe a thread ATUAL em segundo plano (`nice +5`), uma vez só.
+    """Põe a thread ATUAL em segundo plano (`nice +5` no POSIX, BELOW_NORMAL no Windows), uma vez só.
 
     Gerar miniatura é trabalho de fundo: pode demorar, ninguém está olhando.
     Sem isto, as threads do pool disputam núcleo de igual pra igual com o
@@ -47,11 +68,7 @@ def rebaixar_esta_thread() -> None:
     if getattr(_rebaixada, "feito", False):
         return
     _rebaixada.feito = True
-    try:
-        os.nice(5)
-    except OSError:
-        log.warning("Não consegui baixar a prioridade da thread de miniaturas.",
-                    exc_info=True)
+    _aplicar_prioridade_baixa_thread()
 
 
 def _aguardar_retomada(resume: threading.Event, cancel: threading.Event) -> bool:
@@ -77,7 +94,10 @@ class _ThumbJob(QRunnable):
     def run(self) -> None:
         if not _aguardar_retomada(self._resume, self._cancel):
             return
-        rebaixar_esta_thread()
+        try:
+            rebaixar_esta_thread()
+        except Exception:
+            log.warning("Falha ao rebaixar prioridade da thread.", exc_info=True)
         try:
             make_any_thumbnail(self._src, self._dest)
             self._sig.ready.emit(self._asset_id, str(self._dest))
@@ -104,7 +124,10 @@ class _MaterialJob(QRunnable):
     def run(self) -> None:
         if not _aguardar_retomada(self._resume, self._cancel):
             return
-        rebaixar_esta_thread()
+        try:
+            rebaixar_esta_thread()
+        except Exception:
+            log.warning("Falha ao rebaixar prioridade da thread.", exc_info=True)
         try:
             if self._cancel.is_set():
                 return
