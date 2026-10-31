@@ -2,216 +2,198 @@
 
 [![CI](https://github.com/zsabados3523/AssetDeck/actions/workflows/ci.yml/badge.svg)](https://github.com/zsabados3523/AssetDeck/actions/workflows/ci.yml) [![Release](https://img.shields.io/github/v/release/zsabados3523/AssetDeck)](https://github.com/zsabados3523/AssetDeck/releases) [![Licença MIT](https://img.shields.io/github/license/zsabados3523/AssetDeck)](LICENSE)
 
-Gerenciador de assets 2D/3D local para Windows, macOS e Linux (versões para Windows e macOS em fase de testes) — texturas, HDRIs, modelos,
-materiais PBR, LUTs, perfis de luz IES, vetores — com integração direta ao
-Blender. Feito para uso pessoal: **100% offline**, sem conta, sem nuvem, sem
-telemetria.
+Gerenciador de assets 2D e 3D local e independente (DAM) para Windows, macOS e Linux — texturas, materiais PBR, HDRIs, modelos 3D, perfis IES, LUTs e vetores — com visualizadores integrados, organização flexível e integração direta ao Blender. Feito para uso pessoal e em estúdio: **100% offline**, sem conta, sem nuvem e sem telemetria.
 
-A biblioteca de arquivos é **somente-leitura por padrão**: o AssetDeck não
-mexe em nada dentro dela por conta própria. Existem duas ações que escrevem
-no disco, e as duas só acontecem quando você pede explicitamente —
-**renomear em lote** e **mover assets** (arrastando um card da grade para
-uma pasta). As duas mostram antes o que vai acontecer, e nunca apagam nada.
+A biblioteca de arquivos no disco é **somente-leitura por padrão**: o AssetDeck não altera nem move seus arquivos sozinho. Existem duas ações que escrevem no disco, e ambas dependem de confirmação expressa do usuário: **renomear em lote** (com prévia ao vivo de conflitos) e **mover assets** (arrastando cards da grade para pastas da árvore). Nenhuma delas apaga arquivos.
 
-Os metadados (tags, notas, favoritos, avaliações) ficam num banco SQLite
-local, com um espelho em `.json` ao lado de cada asset — se o banco se
-perder, os metadados voltam sozinhos na próxima indexação.
+Os metadados (tags, notas, avaliações, favoritos, coleções) ficam guardados num banco SQLite local com modo WAL e backups diários automáticos, acompanhados de um arquivo sidecar `.assetdeck.json` ao lado de cada asset — se o banco for recriado, seus metadados são restaurados automaticamente na próxima indexação.
 
-<p align="center">
-  <img src="docs/screenshots/biblioteca-escuro.png" alt="AssetDeck em modo escuro, com um HDRI selecionado" width="860">
-</p>
+---
+
+## Galeria
+
+### Interface Principal (Modo Claro e Modo Escuro)
+
+| Modo Claro | Modo Escuro |
+|---|---|
+| ![AssetDeck em modo claro](docs/screenshots/biblioteca-claro.png) | ![AssetDeck em modo escuro](docs/screenshots/biblioteca-escuro.png) |
+| *Grade de assets com navegação lateral, categorias, filtros e painel de detalhes preenchido inspecionando material PBR.* | *Tema escuro com alto contraste WCAG, miniaturas nítidas, tags hierárquicas e ficha técnica completa.* |
+
+### Visualizadores 3D Integrados (OpenGL)
+
+| Visualizador de HDRI / EXR | Visualizador de Modelos 3D |
+|---|---|
+| ![Visualizador de HDRI](docs/screenshots/visualizador-hdri.png) | ![Visualizador de Modelos 3D](docs/screenshots/visualizador-modelo-3d.png) |
+| *Projeção equirretangular 360°, rotação orbital, modo esfera de reflexo e leitura de alcance dinâmico.* | *Órbita 3D em tempo real com iluminação difusa, sombreamento suave de normais e leitura de materiais (.mtl).* |
+
+### Organização e Busca Avançada
+
+| Organização Lateral (Pastas, Tags e Coleções) | Busca Booleana com Operadores |
+|---|---|
+| ![Barra lateral de coleções e tags](docs/screenshots/colecoes-tags.png) | ![Busca com operadores booleanos](docs/screenshots/busca-operadores.png) |
+| *Árvore de pastas do disco, tags hierárquicas coloridas, coleções manuais e coleções inteligentes dinâmicas.* | *Busca combinada por nome e filtros avançados (`concreto E industrial`, `madeira OU metal`, `NÃO metal`).* |
+
+### Central de Configurações (Modo Claro e Modo Escuro)
+
+| Configurações no Modo Claro | Configurações no Modo Escuro |
+|---|---|
+| ![Janela de Configurações no modo claro](docs/screenshots/configuracoes.png) | ![Janela de Configurações no modo escuro](docs/screenshots/configuracoes-escuro.png) |
+| *Manutenção do banco, biblioteca ativa, varredura ao abrir, processos paralelos e ponte do Blender.* | *Ajustes de sistema, manutenção e preferências adaptados com fidelidade ao tema escuro.* |
+
+### Ferramentas e Primeira Execução
+
+| Renomear em Lote | Detecção de Duplicatas | Primeira Execução (Estado Vazio) |
+|---|---|---|
+| ![Renomear em lote](docs/screenshots/renomear-lote.png) | ![Revisar duplicados](docs/screenshots/duplicatas.png) | ![Estado vazio](docs/screenshots/estado-vazio.png) |
+| *Substituição de texto em lote com prévia ao vivo de alterações e validação de conflitos.* | *Agrupamento de arquivos idênticos ou variantes redimensionadas por hash perceptual (pHash).* | *Tela inicial orientando a escolha da pasta da biblioteca.* |
+
+---
+
+## Recursos
+
+- **Biblioteca somente-leitura por padrão:** O app analisa, calcula fingerprints e lê metadados sem tocar na sua pasta de assets. As únicas operações de escrita no disco (mover assets e renomear em lote) exigem confirmação explícita.
+- **Agrupamento PBR automático:** Agrupa arquivos complementares (`_basecolor`, `_normal`, `_roughness`, `_height`, `_metallic`, `_ao`, etc.) em um único card de material PBR com capa representativa.
+- **Associação automática de capas e previews:** Associa imagens de prévia homônimas (`Cadeira.blend` + `Cadeira.jpg`) ou pastas `previews/` e catálogos de packs ao respectivo modelo 3D.
+- **Visualizador 3D em janela dedicada:**
+  - **HDRIs e EXRs:** Projeção esférica equirretangular 360°, controle de rotação e zoom, visualização em modo esfera de reflexo para avaliar a iluminação e leitura precisa de resolução.
+  - **Modelos 3D:** Órbita de câmera tridimensional para `.obj`, `.fbx` (via Assimp) e `.blend` (via Blender headless), com reenquadramento automático, contagem de vértices, triângulos e inspeção de materiais.
+- **Geração de miniaturas offline:** Cache determinístico indexado pelo `content_hash` do arquivo original. Inclui tonemapping com compressão de alcance dinâmico (Reinhard global + curva gamma 2.2) para `.hdr` e `.exr`, e renderização vetorial nítida para `.svg`.
+- **Busca avançada e filtros multifacetados:**
+  - Sintaxe de busca com operadores booleanos (`concreto E rústico`, `pedra OU metal`, `NÃO tijolo`).
+  - Filtro por tipo de asset (Textura, Material PBR, Modelo 3D, HDRI, IES, LUT, Vetor).
+  - Filtro por extensão, avaliação por estrelas, favoritos e cor dominante da imagem.
+- **Organização estruturada e flexível:**
+  - **Tags hierárquicas:** Árvore de tags com cores e ícones customizáveis.
+  - **Sinônimos e aliases bilíngues:** Associa termos em português e inglês (ex.: `Madeira` = `Wood`, `Concreto` = `Concrete`).
+  - **Coleções manuais:** Agrupamentos arbitrários organizados em árvore sem duplicar arquivos no disco.
+  - **Coleções inteligentes:** Consultas salvas que reavaliam os critérios dinamicamente sobre o banco de dados.
+  - **Avaliação e notas:** Classificação de 1 a 5 estrelas, marcador de favoritos e campo de anotações livres.
+  - **Propriedades personalizadas (EAV):** Criação de campos tipados adicionais (Texto, Número, Booleano, Data), como *Fornecedor*, *Resolução* ou *Licença*.
+- **Detecção de duplicatas por conteúdo visual:** Algoritmo de hash perceptual (pHash) que encontra imagens idênticas mesmo quando salvas em resoluções ou formatos diferentes.
+- **Segurança de metadados com sidecars:** Espelho em `.assetdeck.json` gravado ao lado de cada asset para preservar tags, notas e avaliações de forma independente do banco SQLite.
+- **Integração nativa com o Blender:** Ponte local via socket com token de segurança que permite arrastar assets direto para a viewport 3D e acionar renderização headless de capas de modelos.
+
+---
 
 ## Baixar
 
-Executáveis prontos para uso em Windows, macOS e Linux estão disponíveis na página de [Releases](https://github.com/zsabados3523/AssetDeck/releases).
+Executáveis pré-compilados para Windows, macOS e Linux estão disponíveis na página oficial de [Releases](https://github.com/zsabados3523/AssetDeck/releases).
 
-> **Aviso sobre executáveis não assinados:** Como o AssetDeck é mantido de forma independente e aberta, os binários ainda não possuem assinatura digital com certificado comercial:
-> - No **Windows**, o Windows SmartScreen pode exibir um aviso ("O Windows protegeu o seu computador"). Clique em *Mais informações* e depois em *Executar assim mesmo*.
-> - No **macOS**, o Gatekeeper pode bloquear a abertura do aplicativo. Caso ocorra, acesse *Ajustes do Sistema → Privacidade e Segurança* e selecione *Abrir mesmo assim*.
+> [!IMPORTANT]
+> **Aviso sobre executáveis não assinados:** Como o AssetDeck é um projeto open-source mantido de forma independente, os binários de release não possuem certificados comerciais pagos:
+> - **Windows:** O Windows SmartScreen pode exibir o alerta *"O Windows protegeu o seu computador"*. Clique em **Mais informações** e em seguida em **Executar assim mesmo**.
+> - **macOS:** O Gatekeeper pode bloquear a abertura inicial. Clique com o **botão direito** no aplicativo e selecione **Abrir**, ou acesse **Ajustes do Sistema → Privacidade e Segurança** e clique em **Abrir mesmo assim**.
+> - **Linux:** Baixe o arquivo `.tar.gz`, extraia o conteúdo, torne o binário executável com `chmod +x assetdeck` e execute `./assetdeck`.
 
-## Para que serve
+---
 
-Você aponta o AssetDeck para uma pasta de assets já organizada no disco. Ele
-indexa em segundo plano (sem travar a janela), gera miniaturas — inclusive
-para `.hdr`/`.exr` com tonemap (formatos que o sistema operacional normalmente
-não abre nativamente) — e agrupa automaticamente os arquivos de um mesmo material PBR
-(`_basecolor`, `_normal`, `_roughness`...) num card só. Daí em diante:
+## Instalação a partir do código-fonte
 
-- **Organiza sem mexer no disco.** Tags hierárquicas com cor e apelido
-  (`madeira` = `wood`), coleções manuais, coleções inteligentes (um filtro
-  salvo que se atualiza sozinho), avaliação por estrelas e favoritos.
-- **Acha o que você procura.** Busca por nome com operadores booleanos
-  (`concreto E rústico`, `pedra OU metal`, `NÃO metal`), filtro por tipo de
-  asset, extensão, nota, resolução e até por cor dominante da imagem.
-- **Detecta duplicatas de verdade**, mesmo quando o arquivo mudou de
-  resolução ou formato (hash perceptual de conteúdo visual, não só nome ou
-  bytes idênticos).
-- **Conversa com o Blender.** Um add-on próprio (a "ponte", não um
-  importador) deixa arrastar um asset do AssetDeck direto para dentro da
-  cena: HDRI vira World, um set PBR vira material com node group pronto,
-  modelos entram por Append/Link. Também gera capas em lote renderizando
-  dentro do Blender, headless.
-- **Abre HDRI e modelo 3D de verdade, sem sair do app.** Duplo clique num
-  `.hdr`/`.exr` abre um visualizador com a imagem projetada em volta da
-  câmera (e um modo "esfera de reflexo", pra julgar a luz); num
-  `.blend`/`.fbx`/`.obj`, o modelo aparece com câmera orbitando. Miniatura
-  achatada não deixa avaliar nem luz nem forma.
-- **Arruma a biblioteca sem sair do programa.** Arrastar assets da grade
-  para uma pasta da árvore MOVE os arquivos no disco (com confirmação, e
-  levando junto texturas, previews e sidecars do asset). É a saída pra
-  aquele modelo que foi parar na pasta errada há dois anos.
-- **Casa preview com modelo automaticamente.** `Cadeira.blend` +
-  `Cadeira.jpg` viram um card só, com a imagem de capa — inclusive quando o
-  pack traz vários previews numerados (`_001`, `_002`), como o Chaos Cosmos.
-- **Resolve manutenção chata de biblioteca grande:** renomear em lote com
-  padrão de texto, religar texturas que sumiram do caminho original de um
-  `.blend`, e apontar para mais de uma pasta-raiz (trocando qual está ativa
-  pelo seletor no canto superior direito).
+### Requisitos
 
-## Screenshots
+- Python 3.12+
+- [Blender](https://www.blender.org/) 4.x ou 5.x (opcional, para a ponte de arrastar assets e render headless de capas)
 
-| Modo escuro | Modo claro |
-|---|---|
-| ![Modo escuro](docs/screenshots/biblioteca-escuro.png) | ![Modo claro](docs/screenshots/biblioteca-claro.png) |
+### Passo a passo
 
-Da esquerda para a direita: **lateral** com pastas, tags, coleções e coleções
-inteligentes (cada seção com contador e recolhível); **grade** com os filtros
-de tipo de asset e o caminho de navegação; **painel de detalhes** com
-miniatura, ficha técnica, avaliação, galeria de previews e tags do asset
-selecionado. O rodapé mostra se a ponte com o Blender está conectada e o
-tamanho total da biblioteca.
+1. Clone o repositório e acesse o diretório:
+   ```bash
+   git clone https://github.com/zsabados3523/AssetDeck.git
+   cd AssetDeck
+   ```
 
-### Visualizador de HDRI e de modelo 3D
+2. Crie e ative um ambiente virtual isolado:
+   ```bash
+   python3 -m venv .venv
+   source .venv/bin/activate
+   # No Windows (PowerShell): .venv\Scripts\Activate.ps1
+   ```
 
-<p align="center">
-  <img src="docs/screenshots/visualizador-hdri.png" alt="Visualizador de HDRI, com a imagem projetada em volta da câmera" width="860">
-</p>
+3. Instale as dependências:
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-Duplo clique num `.hdr`/`.exr` abre o HDRI projetado em volta da câmera —
-arrastar gira a vista, e o modo **esfera de reflexo** põe uma esfera
-espelhada no meio da cena pra julgar a luz. O mesmo visualizador atende
-`.blend`, `.fbx` e `.obj`, aí com câmera orbitando e um botão para
-reenquadrar o modelo.
+4. Execute o aplicativo:
+   ```bash
+   python -m assetdeck
+   ```
 
-## Requisitos
+5. (Opcional no Linux) Crie o atalho no menu de aplicativos do sistema:
+   ```bash
+   python install_desktop_entry.py
+   ```
 
-- Windows, macOS ou Linux (desenvolvido originalmente no Linux / Zorin OS; versões para Windows e macOS em fase de testes)
-- Python 3.12 (se for executar via código-fonte)
-- [Blender](https://www.blender.org/) 5.2, opcional — necessário para a
-  ponte (arrastar assets direto pra cena), para gerar capas de modelos e
-  para abrir `.blend` no visualizador 3D. O app aceita o Blender instalado
-  via Flatpak **ou** um binário `blender` no `PATH`, nessa ordem:
-  ```bash
-  flatpak install flathub org.blender.Blender
-  ```
+---
 
-## Instalação
+## Primeiros Passos
 
-Clone o repositório e entre na pasta:
+1. **Definir a pasta da biblioteca:**
+   Ao abrir o app pela primeira vez, o AssetDeck exibirá o estado inicial sem biblioteca. Selecione a pasta onde seus assets 3D e texturas já estão organizados. Você também pode alterar ou repontar esse caminho a qualquer momento no arquivo `config.json` ou pelo menu de configurações.
 
-```bash
-git clone git@github.com:zsabados3523/AssetDeck.git
-cd AssetDeck
-```
+2. **Indexar os arquivos:**
+   O AssetDeck **não varre o disco sozinho ao abrir** por padrão, evitando lentidão desnecessária em bibliotecas grandes com dezenas de milhares de arquivos. Clique no botão **Reindexar** na barra de topo sempre que adicionar novos arquivos à pasta. Se desejar a varredura automática ao iniciar, ative a opção em *Configurações → Manutenção → Varrer a biblioteca ao abrir*.
 
-Crie um ambiente virtual Python e instale as dependências (isola os
-pacotes do projeto do resto do sistema, então não precisa de `sudo`):
+3. **Instalar a ponte do Blender (opcional):**
+   No AssetDeck, acesse *Configurações → Blender → Instalar / atualizar add-on...* para copiar a extensão diretamente para a pasta de add-ons do Blender. Em seguida, no Blender, acesse *Edit → Preferences → Add-ons*, ative o **AssetDeck Bridge** e use o painel na barra lateral (`N`) da viewport 3D para receber modelos, materiais e mundos arrastados.
 
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-```
+---
 
-## Rodando o app
+## Onde ficam os dados por Sistema Operacional
 
-Com o ambiente virtual ativado (`source .venv/bin/activate`, se ainda não
-estiver):
+O AssetDeck segue rigorosamente as convenções de diretórios de cada sistema operacional (implementado em `assetdeck/config.py`). As localizações padrão são:
+
+| Sistema | Configurações (`config.json`) | Banco de dados, logs e backups | Cache de miniaturas |
+|---|---|---|---|
+| **Linux** | `~/.config/assetdeck/` | `~/.local/share/assetdeck/` | `~/.cache/assetdeck/` |
+| **Windows** | `%APPDATA%\assetdeck\` | `%LOCALAPPDATA%\assetdeck\` | `%LOCALAPPDATA%\assetdeck\cache\` |
+| **macOS** | `~/Library/Application Support/assetdeck/` | `~/Library/Application Support/assetdeck/` | `~/Library/Caches/assetdeck/` |
+
+> [!TIP]
+> Todos os caminhos podem ser sobrescritos por variáveis de ambiente, ideal para ambientes portáteis ou scripts de automação:
+> - `ASSETDECK_CONFIG_DIR`: Diretório do `config.json`
+> - `ASSETDECK_DATA_DIR`: Diretório do `assetdeck.db`, backups e logs
+> - `ASSETDECK_CACHE_DIR`: Diretório do cache de miniaturas e malhas
+
+---
+
+## Tecnologias
+
+- **Interface Gráfica:** PySide6 (Qt 6.11) com folha de estilos modular QSS e sistema de tokens de cor calibrados para conformidade com normas de contraste WCAG.
+- **Banco de Dados Local:** SQLite 3 estruturado com modo WAL (Write-Ahead Logging) e sistema de migrations versionadas.
+- **Gráficos e Shaders:** OpenGL 3.30 Core Profile (`QOpenGLWidget`) com shaders GLSL para visualização equirretangular de HDRIs e malhas 3D.
+- **Processamento de Imagens e Dados:** Pillow (PIL), NumPy, OpenCV e biblioteca oficial OpenEXR.
+- **Integração 3D:** Parser OBJ nativo, suporte a FBX via Assimp e scripts headless de automação para Blender.
+
+---
+
+## Como regenerar os screenshots da documentação
+
+O repositório inclui ferramentas determinísticas para gerar uma biblioteca demo sintética (livre de direitos autorais) e capturar todas as imagens da interface sem depender de configurações do usuário:
 
 ```bash
-python -m assetdeck
+# 1. Gerar a biblioteca demo sintética em pasta temporária isolada
+python tools/make_demo_library.py "/tmp/claude-1000/shots/AssetDeck Demo"
+
+# 2. Executar o script de captura determinística (gera as imagens em docs/screenshots/)
+QT_QPA_PLATFORM=offscreen python tools/capture_screenshots.py
 ```
 
-Na primeira execução, o AssetDeck cria um `config.json` em
-`~/.config/assetdeck/config.json` com uma biblioteca de exemplo. Pra
-apontar pra uma biblioteca sua, edite a chave `"library_root"` nesse
-arquivo com o caminho absoluto da pasta que você quer indexar (o app só
-lê essa pasta — nunca escreve nela).
+O script configura automaticamente um ambiente isolado em `/tmp`, indexa os arquivos sintéticos, popula metadados de demonstração (tags, coleções, avaliações, propriedades) e salva as capturas otimizadas em `docs/screenshots/`.
 
-### Indexar a biblioteca
-
-O AssetDeck **não varre a biblioteca sozinho ao abrir** — numa biblioteca
-grande isso são vários minutos de disco e CPU sem ninguém ter pedido. Quem
-manda é o botão **Reindexar**, na barra de cima: clique nele depois de
-copiar arquivos novos para a pasta.
-
-Se você preferir o comportamento antigo, ligue **Configurações →
-Manutenção → Varrer a biblioteca ao abrir**.
-
-Dados do app ficam em (padrão XDG, não versionado no git):
-- Config: `~/.config/assetdeck/config.json`
-- Banco + backups + logs: `~/.local/share/assetdeck/`
-- Cache de miniaturas: `~/.cache/assetdeck/`
-
-Se o programa fechar sozinho alguma vez, `~/.local/share/assetdeck/logs/`
-guarda dois arquivos úteis: `assetdeck.log` (o que ele estava fazendo) e
-`quedas.txt` (onde ele estava no instante da queda).
-
-### Ponte com o Blender (opcional)
-
-Com o Blender 5.2 instalado via Flatpak, use **Ferramentas → Blender →
-Instalar / atualizar add-on…** dentro do app para copiar o add-on da ponte
-para a pasta de add-ons do Blender. Depois é só ativá-lo em *Edit →
-Preferences → Add-ons* no Blender — ele aparece como um painel na barra
-lateral (tecla `N`) das viewports 3D.
-
-### Atalho no menu de aplicativos (opcional)
-
-```bash
-python install_desktop_entry.py
-```
-
-Cria uma entrada no menu de aplicativos do sistema, pra abrir o AssetDeck
-sem precisar do terminal depois da primeira instalação.
-
-## Rodando os testes
-
-```bash
-pytest -q
-```
-
-## Estrutura do projeto
-
-- `assetdeck/` — código do app
-  - `ui/` — interface em PySide6/Qt (janela, tema, grade, painéis, diálogos,
-    visualizador 3D)
-  - `db/` — SQLite (conexão, migrations, repositórios)
-  - `indexer/` — varredura de disco, agrupamento PBR, dependências
-  - `thumbs/` — geração e cache de miniaturas (raster e HDR/EXR)
-  - `bridge/` — servidor da ponte com o Blender (protocolo próprio via socket)
-  - `blender/` — chamadas headless ao Blender (render de capas)
-  - `mover.py` — mover assets entre pastas (planeja, confirma, executa)
-- `blender_addon/` — add-on do Blender (a ponte: recebe o que o AssetDeck
-  arrasta e aciona o menu nativo do Blender)
-- `tests/` — suíte de testes (`pytest`)
-- `docs/screenshots/` — imagens usadas neste README
+---
 
 ## Contribuir
 
-Contribuições são bem-vindas! Consulte o guia em [CONTRIBUTING.md](CONTRIBUTING.md) para detalhes sobre configuração do ambiente, execução de testes e diretrizes do projeto.
+Contribuições são muito bem-vindas! Consulte o guia em [CONTRIBUTING.md](CONTRIBUTING.md) para orientações sobre o fluxo de desenvolvimento, testes automatizados e estilo de código.
+
+Para rodar a suíte de testes:
+```bash
+QT_QPA_PLATFORM=offscreen pytest -q
+```
+
+---
 
 ## Licença
 
-Distribuído sob a licença MIT. Consulte o arquivo [LICENSE](LICENSE) para mais informações.
-
-## Sobre a biblioteca de teste
-
-O repositório não inclui uma biblioteca de assets de exemplo — os arquivos
-de teste automatizado (`pytest`) geram suas próprias imagens sintéticas
-sob demanda, então **não é preciso nenhuma biblioteca real pra rodar os
-testes ou contribuir com código**.
-
-Se alguém te passou uma pasta de teste separada (fora do git, por conta
-do tamanho), basta apontar `"library_root"` no `config.json` pra ela.
-Vale checar a licença dos arquivos antes de reaproveitá-los em outro
-lugar — bibliotecas de asset compradas costumam proibir redistribuição.
+Distribuído sob a licença MIT. Consulte o arquivo [LICENSE](LICENSE) para obter mais informações.
