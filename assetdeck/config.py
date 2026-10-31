@@ -19,7 +19,7 @@ APP_NAME = "assetdeck"
 # Valores criados no config.json na primeira execução.
 # A raiz da biblioteca é CONFIGURAÇÃO (editável no json), nunca hardcoded no app.
 DEFAULTS = {
-    "library_root": "/home/rafael/00 - PROJETOS/assetdeck-testlib",
+    "library_root": "",
     # claro | escuro — trocado pelo menu Configurações. O redesign aprovado
     # usa fundo branco; quem já tem um config.json conserva sua preferência,
     # este padrão vale só pra primeira execução.
