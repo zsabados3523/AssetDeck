@@ -1,5 +1,7 @@
 # AssetDeck
 
+[![CI](https://github.com/zsabados3523/AssetDeck/actions/workflows/ci.yml/badge.svg)](https://github.com/zsabados3523/AssetDeck/actions/workflows/ci.yml) [![Release](https://img.shields.io/github/v/release/zsabados3523/AssetDeck)](https://github.com/zsabados3523/AssetDeck/releases) [![Licença MIT](https://img.shields.io/github/license/zsabados3523/AssetDeck)](LICENSE)
+
 Gerenciador de assets 2D/3D local para Windows, macOS e Linux (versões para Windows e macOS em fase de testes) — texturas, HDRIs, modelos,
 materiais PBR, LUTs, perfis de luz IES, vetores — com integração direta ao
 Blender. Feito para uso pessoal: **100% offline**, sem conta, sem nuvem, sem
