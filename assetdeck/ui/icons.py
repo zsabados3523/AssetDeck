@@ -14,6 +14,7 @@ desenhar evita depender de licença ou de baixar algo — o que combina com o
 from __future__ import annotations
 
 import logging
+import sys
 from functools import lru_cache
 from pathlib import Path
 
@@ -22,7 +23,10 @@ from PySide6.QtGui import QColor, QIcon, QPainter, QPixmap
 
 log = logging.getLogger(__name__)
 
-ICONS_DIR = Path(__file__).parent / "icons"
+if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+    ICONS_DIR = Path(sys._MEIPASS) / "assetdeck" / "ui" / "icons"
+else:
+    ICONS_DIR = Path(__file__).parent / "icons"
 
 
 @lru_cache(maxsize=None)

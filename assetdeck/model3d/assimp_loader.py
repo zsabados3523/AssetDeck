@@ -10,17 +10,18 @@ tem biblioteca de terceiros de verdade — não precisa do Blender.
 
 from __future__ import annotations
 
-import array
 from pathlib import Path
 
-from assetdeck.model3d.obj_parser import Mesh
+import numpy as np
+
+from assetdeck.model3d.obj_parser import MaterialRange, Mesh, _resolve_texture
 
 
 def load_via_assimp(path: Path) -> Mesh:
-    """Lê qualquer formato que o assimp suporte, achatado pro mesmo
-    formato "um vértice por canto de triângulo" que `Mesh` usa — o
-    visualizador não sabe (nem precisa saber) de qual loader a malha
-    veio.
+    """Lê qualquer formato que o assimp suporte em malha indexada.
+
+    Mantém vértices compartilhados e faixas de índices por material;
+    o visualizador não precisa saber de qual formato a malha veio.
 
     Levanta `ImportError` com mensagem legível se `assimp-py` não
     estiver instalado (formato existe, biblioteca que falta — mensagem
@@ -53,23 +54,51 @@ def load_via_assimp(path: Path) -> Mesh:
     if not cena.meshes:
         raise ValueError(f"{path.name}: nenhuma malha encontrada no arquivo")
 
-    positions: list[tuple[float, float, float]] = []
-    normals: list[tuple[float, float, float]] = []
+    position_parts: list[np.ndarray] = []
+    normal_parts: list[np.ndarray] = []
+    uv_parts: list[np.ndarray] = []
+    index_parts: list[np.ndarray] = []
+    materials: list[MaterialRange] = []
+    vertex_offset = 0
+    index_offset = 0
 
     for malha in cena.meshes:
-        verts = array.array("f", malha.vertices)
-        norms = array.array("f", malha.normals) if malha.normals else None
-        indices = array.array("I", malha.indices)
-        for i in indices:
-            positions.append((verts[3 * i], verts[3 * i + 1], verts[3 * i + 2]))
-            if norms is not None:
-                normals.append((norms[3 * i], norms[3 * i + 1], norms[3 * i + 2]))
-            else:
-                # Process_GenNormals deveria sempre preencher — sobra só
-                # como rede de segurança pra um formato/caso exótico.
-                normals.append((0.0, 0.0, 1.0))
+        indices = np.frombuffer(malha.indices, dtype=np.uint32)
+        if not len(indices):
+            continue
+        verts = np.frombuffer(malha.vertices, dtype=np.float32).reshape(-1, 3)
+        position_parts.append(verts.copy())
+        index_parts.append(indices + vertex_offset)
+        if malha.normals:
+            norms = np.frombuffer(malha.normals, dtype=np.float32).reshape(-1, 3)
+            normal_parts.append(norms.copy())
+        else:
+            # Process_GenNormals deveria preencher; mantém um fallback
+            # explícito para formatos que não ofereçam normais.
+            fallback = np.zeros((len(verts), 3), dtype=np.float32)
+            fallback[:, 2] = 1.0
+            normal_parts.append(fallback)
+        if malha.texcoords:
+            coords = np.frombuffer(malha.texcoords[0], dtype=np.float32).reshape(-1, 2)
+            uv_parts.append(coords.copy())
+        else:
+            uv_parts.append(np.zeros((len(verts), 2), dtype=np.float32))
 
-    if not positions:
+        props = cena.materials[malha.material_index]
+        raw_color = props.get("COLOR_DIFFUSE") or (0.72, 0.72, 0.75)
+        color = tuple(float(x) for x in raw_color[:3])
+        diffuse = props.get("TEXTURES", {}).get(assimp_py.TextureType_DIFFUSE, [])
+        texture_name = diffuse[0] if diffuse else props.get("TEXTURE_BASE")
+        texture = _resolve_texture(path.parent, texture_name) if texture_name else None
+        materials.append(MaterialRange(index_offset, len(indices), color, texture,
+                                       props.get("NAME")))
+        vertex_offset += len(verts)
+        index_offset += len(indices)
+
+    if not position_parts:
         raise ValueError(f"{path.name}: malha sem vértices")
 
-    return Mesh(positions=positions, normals=normals)
+    return Mesh(positions=np.concatenate(position_parts),
+                normals=np.concatenate(normal_parts),
+                uvs=np.concatenate(uv_parts), materials=materials,
+                indices=np.concatenate(index_parts))

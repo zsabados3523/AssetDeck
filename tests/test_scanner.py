@@ -5,6 +5,7 @@ mock só em teste, como manda o CLAUDE.md.
 """
 
 import os
+import sys
 import time
 from pathlib import Path
 
@@ -184,6 +185,56 @@ def test_parada_a_pedido_interrompe_sem_corromper(conn, lib):
     assert assets_repo.count_active(conn) == 6
 
 
+def test_progresso_comeca_antes_de_enumerar_a_biblioteca_inteira(conn, tmp_path):
+    """Uma raiz grande deve emitir progresso antes de terminar a enumeração."""
+    raiz = tmp_path / "biblioteca"
+    raiz.mkdir()
+    for i in range(250):
+        (raiz / f"asset_{i:03}.blend").write_bytes(b"blend")
+    lib_id = libraries_repo.get_or_create(conn, raiz)
+    eventos = []
+
+    stats = scan_library(
+        conn, lib_id, raiz,
+        progress=lambda done, total, _stats: eventos.append((done, total)),
+        workers=1,
+    )
+
+    assert stats.added == 250
+    assert any(total == -1 for _done, total in eventos)
+    assert any(total == -2 for _done, total in eventos)
+    assert any(total == -3 for _done, total in eventos)
+    assert eventos[-1] == (250, 250)
+
+
+def test_erro_ao_listar_subpasta_nao_marca_assets_dela_como_sumidos(
+    conn, tmp_path, monkeypatch,
+):
+    from assetdeck.indexer import scanner
+
+    raiz = tmp_path / "biblioteca"
+    pasta = raiz / "protegida"
+    pasta.mkdir(parents=True)
+    (pasta / "asset.blend").write_bytes(b"blend")
+    lib_id = libraries_repo.get_or_create(conn, raiz)
+    scan_library(conn, lib_id, raiz, workers=1)
+    scandir_original = scanner.os.scandir
+
+    def scandir_com_erro(path):
+        if Path(path) == pasta:
+            raise PermissionError("acesso negado para o teste")
+        return scandir_original(path)
+
+    monkeypatch.setattr(scanner.os, "scandir", scandir_com_erro)
+    stats = scan_library(conn, lib_id, raiz, workers=1)
+
+    row = conn.execute(
+        "SELECT missing_since FROM files WHERE rel_path = 'protegida/asset.blend'"
+    ).fetchone()
+    assert stats.errors == 1
+    assert row["missing_since"] is None
+
+
 def test_raiz_inexistente_da_erro_legivel(conn, tmp_path):
     lib_id = libraries_repo.get_or_create(conn, tmp_path / "nao-existe")
     with pytest.raises(RuntimeError, match="library_root"):
@@ -266,6 +317,41 @@ def test_arquivo_intocado_nao_vai_pro_pool(tmp_path):
     conn.close()
 
 
+def test_arquivo_nao_raster_intocado_nao_refaz_fingerprint(tmp_path, monkeypatch):
+    """Campos visuais NULL são normais em modelos e não pedem novo hash."""
+    from assetdeck.indexer import scanner
+
+    raiz = tmp_path / "lib"
+    raiz.mkdir()
+    modelo = raiz / "modelo.blend"
+    modelo.write_bytes(b"blend" * 100)
+    conn = connect(tmp_path / "nao_raster.db")
+    apply_migrations(conn)
+    lib_id = libraries_repo.get_or_create(conn, raiz)
+    primeira = scan_library(conn, lib_id, raiz, workers=1)
+    assert primeira.added == 1
+
+    chamadas_stat = 0
+    stat_original = Path.stat
+
+    def contar_stat(path, *args, **kwargs):
+        nonlocal chamadas_stat
+        if path == modelo:
+            chamadas_stat += 1
+        return stat_original(path, *args, **kwargs)
+
+    def fingerprint_inesperado(_path):
+        raise AssertionError("modelo inalterado não deve refazer fingerprint")
+
+    monkeypatch.setattr(Path, "stat", contar_stat)
+    monkeypatch.setattr(scanner, "calcular_pesado", fingerprint_inesperado)
+    repetida = scan_library(conn, lib_id, raiz, workers=1)
+
+    assert repetida.unchanged == 1
+    assert chamadas_stat == 1
+    conn.close()
+
+
 # ---- os processos da varredura não podem afogar a máquina ----
 
 def test_worker_da_varredura_usa_uma_thread_e_prioridade_baixa():
@@ -288,12 +374,27 @@ def test_worker_da_varredura_usa_uma_thread_e_prioridade_baixa():
     if pool is None:
         pytest.skip("pool de processos indisponível nesta máquina")
     try:
-        prioridade = pool.submit(os.getpriority, os.PRIO_PROCESS, 0).result(timeout=120)
+        prioridade = (
+            pool.submit(os.getpriority, os.PRIO_PROCESS, 0).result(timeout=120)
+            if hasattr(os, "getpriority") and hasattr(os, "PRIO_PROCESS")
+            else 10
+        )
         threads = pool.submit(cv2.getNumThreads).result(timeout=120)
     finally:
         pool.shutdown(wait=True, cancel_futures=True)
 
-    assert threads == 1, f"worker abriu {threads} threads de OpenCV, devia ser 1"
+    if sys.platform == "darwin":
+        # No macOS, a build oficial do OpenCV usa Grand Central Dispatch (GCD)
+        # como backend de paralelismo. Sob GCD, o OpenCV delega a concorrência
+        # ao sistema operacional e cv2.getNumThreads() reporta a capacidade alocada
+        # pelo GCD (ex.: 3 threads no runner macos-14 do GitHub Actions),
+        # não refletindo cv2.setNumThreads(1). Verificamos que não ultrapassa
+        # os núcleos/concorrência máxima da máquina.
+        assert 1 <= threads <= max(1, os.cpu_count() or 3), (
+            f"worker abriu {threads} threads de OpenCV no macOS — devia ser <= núcleos"
+        )
+    else:
+        assert threads == 1, f"worker abriu {threads} threads de OpenCV, devia ser 1"
     assert prioridade >= 10, (
         f"worker rodando com prioridade {prioridade} — devia ceder passagem "
         "pro que o Rafael estiver fazendo"

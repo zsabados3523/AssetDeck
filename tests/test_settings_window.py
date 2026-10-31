@@ -69,6 +69,70 @@ def test_cada_categoria_tem_uma_pagina(janela):
     assert sw._paginas.count() == sw._lista.count()
 
 
+def test_navegacao_tem_coluna_propria_e_titulo(janela):
+    sw = janela.settings_window
+
+    assert sw.nav_panel.objectName() == "settingsNavPanel"
+    assert sw._lista.parentWidget() is sw.nav_panel
+    assert sw.nav_panel.width() == 202
+
+
+def test_troca_de_pagina_nas_configuracoes_e_imediata(janela):
+    sw = janela.settings_window
+    sw._lista.setCurrentRow(1)
+
+    assert sw._paginas.currentIndex() == 1
+    assert not sw._paginas.currentWidget().isHidden()
+    assert all(
+        sw._paginas.widget(i).isHidden()
+        for i in range(sw._paginas.count())
+        if i != 1
+    )
+
+    janela.reduce_motion_check.setChecked(True)
+    sw._lista.setCurrentRow(2)
+
+    assert sw._paginas.currentIndex() == 2
+    assert not sw._paginas.currentWidget().isHidden()
+
+
+def test_trocas_rapidas_nao_deixam_paginas_ou_efeitos_sobrepostos(janela, qapp):
+    sw = janela.settings_window
+    sw._lista.setCurrentRow(1)
+    sw._lista.setCurrentRow(2)
+    sw._lista.setCurrentRow(3)
+    qapp.processEvents()
+
+    visiveis = [
+        sw._paginas.widget(i)
+        for i in range(sw._paginas.count())
+        if not sw._paginas.widget(i).isHidden()
+    ]
+    assert visiveis == [sw._paginas.currentWidget()]
+    for indice in range(sw._paginas.count()):
+        pagina = sw._paginas.widget(indice)
+        assert pagina.graphicsEffect() is None
+
+
+def test_reduzir_movimento_salva_e_aplica_na_grade(janela):
+    check = janela.reduce_motion_check
+    delegate = janela.grid.itemDelegate()
+
+    assert check.isChecked() is False
+    assert delegate._reduced_motion is False
+    assert janela._reduce_motion is False
+    check.setChecked(True)
+    assert config.load_config()["reduce_motion"] is True
+    assert delegate._reduced_motion is True
+    assert janela._reduce_motion is True
+    assert janela._size_value_effect.opacity() == 1.0
+
+    check.setChecked(False)
+    assert config.load_config()["reduce_motion"] is False
+    assert delegate._reduced_motion is False
+    assert janela._reduce_motion is False
+
+
 # ------------------------ opções que vieram da janela de Preferências --
 
 def test_a_ponte_carrega_o_valor_do_config(janela):
@@ -168,3 +232,11 @@ def test_o_interruptor_da_varredura_grava_no_config(janela):
 
     sw.scan_on_startup.setChecked(False)
     assert config.load_config().get("scan_on_startup") is False
+
+
+def test_processos_da_varredura_gravam_na_hora(janela):
+    sw = janela.settings_window
+    assert sw.scan_workers.currentData() == 4
+
+    sw.scan_workers.setCurrentIndex(sw.scan_workers.findData(8))
+    assert config.load_config()["scan_workers"] == 8

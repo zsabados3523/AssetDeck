@@ -28,13 +28,23 @@ from pathlib import Path
 
 log = logging.getLogger(__name__)
 
+
+def _is_dir(path: Path, contexto: str) -> bool:
+    """Verifica um diretório sem derrubar a busca quando o caminho é ilegível."""
+    try:
+        return path.is_dir()
+    except OSError as exc:
+        log.warning("Não consegui verificar %s durante %s: %s", path, contexto, exc)
+        return False
+
+
 # Onde o Linux costuma montar disco externo. `/media/<user>` é o padrão do
 # udisks (GNOME), `/run/media/<user>` o de distros com systemd puro, e
 # `/mnt` é onde caem montagens manuais e de alguns gerenciadores de arquivo.
 def _mount_roots() -> list[Path]:
     roots: list[Path] = []
     for base in (Path("/media"), Path("/run/media")):
-        if not base.is_dir():
+        if not _is_dir(base, "a busca por pontos de montagem"):
             continue
         # /media/<user>/<label> — junta os dois níveis
         roots.extend(_subdirs(base))
@@ -91,7 +101,7 @@ def resolve(configured: Path) -> Resolution:
     pedaços do caminho batem, menor a chance de ser coincidência.
     """
     configured = Path(configured)
-    if configured.is_dir():
+    if _is_dir(configured, "a busca da biblioteca configurada"):
         return Resolution(configured=configured, found=configured)
 
     log.warning("Biblioteca não está no caminho gravado: %s", configured)
@@ -110,7 +120,7 @@ def resolve(configured: Path) -> Resolution:
         sufixo = Path(*partes[k:])
         for raiz in candidatos:
             alvo = raiz / sufixo
-            if alvo.is_dir():
+            if _is_dir(alvo, "a busca da biblioteca nos pontos de montagem"):
                 log.info("Biblioteca encontrada em outro lugar: %s (era %s)",
                          alvo, configured)
                 return Resolution(configured=configured, found=alvo)

@@ -23,6 +23,8 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
+from assetdeck.ui import dialog_chrome
+
 
 class MissingTexturesDialog(QDialog):
     def __init__(self, blend_path: Path, perdidas: list[dict],
@@ -35,6 +37,9 @@ class MissingTexturesDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(10)
+        dialog_chrome.add_heading(
+            layout, "Texturas não encontradas",
+            f"Relatório das referências dentro de {blend_path.name}.")
 
         resumo = f"{len(perdidas)} continuam quebradas"
         if recuperadas_auto:
@@ -55,13 +60,13 @@ class MissingTexturesDialog(QDialog):
             self.table.setItem(row, 1, QTableWidgetItem(p["caminho_esperado"]))
         layout.addWidget(self.table)
 
-        abrir_pasta = QPushButton("Abrir pasta do asset")
-        abrir_pasta.clicked.connect(self._abrir_pasta)
-        layout.addWidget(abrir_pasta)
-
         # Close é RejectRole no Qt — só emite `rejected`, não `accepted`.
         botoes = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        abrir_pasta = botoes.addButton(
+            "Abrir pasta do asset", QDialogButtonBox.ButtonRole.ActionRole)
+        abrir_pasta.clicked.connect(self._abrir_pasta)
         botoes.rejected.connect(self.reject)
+        dialog_chrome.prepare_actions(botoes)
         layout.addWidget(botoes)
 
     def _abrir_pasta(self) -> None:

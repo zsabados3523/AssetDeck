@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import io
 import logging
+import time
 import zlib
 from pathlib import Path
 from uuid import uuid4
@@ -91,7 +92,21 @@ def save_png_atomic(img: Image.Image, dest: Path) -> None:
     tmp = dest.parent / f"{dest.stem}.{uuid4().hex}.tmp"
     try:
         img.save(tmp, format="PNG")
-        tmp.replace(dest)  # atômico; se dois jobs competirem, o último vence
+        # No Windows, replace falha se o destino estiver aberto ou sendo
+        # substituído simultaneamente por outra thread. Retry curto resolve.
+        max_tentativas = 10
+        for tentativa in range(max_tentativas):
+            try:
+                tmp.replace(dest)  # atômico; se dois jobs competirem, o último vence
+                break
+            except PermissionError:
+                if tentativa == max_tentativas - 1:
+                    log.warning(
+                        "Falha ao substituir atomicamente %s por %s após %d tentativas.",
+                        tmp, dest, max_tentativas, exc_info=True,
+                    )
+                    raise
+                time.sleep(0.005 * (tentativa + 1))
     finally:
         tmp.unlink(missing_ok=True)
 

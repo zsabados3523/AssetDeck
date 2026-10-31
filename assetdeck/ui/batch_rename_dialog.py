@@ -23,9 +23,7 @@ from PySide6.QtWidgets import (
 )
 
 from assetdeck import batch_rename
-
-_COR_CONFLITO = QColor("#f6c6c6")
-
+from assetdeck.ui import dialog_chrome, theme
 
 class BatchRenameDialog(QDialog):
     def __init__(self, conn: sqlite3.Connection, library_id: int,
@@ -38,6 +36,12 @@ class BatchRenameDialog(QDialog):
         self._conflitos: dict[str, str] = {}
         self.setWindowTitle(f"Renomear em lote — {len(asset_ids)} asset(s)")
         self.resize(700, 460)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(10)
+        dialog_chrome.add_heading(
+            layout, "Renomear arquivos em lote",
+            "Confira a prévia: nada será alterado até você confirmar.")
 
         campos = QHBoxLayout()
         self.busca_edit = QLineEdit()
@@ -74,10 +78,7 @@ class BatchRenameDialog(QDialog):
         self.renomear_btn.clicked.connect(self.accept)
         self.botoes.rejected.connect(self.reject)
         self.renomear_btn.setEnabled(False)
-
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(10)
+        dialog_chrome.prepare_actions(self.botoes)
         layout.addLayout(campos)
         layout.addWidget(self.info_label)
         layout.addWidget(self.table)
@@ -102,8 +103,11 @@ class BatchRenameDialog(QDialog):
             motivo = self._conflitos.get(item.new_rel_path)
             if motivo:
                 item_novo.setText(f"{nome_novo}   ⚠ {motivo}")
-                item_antigo.setBackground(_COR_CONFLITO)
-                item_novo.setBackground(_COR_CONFLITO)
+                # Os conflitos ficam em uma pastilha neutra; o ícone e a
+                # mensagem informam o motivo sem abrir uma cor local.
+                fundo_conflito = QColor(theme.current_colors()["accent_soft"])
+                item_antigo.setBackground(fundo_conflito)
+                item_novo.setBackground(fundo_conflito)
             self.table.setItem(row, 0, item_antigo)
             self.table.setItem(row, 1, item_novo)
 

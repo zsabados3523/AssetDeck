@@ -8,6 +8,7 @@ ainda entram com prioridade 1, furando a fila). Com a varredura da
 biblioteca real rodando junto, a fila nunca esvaziava.
 """
 
+import sys
 import threading
 from pathlib import Path
 
@@ -112,6 +113,88 @@ def test_as_miniaturas_deixam_nucleo_sobrando(qapp, tmp_path):
     assert pipeline._pool.maxThreadCount() >= 2
 
 
+def test_as_miniaturas_reduzem_concorrencia_durante_varredura(qapp, tmp_path):
+    pipeline = ThumbnailPipeline(tmp_path)
+    normal = pipeline._normal_thread_count
+    try:
+        pipeline.set_scan_active(True)
+        assert pipeline._pool.maxThreadCount() == 1
+        pipeline.set_scan_active(False)
+        assert pipeline._pool.maxThreadCount() == normal
+    finally:
+        pipeline.shutdown()
+
+
+def test_job_de_miniatura_aguarda_fim_da_varredura(
+    qapp, tmp_path, monkeypatch,
+):
+    from assetdeck.thumbs import pipeline as pipeline_mod
+
+    pipeline = ThumbnailPipeline(tmp_path / "thumbs")
+    src = tmp_path / "imagem.tif"
+    geradas = []
+    monkeypatch.setattr(
+        pipeline_mod, "make_any_thumbnail",
+        lambda source, _dest: geradas.append(source),
+    )
+    try:
+        pipeline.set_scan_active(True)
+        pipeline.get_or_request(1, src, "abc123")
+
+        assert pipeline._pool.waitForDone(100) is False
+        assert geradas == []
+
+        pipeline.set_scan_active(False)
+        assert pipeline._pool.waitForDone(5000)
+        qapp.processEvents()
+        assert geradas == [src]
+    finally:
+        pipeline.shutdown()
+
+
+def test_job_suspenso_e_cancelado_ao_fechar(qapp, tmp_path, monkeypatch):
+    from assetdeck.thumbs import pipeline as pipeline_mod
+
+    pipeline = ThumbnailPipeline(tmp_path / "thumbs")
+    geradas = []
+    monkeypatch.setattr(
+        pipeline_mod, "make_any_thumbnail",
+        lambda source, _dest: geradas.append(source),
+    )
+    pipeline.set_scan_active(True)
+    pipeline.get_or_request(1, tmp_path / "imagem.tif", "abc123")
+
+    pipeline.shutdown(timeout_ms=1000)
+
+    assert geradas == []
+    assert pipeline._pool.activeThreadCount() == 0
+
+
+def test_job_pbr_aguarda_fim_da_varredura(qapp, tmp_path, monkeypatch):
+    from assetdeck.thumbs import pipeline as pipeline_mod
+
+    pipeline = ThumbnailPipeline(tmp_path / "thumbs")
+    renderizados = []
+    monkeypatch.setattr(
+        pipeline_mod, "render_material_preview",
+        lambda name, _maps, _dest, _cancel, _size:
+            renderizados.append(name),
+    )
+    try:
+        pipeline.set_scan_active(True)
+        pipeline.get_or_request_material(1, "Material", {}, "mat-key")
+
+        assert pipeline._material_pool.waitForDone(100) is False
+        assert renderizados == []
+
+        pipeline.set_scan_active(False)
+        assert pipeline._material_pool.waitForDone(5000)
+        qapp.processEvents()
+        assert renderizados == ["Material"]
+    finally:
+        pipeline.shutdown()
+
+
 def test_uma_miniatura_lenta_nao_atrasa_o_visualizador(qapp, tmp_path):
     """O teste que junta tudo: fila de miniaturas cheia E o pool global
     ocupado, e mesmo assim a prévia do visualizador tem thread livre."""
@@ -141,7 +224,7 @@ def test_a_thread_de_miniatura_e_rebaixada_uma_vez_so(monkeypatch):
     from assetdeck.thumbs import pipeline
 
     chamadas = []
-    monkeypatch.setattr(pipeline.os, "nice", lambda n: chamadas.append(n))
+    monkeypatch.setattr(pipeline, "_aplicar_prioridade_baixa_thread", lambda: chamadas.append(5))
     monkeypatch.setattr(pipeline, "_rebaixada", threading.local())
 
     for _ in range(5):
@@ -154,7 +237,7 @@ def test_cada_thread_e_rebaixada_por_conta_propria(monkeypatch):
     from assetdeck.thumbs import pipeline
 
     chamadas = []
-    monkeypatch.setattr(pipeline.os, "nice", lambda n: chamadas.append(n))
+    monkeypatch.setattr(pipeline, "_aplicar_prioridade_baixa_thread", lambda: chamadas.append(5))
     monkeypatch.setattr(pipeline, "_rebaixada", threading.local())
 
     outra = threading.Thread(target=pipeline.rebaixar_esta_thread)
@@ -163,3 +246,25 @@ def test_cada_thread_e_rebaixada_por_conta_propria(monkeypatch):
     outra.join()
 
     assert chamadas == [5, 5]
+
+
+def test_aplicar_prioridade_baixa_thread_chama_api_do_so(monkeypatch):
+    from assetdeck.thumbs import pipeline
+
+    if sys.platform == "win32":
+        chamadas = []
+        import ctypes
+        monkeypatch.setattr(
+            ctypes.windll.kernel32,
+            "SetThreadPriority",
+            lambda h, p: chamadas.append((h, p)) or 1,
+            raising=False,
+        )
+        pipeline._aplicar_prioridade_baixa_thread()
+        assert len(chamadas) == 1
+        assert chamadas[0][1] == -1
+    else:
+        chamadas = []
+        monkeypatch.setattr(pipeline.os, "nice", lambda n: chamadas.append(n), raising=False)
+        pipeline._aplicar_prioridade_baixa_thread()
+        assert chamadas == [5]

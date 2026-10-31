@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from string import Template
@@ -32,36 +33,20 @@ from assetdeck import config
 
 log = logging.getLogger(__name__)
 
-QSS_FILE = Path(__file__).parent / "theme.qss"
+if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+    _UI_DIR = Path(sys._MEIPASS) / "assetdeck" / "ui"
+else:
+    _UI_DIR = Path(__file__).parent
+
+QSS_FILE = _UI_DIR / "theme.qss"
 
 # --------------------------------------------------------------------------
 # Paleta base
 # --------------------------------------------------------------------------
-# Fatia 44 (overhaul visual): o Rafael escolheu a direção olhando mockups da
-# janela inteira, não em abstrato. Duas mudanças de fundo em relação ao que
-# havia aqui:
-#
-#  1. **Existe cor de destaque agora: azul.** O monocromático foi vetado na
-#     tela — as três referências que ele mandou têm destaque (roxo numa, azul
-#     em duas). O azul é um token só: trocar a identidade do app inteiro
-#     continua sendo mexer numa linha.
-#  2. **Fundo e superfície deixaram de ser a mesma cor.** Eram os dois brancos,
-#     separados só por uma linha quase invisível — o que sobrava era uma tela
-#     chapada. Agora o fundo é um degrau mais fundo que o painel, nos dois
-#     modos, e a hierarquia aparece sem depender de sombra (que no modo escuro
-#     praticamente não rende).
-#
-# O azul do modo claro NÃO é o mesmo do escuro: o claro precisa ser mais fundo
-# para segurar texto branco por cima e ainda passar em 4.5:1 sobre a pastilha
-# suave. Os dois foram calibrados por `contrast_ratio()`, não por olhômetro —
-# `tests/test_theme.py` falha se algum par cair abaixo do mínimo.
-#
-# Fatia 73 (Fase 7, revisão visual): o AZUL virou LARANJA — pedido do Rafael
-# depois de mandar referências (dashboards SaaS, cards com sombra suave) e
-# perguntar se dava pra deixar o app "mais estiloso". Mesma calibração por
-# `contrast_ratio()`, não só trocado o hex — ver `tests/test_theme.py` pros
-# mínimos que continuam valendo (4.5:1 sobre `surface`, sobre `on_accent`, e
-# entre `accent`/`accent_soft`).
+# Direção visual aprovada nos mockups: branco puro no tema claro e identidade
+# monocromática nos dois modos. A escala neutra serve a foco, seleção e ações
+# ativas; aviso, erro e sucesso mantêm cores semânticas próprias. Contrastes
+# continuam travados em `tests/test_theme.py`.
 
 BG = "#FFFFFF"          # fundo da janela: branco (Fatia 95). Era um cinza
                         # muito claro, pra separar do painel branco por
@@ -72,13 +57,12 @@ SURFACE = "#FFFFFF"     # painel/card/lateral: branco flutuando sobre o fundo
 BG_TINT = "#EDEDF1"     # variação do fundo (trilho de barra de rolagem, cabeçalho)
 FIELD = "#F2F2F6"       # campo de entrada: afunda em vez de sumir no branco
 
-ACCENT = "#B8460D"
-ACCENT_HOVER = "#C9520F"
-ACCENT_PRESS = "#9A3A0A"
+ACCENT = "#202124"
+ACCENT_HOVER = "#38393D"
+ACCENT_PRESS = "#111214"
 ON_ACCENT = "#FFFFFF"
-# Pastilha suave do estado ativo (categoria marcada, item da lateral
-# selecionado): fundo laranja lavado com o próprio ACCENT escrito por cima.
-ACCENT_SOFT = "#FDECDD"
+# Pastilha suave do estado ativo: cinza claro com texto quase preto.
+ACCENT_SOFT = "#E8E8EA"
 
 TITLE = "#101116"       # títulos: mais escuros que o corpo, é o que dá hierarquia
 TEXT = "#1F2024"
@@ -92,7 +76,7 @@ OK = "#1F8A53"          # LED do Blender conectado no rodapé (Fatia 46)
 POPOVER = "#FFFFFF"     # menus e popups são JANELAS separadas: sempre opacos
 BORDER = (0, 0, 0, 0.09)         # contorno de campo/botão
 BORDER_STRONG = (0, 0, 0, 0.28)  # contorno de controle (caixa de checkbox)
-FOCUS = ACCENT                   # foco agora é o destaque, não um cinza
+FOCUS = ACCENT                   # anel de foco segue a identidade monocromática
 
 # Seleção monocromática: pastilha de cinza claro com o texto normal por cima.
 # Continua sem cor de propósito — a seleção da GRADE compete com a miniatura,
@@ -146,24 +130,15 @@ SURFACE_SUNKEN = "#E4E4EB"
 # rótulo de extensão no canto (".fbx"/".exr"/...), não de cor. Antes isto era
 # um apelido de ACCENT; virou constante própria justamente para o azul não
 # vazar até aqui. Consumido pelo delegate (Fatia 27).
-TYPE_TINT = "#4A4A52"
-ON_TYPE_TINT = "#FFFFFF"  # texto/glifo sobre a pastilha acima
+TYPE_TINT = "#EDEDF1"
+ON_TYPE_TINT = "#303136"  # texto/glifo sobre a pastilha acima
 
 # --------------------------------------------------------------------------
 # Paleta escura (Fatia 43)
 # --------------------------------------------------------------------------
-# Nasceu na Fatia 43 como inversão monocromática da paleta clara. A Fatia 44
-# rebaseou os fundos: o modo escuro passou de cinza-chumbo (#1B1B1E) para um
-# quase-preto em camadas, que é o que a referência escolhida pelo Rafael faz —
-# fundo mais fundo que o painel, e o painel mais fundo que o campo. Sem esses
-# degraus, a lateral e a grade viravam uma mancha só.
-#
-# O destaque deixou de inverter polaridade (era um cinza CLARO com texto
-# escuro): agora é o MESMO azul da identidade, num tom mais luminoso porque
-# precisa brilhar sobre quase-preto em vez de sobre branco. O texto que vai por
-# cima dele é escuro — azul claro com branco em cima não passa em 4.5:1.
-# WARNING/DANGER seguem em tom mais claro que a versão clara: os tons escuros
-# ficam ilegíveis invertidos.
+# O modo escuro preserva a hierarquia de quase-preto em camadas. O destaque
+# inverte para cinza muito claro com texto escuro; os tons semânticos ficam
+# mais claros para continuar legíveis sobre superfícies escuras.
 
 BG_DARK = "#101114"
 SURFACE_DARK = "#1A1B1F"
@@ -173,11 +148,11 @@ BG_TINT_DARK = "#232429"
 # é o branco — por isso `field` é token próprio e não um apelido de `bg`.
 FIELD_DARK = "#131417"
 
-ACCENT_DARK = "#FF8A4C"
-ACCENT_HOVER_DARK = "#FF9C68"
-ACCENT_PRESS_DARK = "#E67638"
-ON_ACCENT_DARK = "#241000"
-ACCENT_SOFT_DARK = "#3A2417"
+ACCENT_DARK = "#F0F0F2"
+ACCENT_HOVER_DARK = "#FFFFFF"
+ACCENT_PRESS_DARK = "#D5D5D8"
+ON_ACCENT_DARK = "#17181B"
+ACCENT_SOFT_DARK = "#38393D"
 
 TITLE_DARK = "#FFFFFF"
 TEXT_DARK = "#DEDEE3"
@@ -250,14 +225,23 @@ def _paleta(mode: str) -> dict:
 SEPARATION = {"sutil": 0.05, "media": 0.075, "forte": 0.11}
 RADII = {  # (painel, card, controle)
     "discreto": (10, 8, 6),
-    # "marcante" cresceu na Fatia 73 (16,12,9 → 20,16,10) — parte do mesmo
-    # pedido do laranja: cantos maiores é um dos ingredientes do visual
-    # "mais estiloso" que as referências do Rafael mostravam.
+    # Cantos marcantes compõem a identidade aprovada nos mockups.
     "marcante": (20, 16, 10),
 }
 FONTS = {
+    "manrope": "Manrope",
     "inter": "Inter",
     "sistema": "",  # vazio = mantém a fonte padrão do sistema
+}
+DISPLAY_FONT = "Manrope"
+
+# A fonte da prévia aprovada acompanha o app. Arquivos estáticos separados
+# fazem o Qt reconhecer os pesos que a interface usa, sem síntese de negrito.
+MANROPE_FONT_FILES = {
+    "Regular": _UI_DIR / "fonts" / "Manrope-Regular.ttf",
+    "Medium": _UI_DIR / "fonts" / "Manrope-Medium.ttf",
+    "SemiBold": _UI_DIR / "fonts" / "Manrope-SemiBold.ttf",
+    "Bold": _UI_DIR / "fonts" / "Manrope-Bold.ttf",
 }
 
 BACKGROUNDS = ("liso", "grao")
@@ -269,15 +253,15 @@ class Variant:
     """Uma combinação de escolhas visuais.
 
     O padrão é o que o Rafael pediu: fundo liso, translucidez média, cantos
-    marcantes, fonte Inter, modo claro. A vitrine (`theme_gallery.py`) troca
+    marcantes, fonte Manrope, modo claro. A vitrine (`theme_gallery.py`) troca
     estes campos ao vivo para ele comparar as alternativas na tela antes de
     bater o martelo.
     """
 
     background: str = "liso"      # liso | grao
     separation: str = "media"     # sutil | media | forte (opacidade da linha)
-    radius: str = "marcante"      # discreto | marcante
-    font: str = "inter"           # inter | sistema
+    radius: str = "discreto"     # discreto | marcante
+    font: str = "manrope"         # manrope | inter | sistema
     mode: str = "claro"           # claro | escuro (Fatia 43)
 
     def __post_init__(self) -> None:
@@ -475,7 +459,6 @@ def build_tokens(variant: Variant = DEFAULT) -> dict[str, str]:
     pal = _paleta(variant.mode)
     raio_painel, raio_card, raio_controle = RADII[variant.radius]
     familia = FONTS[variant.font]
-
     ladrilho = background_tile_path(variant)
     bg_image = ""
     if ladrilho is not None:
@@ -498,6 +481,8 @@ def build_tokens(variant: Variant = DEFAULT) -> dict[str, str]:
         # agora também para botões e controles. Ver `SURFACE_RAISED`.
         "surface_raised": pal["surface_raised"],
         "surface_sunken": pal["surface_sunken"],
+        "type_tint": pal["type_tint"],
+        "on_type_tint": pal["on_type_tint"],
         "selection": rgba_css(pal["selection"]),
         "field": pal["field"],
         "popover": pal["popover"],
@@ -540,15 +525,22 @@ def build_tokens(variant: Variant = DEFAULT) -> dict[str, str]:
         # descartar o arredondamento inteiro, sem erro nenhum.
         "radius_pill_small": "13px",
         "radius_chip_small": "9px",
+        "radius_brand_tile": "2px",
+        "radius_slider_handle": "9px",
 
         "pad_s": "4px",
         "pad_m": "8px",
         "pad_l": "12px",
 
         "font_family": f'"{familia}"' if familia else "inherit",
+        "font_family_display": (
+            f'"{DISPLAY_FONT}"' if familia else "inherit"
+        ),
         "font_size": "13px",
-        "font_size_small": "12px",
-        "font_size_title": "15px",
+        "font_size_small": "11px",
+        "font_size_title": "17px",
+        "font_size_brand": "16px",
+        "font_size_page_title": "25px",
 
         "check_icon": str(icon_asset_path("check", pal["on_accent"], 12)),
         "chevron_icon": str(icon_asset_path("chevron-down", pal["text_muted"], 12)),
@@ -562,6 +554,21 @@ def build_tokens(variant: Variant = DEFAULT) -> dict[str, str]:
     }
 
 
+_QSS_CACHE: dict[Path, tuple[float, Template]] = {}
+
+
+def _get_qss_template() -> Template:
+    if not QSS_FILE.exists():
+        raise FileNotFoundError(f"Folha de estilo do tema não encontrada: {QSS_FILE}")
+    mtime = QSS_FILE.stat().st_mtime
+    cached = _QSS_CACHE.get(QSS_FILE)
+    if cached is None or cached[0] != mtime:
+        tpl = Template(QSS_FILE.read_text(encoding="utf-8"))
+        _QSS_CACHE[QSS_FILE] = (mtime, tpl)
+        return tpl
+    return cached[1]
+
+
 def build_qss(variant: Variant = DEFAULT) -> str:
     """Lê o theme.qss e substitui os tokens.
 
@@ -569,9 +576,7 @@ def build_qss(variant: Variant = DEFAULT) -> str:
     esquecido levanta `KeyError` na hora, em vez de vazar um "$nome" para
     dentro do QSS, onde o Qt descartaria a regra em silêncio.
     """
-    if not QSS_FILE.exists():
-        raise FileNotFoundError(f"Folha de estilo do tema não encontrada: {QSS_FILE}")
-    return Template(QSS_FILE.read_text(encoding="utf-8")).substitute(build_tokens(variant))
+    return _get_qss_template().substitute(build_tokens(variant))
 
 
 def build_palette(variant: Variant = DEFAULT):
@@ -662,20 +667,64 @@ def make_card(inner, *, titulo: str | None = None, sombra: bool = True):
     return card
 
 
+_FONT_FAMILIES_CACHE: set[str] | None = None
+
+
+def _available_font_families() -> set[str]:
+    global _FONT_FAMILIES_CACHE
+    if _FONT_FAMILIES_CACHE is None:
+        from PySide6.QtGui import QFontDatabase
+        _FONT_FAMILIES_CACHE = set(QFontDatabase.families())
+    return _FONT_FAMILIES_CACHE
+
+
 def apply_theme(app, variant: Variant = DEFAULT) -> None:
     """Aplica estilo, paleta, fonte e QSS na aplicação inteira."""
     from PySide6.QtGui import QFont, QFontDatabase
     from PySide6.QtWidgets import QStyleFactory
 
-    estilo = QStyleFactory.create("Fusion")
-    if estilo is None:  # nunca deve acontecer: Fusion é embutido no Qt
-        log.error("Estilo Fusion indisponível; seguindo com o estilo padrão do sistema.")
-    else:
-        app.setStyle(estilo)
+    if not app.property("assetdeck_fusion_style_set"):
+        estilo = QStyleFactory.create("Fusion")
+        if estilo is None:  # nunca deve acontecer: Fusion é embutido no Qt
+            log.error("Estilo Fusion indisponível; seguindo com o estilo padrão do sistema.")
+        else:
+            app.setStyle(estilo)
+            app.setProperty("assetdeck_fusion_style_set", True)
 
     familia = FONTS[variant.font]
+    if variant.font == "manrope" and not app.property("assetdeck_manrope_font_registered"):
+        font_ids = []
+        for style, font_file in MANROPE_FONT_FILES.items():
+            if not font_file.is_file():
+                log.error("Fonte Manrope %s não encontrada em %s", style, font_file)
+                continue
+            font_id = QFontDatabase.addApplicationFont(str(font_file))
+            if font_id < 0:
+                log.error("Qt não conseguiu registrar a fonte Manrope %s em %s", style, font_file)
+                continue
+            familias_registradas = QFontDatabase.applicationFontFamilies(font_id)
+            if familia not in familias_registradas:
+                log.error(
+                    "A fonte em %s registrou as famílias %s; esperava %r.",
+                    font_file, familias_registradas, familia,
+                )
+                continue
+            font_ids.append(font_id)
+
+        app.setProperty("assetdeck_manrope_font_ids", font_ids)
+        app.setProperty("assetdeck_manrope_font_registered", True)
+        global _FONT_FAMILIES_CACHE
+        _FONT_FAMILIES_CACHE = None
+        estilos_disponiveis = set(QFontDatabase.styles(familia))
+        estilos_esperados = set(MANROPE_FONT_FILES)
+        if estilos_faltantes := estilos_esperados - estilos_disponiveis:
+            log.error(
+                "Estilos Manrope ausentes após registro: %s (disponíveis: %s)",
+                sorted(estilos_faltantes), sorted(estilos_disponiveis),
+            )
     if familia:
-        if familia in QFontDatabase.families():
+        familias = _available_font_families()
+        if familia in familias:
             fonte = QFont(familia)
             fonte.setPointSize(10)
             app.setFont(fonte)
@@ -683,9 +732,16 @@ def apply_theme(app, variant: Variant = DEFAULT) -> None:
             log.warning(
                 "Fonte %r não está instalada; usando a fonte padrão do sistema.", familia
             )
+        if DISPLAY_FONT not in familias:
+            log.warning(
+                "Fonte de títulos %r não está instalada; usando o fallback do Qt.",
+                DISPLAY_FONT,
+            )
 
     app.setPalette(build_palette(variant))
-    app.setStyleSheet(build_qss(variant))
+    novo_qss = build_qss(variant)
+    if app.styleSheet() != novo_qss:
+        app.setStyleSheet(novo_qss)
     install_popup_corner_mask(app, variant)
 
     global _CURRENT_VARIANT
@@ -697,89 +753,100 @@ def apply_theme(app, variant: Variant = DEFAULT) -> None:
     )
 
 
+_POPUP_CLASSES = None
+
+
+def _get_popup_classes():
+    global _POPUP_CLASSES
+    if _POPUP_CLASSES is None:
+        from PySide6.QtCore import QEvent
+        from PySide6.QtWidgets import QDialog, QDialogButtonBox, QMessageBox, QMenu
+        _POPUP_CLASSES = (QEvent, QDialog, QDialogButtonBox, QMessageBox, QMenu)
+    return _POPUP_CLASSES
+
+
 class _PopupCornerMask:
-    """Recorta QMenu num retângulo arredondado de verdade.
+    """Prepara diálogos e registra que os cantos são desenhados pelo tema.
 
-    `WA_TranslucentBackground` foi testado e DESCARTADO: com ele ativo, o
-    `background-color` do QSS simplesmente parou de ser pintado (sonda
-    mostrou o meio da janela como `#00000000`) — o mesmo risco de depender
-    do compositor que a Fatia 24 já tinha evitado pra janela principal, só
-    que agora se confirmou na prática. `setMask()` com um `QRegion`
-    arredondado não depende de compositor (usa a X-Shape extension) e,
-    testado, manteve o fundo do QSS pintado normalmente.
-
-    Só QMenu — QDialog foi tentado e revertido (ver comentário do QDialog
-    no theme.qss): ele ganha barra de título nativa do gerenciador de
-    janelas, e cortar cantos por baixo dela deixa uma costura feia onde o
-    retângulo da barra encontra o corpo arredondado (visto na tela pelo
-    Rafael). QMenu é uma janela popup sem decoração nenhuma — sem esse
-    problema.
+    Máscaras de QWidget recortam em pixels inteiros e deixam os cantos
+    serrilhados. O QSS já desenha os raios de QMenu e a base de QDialog com
+    antialiasing; o filtro fica apenas com a padronização das QMessageBox.
     """
 
-    def __init__(self, radius_menu: int) -> None:
-        self._radius_menu = radius_menu
-
     def __call__(self, obj, event) -> bool:
-        from PySide6.QtCore import QEvent
-        from PySide6.QtWidgets import QMenu
-
-        if event.type() not in (QEvent.Type.Show, QEvent.Type.Resize):
+        q_event, q_dialog, q_btn_box, q_msg_box, q_menu = _get_popup_classes()
+        if event.type() != q_event.Type.Show:
             return False
-        if isinstance(obj, QMenu):
-            self._mask(obj, self._radius_menu)
+        if isinstance(obj, q_menu):
+            obj.setProperty("_assetdeck_corner_renderer", "qss")
+        elif isinstance(obj, q_dialog):
+            self._prepare_dialog(obj, q_btn_box, q_msg_box)
+            obj.setProperty("_assetdeck_corner_renderer", "qss")
         return False
 
     @staticmethod
-    def _mask(widget, radius: int) -> None:
-        from PySide6.QtCore import QRectF
-        from PySide6.QtGui import QPainterPath, QRegion
+    def _prepare_dialog(dialog, button_box_type, message_box_type) -> None:
+        """Aplica a faixa de ações comum e rótulos em português."""
+        from PySide6.QtWidgets import QDialogButtonBox, QMessageBox
 
-        if widget.width() <= 0 or widget.height() <= 0:
-            return
-        # Defesa extra: `setMask()` pode disparar outro Resize de volta pro
-        # widget (o gerenciador de janelas confirma a mudança de geometria).
-        # Sem este corte, isso reentraria no filtro e recalcularia a máscara
-        # de novo pro MESMO tamanho, sem necessidade.
-        tamanho = widget.size()
-        if widget.property("_assetdeck_masked_size") == tamanho:
-            return
-        widget.setProperty("_assetdeck_masked_size", tamanho)
+        if isinstance(dialog, QMessageBox) and not dialog.objectName():
+            dialog.setObjectName("assetdeckMessageBox")
 
-        path = QPainterPath()
-        path.addRoundedRect(QRectF(0, 0, widget.width(), widget.height()), radius, radius)
-        widget.setMask(QRegion(path.toFillPolygon().toPolygon()))
+        textos = {
+            QDialogButtonBox.StandardButton.Ok: "OK",
+            QDialogButtonBox.StandardButton.Cancel: "Cancelar",
+            QDialogButtonBox.StandardButton.Close: "Fechar",
+            QDialogButtonBox.StandardButton.Yes: "Sim",
+            QDialogButtonBox.StandardButton.No: "Não",
+            QDialogButtonBox.StandardButton.Apply: "Aplicar",
+            QDialogButtonBox.StandardButton.Save: "Salvar",
+            QDialogButtonBox.StandardButton.Discard: "Descartar",
+            QDialogButtonBox.StandardButton.Abort: "Interromper",
+            QDialogButtonBox.StandardButton.Retry: "Tentar novamente",
+            QDialogButtonBox.StandardButton.Ignore: "Ignorar",
+            QDialogButtonBox.StandardButton.Open: "Abrir",
+            QDialogButtonBox.StandardButton.Reset: "Redefinir",
+            QDialogButtonBox.StandardButton.RestoreDefaults: "Restaurar padrão",
+        }
 
+        for caixa in dialog.findChildren(button_box_type):
+            if not caixa.objectName():
+                caixa.setObjectName("dialogActions")
+            for botao in caixa.buttons():
+                texto = textos.get(caixa.standardButton(botao))
+                if texto:
+                    botao.setText(texto)
+
+        if isinstance(dialog, message_box_type):
+            for botao in dialog.buttons():
+                texto = textos.get(dialog.standardButton(botao))
+                if texto:
+                    botao.setText(texto)
 
 _popup_filter_ref = None  # installEventFilter não segura referência sozinho
 
 
 def install_popup_corner_mask(app, variant: Variant = DEFAULT) -> None:
-    """Instala (ou REINSTALA, se o tema for reaplicado) o recorte de cantos
-    de QMenu. Ver `_PopupCornerMask` para o porquê de `setMask()` em vez de
-    `WA_TranslucentBackground`, e para o porquê de NÃO incluir QDialog.
+    """Instala (ou reinstala) a padronização dos popups e caixas de diálogo.
 
-    Bug pego rodando a suíte inteira: `apply_theme()` é chamado várias vezes
-    em sequência em teste (`test_todas_as_variantes_aplicam_sem_erro` chama
-    24x seguidas). Sem remover o filtro ANTERIOR antes de instalar o novo,
-    eles se acumulavam no `QApplication` — que dura a sessão inteira de
-    testes — e cada Show/Resize passava a ser reprocessado por dezenas de
-    filtros ao mesmo tempo, travando a suíte por minutos. Por isso remove o
-    filtro velho primeiro: nunca mais de um instalado.
+    O nome é mantido para compatibilidade interna; os cantos agora são
+    antisserrilhados pelo QSS e não recebem mais recorte por máscara.
     """
     global _popup_filter_ref
     from PySide6.QtCore import QObject
 
     if _popup_filter_ref is not None:
-        app.removeEventFilter(_popup_filter_ref)
-        _popup_filter_ref.deleteLater()
-        _popup_filter_ref = None
+        return
 
-    _raio_painel, raio_card, _raio_controle = RADII[variant.radius]
-    mask = _PopupCornerMask(radius_menu=raio_card)
+    _ = variant  # os raios são consumidos diretamente pelo QSS do tema.
+    chrome = _PopupCornerMask()
 
     class _Filter(QObject):
         def eventFilter(self, obj, event) -> bool:  # noqa: N802
-            return mask(obj, event)
+            import shiboken6
+            if not shiboken6.isValid(obj) or not shiboken6.isValid(event):
+                return False
+            return chrome(obj, event)
 
     _popup_filter_ref = _Filter(app)
     app.installEventFilter(_popup_filter_ref)

@@ -85,3 +85,35 @@ def test_sem_swatch_nenhuma_opcao_ganha_icone(qapp):
     botao = FilterButton("palette", OPCOES_COR, swatch=False)
     for acao, _valor in botao._acoes:
         assert acao.icon().isNull()
+
+
+def test_filtro_da_barra_exibe_rotulo_e_popup_identificavel(qapp):
+    botao = FilterButton("sort", OPCOES, caption="Ordenar")
+
+    assert botao.objectName() == "toolbarFilter"
+    assert botao.text() == "Ordenar"
+    assert botao.accessibleName() == "Ordenar"
+    assert botao._menu.objectName() == "filterPopup"
+
+
+def test_popup_de_cor_usa_amostras_maiores(qapp):
+    from PySide6.QtCore import QSize
+
+    botao = FilterButton("palette", OPCOES_COR, swatch=True)
+    acao = botao._acoes[1][0]
+
+    assert acao.icon().actualSize(QSize(32, 32)) == QSize(16, 16)
+
+
+def test_hover_dos_filtros_ocupa_a_largura_do_popup(qapp):
+    from PySide6.QtCore import QPoint
+
+    botao = FilterButton("palette", OPCOES_COR, swatch=True)
+    botao._menu.setMinimumWidth(220)
+    botao._menu.popup(QPoint(30, 30))
+    qapp.processEvents()
+    geometria = botao._menu.actionGeometry(botao._acoes[0][0])
+
+    assert geometria.left() <= 2
+    assert geometria.width() >= botao._menu.width() - 4
+    botao._menu.close()

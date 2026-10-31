@@ -79,6 +79,31 @@ def test_run_le_o_config_de_novo_a_cada_chamada(qapp, env, monkeypatch):
     assert segunda[2] == 15.0        # já pegou o valor novo, sem reconstruir nada
 
 
+def test_worker_repassa_opcao_c_ate_comando_blender(qapp, env, monkeypatch):
+    """Preferências aprovadas atravessam worker e render_thumbnail sem perdas."""
+    from assetdeck.blender import render
+    import subprocess
+
+    tmp_path, root = env
+    cfg = config.load_config()
+    cfg.update(render_bg_color="#959599", render_bg_strength=1.8,
+               render_sun_energy=3.0)
+    config.save_config(cfg)
+    comandos = []
+
+    def executar(cmd, **kwargs):
+        comandos.append(cmd)
+        return subprocess.CompletedProcess(cmd, 1, "", "Error: teste sem render")
+
+    monkeypatch.setattr(render, "blender_command", lambda: ["blender"])
+    monkeypatch.setattr(render.subprocess, "run", executar)
+    rw.RenderWorker(tmp_path / "t.db", root, tmp_path / "previews").run()
+    assert len(comandos) == 1
+    valores = list(map(float, comandos[0][-5:]))
+    assert valores[:3] == pytest.approx(hex_to_linear_rgb("#959599"))
+    assert valores[3:] == [1.8, 3.0]
+
+
 # ---- restringir a fila a um subconjunto (Fatia 101) ----
 
 def test_worker_repassa_asset_ids_pra_models_without_cover(qapp, env, monkeypatch):
@@ -99,6 +124,27 @@ def test_worker_repassa_asset_ids_pra_models_without_cover(qapp, env, monkeypatc
     worker.run()
 
     assert capturado["asset_ids"] == [7, 8]
+
+
+def test_worker_usa_fila_com_capas_existentes_quando_sobrescrever(qapp, env, monkeypatch):
+    tmp_path, root = env
+    capturado = {}
+
+    def _fake_models_for_render(conn, lib_id, library_root, asset_ids=None,
+                               overwrite_existing=False):
+        capturado["asset_ids"] = asset_ids
+        capturado["overwrite_existing"] = overwrite_existing
+        return []
+
+    monkeypatch.setattr(rw, "models_for_render", _fake_models_for_render)
+
+    worker = rw.RenderWorker(
+        tmp_path / "t.db", root, tmp_path / "previews", asset_ids=[7],
+        overwrite_existing=True,
+    )
+    worker.run()
+
+    assert capturado == {"asset_ids": [7], "overwrite_existing": True}
 
 
 def test_worker_sem_asset_ids_continua_pegando_tudo(qapp, env, monkeypatch):
@@ -125,6 +171,7 @@ def test_controller_start_repassa_asset_ids_ao_worker(qapp, env, monkeypatch):
 
     def _espiao(self, *a, **kw):
         capturado["asset_ids"] = kw.get("asset_ids")
+        capturado["overwrite_existing"] = kw.get("overwrite_existing")
         orig_init(self, *a, **kw)
 
     monkeypatch.setattr(rw.RenderWorker, "__init__", _espiao)
@@ -132,7 +179,7 @@ def test_controller_start_repassa_asset_ids_ao_worker(qapp, env, monkeypatch):
 
     controller = rw.RenderController(tmp_path / "t.db", root, tmp_path / "previews")
     controller.start(lambda *a: None, lambda *a: None, lambda *a: None,
-                     asset_ids=[3])
+                     asset_ids=[3], overwrite_existing=True)
     controller.shutdown()
 
-    assert capturado["asset_ids"] == [3]
+    assert capturado == {"asset_ids": [3], "overwrite_existing": True}

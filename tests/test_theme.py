@@ -125,11 +125,11 @@ def test_contraste_do_rotulo_sobre_o_card_sem_miniatura():
     assert theme.contrast_ratio(theme.ON_TYPE_TINT, theme.TYPE_TINT) >= 4.5
 
 
-# ------------------------------------------------- destaque azul (F44) --
+# ------------------------------------------------ destaque monocromático --
 
 def test_contraste_do_destaque_sobre_a_pastilha_suave():
-    """A pastilha suave (`accent_soft`) é o estado ATIVO de filtro/categoria, e
-    o texto dela é o próprio destaque — azul sobre azul lavado.
+    """A pastilha suave (`accent_soft`) é o estado ATIVO de filtro/categoria.
+    Texto e pastilha usam tons neutros com contraste legível.
 
     É o par mais apertado da paleta inteira: quem escurece o `accent` para ele
     caber melhor sobre branco piora aqui, e vice-versa. Travado nos dois modos
@@ -137,6 +137,16 @@ def test_contraste_do_destaque_sobre_a_pastilha_suave():
     """
     assert theme.contrast_ratio(theme.ACCENT, theme.ACCENT_SOFT) >= 4.5
     assert theme.contrast_ratio(theme.ACCENT_DARK, theme.ACCENT_SOFT_DARK) >= 4.5
+
+
+def test_identidade_monocromatica_e_fundo_claro_branco():
+    """A direção visual aprovada usa destaque neutro e branco puro no claro."""
+    for cor in (theme.ACCENT, theme.ACCENT_HOVER, theme.ACCENT_PRESS,
+                theme.ACCENT_SOFT, theme.ACCENT_DARK, theme.ACCENT_HOVER_DARK,
+                theme.ACCENT_PRESS_DARK, theme.ACCENT_SOFT_DARK):
+        r, g, b = theme.hex_to_rgb(cor)
+        assert max(r, g, b) - min(r, g, b) <= 5, f"destaque colorido: {cor}"
+    assert theme.BG == "#FFFFFF"
 
 
 # Quanto dois tons vizinhos precisam diferir para o degrau ser visível.
@@ -492,19 +502,10 @@ def tema_isolado(qapp):
     qapp.setFont(fonte)
 
 
-def test_mascara_de_cantos_nao_quebra_menu_e_dialogo_fica_quadrado(tema_isolado):
-    """`install_popup_corner_mask` (aplicado por `apply_theme`) não pode
-    lançar exceção ao mostrar um QMenu — e o QSS continua sendo pintado por
-    baixo da máscara (o offscreen recusa `setMask()` de verdade, então isto
-    é o que dá pra provar automatizado; o corte em si só é verificável na
-    tela real).
-
-    QDialog é testado aqui também, mas para o oposto: ele NÃO pode ter
-    `border-radius` nem entrar na máscara. Foi tentado e revertido — um
-    QDialog ganha barra de título nativa do gerenciador de janelas, e
-    cortar cantos por baixo dela deixava uma costura feia (visto na tela
-    pelo Rafael)."""
+def test_popups_usam_cantos_do_qss_sem_mascara_serrilhada(tema_isolado):
+    """O tema desenha as curvas com antialiasing, sem recorte binário."""
     from PySide6.QtGui import QColor
+    from PySide6.QtCore import QPoint
     from PySide6.QtWidgets import QDialog, QMenu
 
     theme.apply_theme(tema_isolado)
@@ -515,19 +516,24 @@ def test_mascara_de_cantos_nao_quebra_menu_e_dialogo_fica_quadrado(tema_isolado)
     tema_isolado.processEvents()
     img = dialogo.grab().toImage()
     assert QColor(img.pixelColor(100, 60)).name().upper() == theme.BG.upper()
+    assert dialogo.property("_assetdeck_corner_renderer") == "qss"
+    assert dialogo.mask().isEmpty()
     dialogo.close()
 
     menu = QMenu()
     menu.addAction("Item de teste")
-    menu.popup(dialogo.mapToGlobal(dialogo.rect().center()))
+    menu.popup(QPoint(20, 20))
     tema_isolado.processEvents()
+    assert menu.property("_assetdeck_corner_renderer") == "qss"
+    assert menu.mask().isEmpty()
     menu.close()  # não travou, não lançou exceção
 
 
-def test_qdialog_nao_arredonda(tema_isolado):
+def test_qdialog_arredonda_a_base_no_qss(tema_isolado):
     theme.apply_theme(tema_isolado)
     qss_dialog = [b for b in theme.build_qss().split("}") if "QDialog {" in b][0]
-    assert "border-radius" not in qss_dialog
+    assert "border-bottom-left-radius:" in qss_dialog
+    assert "border-bottom-right-radius:" in qss_dialog
     assert "border:" not in qss_dialog
 
 
@@ -547,10 +553,33 @@ def test_apply_theme_configura_o_app(tema_isolado):
     assert qapp.style().metaObject().className() == "QStyleSheetStyle"
     assert QStyleFactory.create("Fusion") is not None
 
-    # A fonte só é trocada se estiver instalada — em máquina sem Inter o app
-    # tem de seguir com a do sistema, sem quebrar.
-    if theme.FONTS["inter"] in QFontDatabase.families():
-        assert qapp.font().family() == theme.FONTS["inter"]
+    assert all(font_file.is_file() for font_file in theme.MANROPE_FONT_FILES.values())
+    assert theme.FONTS["manrope"] in QFontDatabase.families()
+    assert set(theme.MANROPE_FONT_FILES) <= set(QFontDatabase.styles(theme.FONTS["manrope"]))
+    assert {
+        style: QFontDatabase.weight(theme.FONTS["manrope"], style)
+        for style in theme.MANROPE_FONT_FILES
+    } == {"Regular": 400, "Medium": 500, "SemiBold": 600, "Bold": 700}
+    assert qapp.font().family() == theme.FONTS["manrope"]
+
+
+def test_tokens_tipograficos_tornam_hierarquia_legivel_e_compacta():
+    tokens = theme.build_tokens()
+    qss = theme.build_qss()
+
+    assert tokens["font_size_small"] == "11px"
+    assert tokens["font_size_title"] == "17px"
+    assert tokens["font_size_brand"] == "16px"
+    assert tokens["font_size_page_title"] == "25px"
+    assert tokens["radius_panel"] == "10px"
+    assert tokens["radius_card"] == "8px"
+    assert tokens["font_family"] == '"Manrope"'
+    assert tokens["font_family_display"] == '"Manrope"'
+    assert "font-size: 16px" in qss
+    assert "font-size: 25px" in qss
+    assert 'font-family: "Manrope"' in qss
+    assert theme.build_tokens(theme.Variant(font="sistema"))["font_family_display"] \
+        == "inherit"
 
 
 def test_todas_as_variantes_aplicam_sem_erro(tema_isolado, tmp_path, monkeypatch):
@@ -724,21 +753,10 @@ def test_o_raio_da_pastilha_cabe_na_altura_do_botao(qapp, fonte, tmp_path):
     apply_migrations(conn)
 
     botoes = [
-        ("CategoryButton", CategoryButton(CATEGORIES[0]), "radius_pill"),
-        ("FilterButton", FilterButton("palette", PALETA_CORES, swatch=True), "radius_pill"),
-        # O seletor de biblioteca entrou aqui DEPOIS de escapar: ele usa o
-        # mesmo `$radius_pill`, mas tinha padding próprio e menor, então
-        # media 31px — abaixo do dobro do raio. O Qt descartou o
-        # arredondamento em silêncio e o botão ficou quadrado na tela até o
-        # Rafael reclamar. Um teste que cobre só dois dos três usuários do
-        # token não protege o token.
-        # O seletor encolheu na Fatia 95 (pedido do Rafael: ele ocupava a
-        # faixa inteira e não tinha como parecer centralizado), então passou a
-        # usar um token de raio PRÓPRIO — 18px não caberia mais nos 26px de
-        # altura. Cada botão é conferido contra o token QUE ELE USA: um teste
-        # que cobrisse todos contra o mesmo token voltaria a mentir na
-        # primeira vez que um deles mudasse de tamanho.
-        ("LibrarySwitcher", LibrarySwitcher(conn, 1), "radius_pill_small"),
+        ("CategoryButton", CategoryButton(CATEGORIES[0]), "radius_control"),
+        ("FilterButton", FilterButton("palette", PALETA_CORES, swatch=True,
+                                       caption="Cor"), "radius_control"),
+        ("LibrarySwitcher", LibrarySwitcher(conn, 1), "radius_control"),
     ]
     for nome, b, token in botoes:
         b.show()

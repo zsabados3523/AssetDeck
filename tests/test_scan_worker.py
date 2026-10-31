@@ -110,13 +110,83 @@ def test_progress_conta_so_a_biblioteca_sendo_escaneada(tmp_path, monkeypatch, q
 
     root = _biblioteca_com_par_de_mesmo_nome(tmp_path)  # 2 assets só
 
-    contagens_recebidas = []
+    progresso_recebido = []
     worker = ScanWorker(config.db_path(), root)
     worker.progress.connect(
-        lambda _done, _total, ativos: contagens_recebidas.append(ativos))
+        lambda _done, fase, ativos: progresso_recebido.append((fase, ativos)))
     worker.run()
 
-    assert contagens_recebidas, "nenhum sinal de progresso emitido"
-    assert all(n == 2 for n in contagens_recebidas), (
-        f"esperava sempre 2 (só a lib sendo escaneada), veio {contagens_recebidas}"
+    assert progresso_recebido, "nenhum sinal de progresso emitido"
+    assert all(
+        ativos == (0 if fase in (-3, -4) else 2)
+        for fase, ativos in progresso_recebido
+    ), (
+        "a contagem deve incluir somente a biblioteca atual e refletir se o lote "
+        f"já foi inserido; veio {progresso_recebido}"
     )
+
+
+def test_worker_aplica_quantidade_de_processos_salva_no_config(
+    tmp_path, monkeypatch, qapp,
+):
+    from assetdeck.indexer import scanner
+
+    monkeypatch.setenv("ASSETDECK_CONFIG_DIR", str(tmp_path / "cfg"))
+    monkeypatch.setenv("ASSETDECK_DATA_DIR", str(tmp_path / "data"))
+    config.ensure_dirs()
+    _preparar_banco()
+    cfg = config.load_config()
+    cfg["scan_workers"] = 8
+    config.save_config(cfg)
+    root = _biblioteca_com_par_de_mesmo_nome(tmp_path)
+
+    recebidos = []
+    monkeypatch.setattr(
+        scanner, "_abrir_pool", lambda workers: recebidos.append(workers))
+    ScanWorker(config.db_path(), root).run()
+
+    assert recebidos == [8]
+
+
+def test_shutdown_informa_que_a_thread_ainda_esta_encerrando(
+    tmp_path, monkeypatch, qapp,
+):
+    import threading
+    import time
+
+    from assetdeck.indexer.scanner import ScanStats
+    from assetdeck.ui import scan_worker
+    from assetdeck.ui.scan_worker import ScanController
+
+    monkeypatch.setenv("ASSETDECK_CONFIG_DIR", str(tmp_path / "cfg"))
+    monkeypatch.setenv("ASSETDECK_DATA_DIR", str(tmp_path / "data"))
+    config.ensure_dirs()
+    _preparar_banco()
+    root = tmp_path / "lib"
+    root.mkdir()
+
+    entrou = threading.Event()
+    liberar = threading.Event()
+
+    def scan_bloqueado(*_args, **_kwargs):
+        entrou.set()
+        liberar.wait()
+        return ScanStats(aborted=True)
+
+    monkeypatch.setattr(scan_worker, "scan_library", scan_bloqueado)
+    controller = ScanController(config.db_path(), root)
+    parou = []
+    controller.stopped.connect(lambda: parou.append(True))
+    controller.start(lambda *_: None, lambda *_: None, lambda *_: None)
+
+    assert entrou.wait(timeout=5), "a thread de varredura não iniciou"
+    assert controller.shutdown(timeout_ms=1) is False
+    assert controller.running
+
+    liberar.set()
+    assert controller.shutdown(timeout_ms=5000) is True
+    deadline = time.monotonic() + 2
+    while not parou and time.monotonic() < deadline:
+        qapp.processEvents()
+        time.sleep(0.01)
+    assert parou == [True]

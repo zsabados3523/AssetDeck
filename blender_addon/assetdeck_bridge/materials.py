@@ -27,16 +27,12 @@ def _socket(interface, nome: str, tipo: str, in_out: str):
 
 
 def build_node_group(nome: str, mapas: dict[str, str]) -> bpy.types.NodeTree:
-    """Cria (ou substitui) o node group com as texturas do set.
+    """Cria um node group com as texturas do set.
 
     `mapas` = {map_role: caminho absoluto}. Retorna o NodeTree pronto.
+    Uma nova aplicação não pode destruir o grupo usado por materiais antigos.
     """
     nome_grupo = f"{GROUP_PREFIX}{nome}"
-    antigo = bpy.data.node_groups.get(nome_grupo)
-    if antigo is not None:
-        # Reaplicar o mesmo material não deve empilhar grupos duplicados
-        bpy.data.node_groups.remove(antigo)
-
     grupo = bpy.data.node_groups.new(nome_grupo, "ShaderNodeTree")
     iface = grupo.interface
 
@@ -176,8 +172,8 @@ def build_material(nome: str, mapas: dict[str, str]) -> bpy.types.Material:
         links.new(node_grupo.outputs["Height"], disp.inputs["Height"])
         links.new(disp.outputs["Displacement"], out.inputs["Displacement"])
 
-    if "Alpha" in node_grupo.outputs:
-        mat.blend_method = "BLEND" if hasattr(mat, "blend_method") else mat.blend_method
+    if "Alpha" in node_grupo.outputs and hasattr(mat, "blend_method"):
+        mat.blend_method = "BLEND"
 
     return mat
 

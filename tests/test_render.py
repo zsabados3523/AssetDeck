@@ -161,6 +161,20 @@ def test_asset_ids_ignora_quem_ja_tem_capa(env):
     assert render.models_without_cover(conn, lib_id, root, asset_ids=[alvo]) == []
 
 
+def test_models_for_render_inclui_e_identifica_capa_existente(env):
+    conn, lib_id, root, tmp_path = env
+    alvo = render.models_without_cover(conn, lib_id, root)[0][0]
+    previews_repo.add(conn, alvo, _png_valido(tmp_path), tmp_path / "previews")
+
+    jobs = render.models_for_render(
+        conn, lib_id, root, asset_ids=[alvo], overwrite_existing=True,
+    )
+
+    assert len(jobs) == 1
+    assert jobs[0][0] == alvo
+    assert jobs[0][3] is True
+
+
 def _png_valido(tmp_path):
     from PIL import Image
 
@@ -190,6 +204,25 @@ def test_render_que_nao_gera_imagem_e_falha(tmp_path):
     alvo.write_bytes(b"b")
     r = render.render_thumbnail(alvo, tmp_path / "saida.png", comando=["true"])
     assert r.ok is False
+
+
+def test_manifesto_de_material_reaproveita_obj_e_pede_modo_correto(tmp_path, monkeypatch):
+    blend = tmp_path / "modelo.blend"
+    blend.write_bytes(b"blend")
+    obj = tmp_path / "cache.obj"
+    obj.write_text("v 0 0 0\n")
+    called = []
+
+    def fake_run(cmd, **_kwargs):
+        called.append(cmd)
+        obj.with_suffix(".materials.json").write_text("{}")
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    monkeypatch.setattr(render.subprocess, "run", fake_run)
+    result = render.export_material_manifest(blend, obj, comando=["blender"])
+    assert result.ok
+    assert called[0][-1] == "--manifest-only"
+    assert obj.read_text() == "v 0 0 0\n"
 
 
 def test_motivo_extrai_a_excecao(tmp_path):
