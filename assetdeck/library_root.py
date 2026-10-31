@@ -90,7 +90,7 @@ class Resolution:
         return self.found is None
 
 
-def resolve(configured: Path) -> Resolution:
+def resolve(configured: Path | str) -> Resolution:
     """Confere o caminho gravado e, se ele não existir, procura a biblioteca
     nos pontos de montagem do sistema.
 
@@ -100,7 +100,13 @@ def resolve(configured: Path) -> Resolution:
     montagem candidato. Vence o sufixo MAIS LONGO que existir — quanto mais
     pedaços do caminho batem, menor a chance de ser coincidência.
     """
+    if isinstance(configured, str) and not configured.strip():
+        return Resolution(configured=Path(""), found=None)
+
     configured = Path(configured)
+    if str(configured).strip() in ("", "."):
+        return Resolution(configured=configured, found=None)
+
     if _is_dir(configured, "a busca da biblioteca configurada"):
         return Resolution(configured=configured, found=configured)
 
@@ -109,6 +115,8 @@ def resolve(configured: Path) -> Resolution:
     partes = configured.parts
     if partes and partes[0] == "/":
         partes = partes[1:]
+    if not partes:
+        return Resolution(configured=configured, found=None)
 
     candidatos = _mount_roots()
     log.info("Procurando a biblioteca em %d ponto(s) de montagem: %s",
@@ -137,6 +145,10 @@ def repoint(conn: sqlite3.Connection, old_root: Path, new_root: Path) -> int:
     mudar. Quem grava o config.json é o chamador (`config.save_config`),
     porque este módulo não decide política, só executa.
     """
+    if not str(old_root).strip() or str(old_root).strip() == ".":
+        return 0
+    if not str(new_root).strip() or str(new_root).strip() == ".":
+        return 0
     cur = conn.execute(
         "UPDATE libraries SET root_path = ? WHERE root_path = ? AND deleted_at IS NULL",
         (str(new_root), str(old_root)),

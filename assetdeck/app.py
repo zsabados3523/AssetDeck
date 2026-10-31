@@ -113,7 +113,12 @@ def _confirmar_biblioteca(conn, cfg: dict, silencioso: bool) -> str:
 
     from assetdeck import library_root
 
-    configurado = Path(cfg["library_root"])
+    raw_root = cfg.get("library_root", "")
+    if not raw_root or not str(raw_root).strip() or str(raw_root).strip() == ".":
+        log.info("Nenhuma biblioteca configurada.")
+        return ""
+
+    configurado = Path(raw_root)
     res = library_root.resolve(configurado)
 
     if res.ok:
@@ -139,7 +144,7 @@ def _confirmar_biblioteca(conn, cfg: dict, silencioso: bool) -> str:
             QMessageBox.StandardButton.Yes,
         )
         if escolha != QMessageBox.StandardButton.Yes:
-            log.warning("Rafael recusou repontar a biblioteca para %s", res.found)
+            log.warning("Usuário recusou repontar a biblioteca para %s", res.found)
             return str(configurado)
         novo = res.found
     else:
@@ -156,7 +161,7 @@ def _confirmar_biblioteca(conn, cfg: dict, silencioso: bool) -> str:
             None, "Onde está a biblioteca?", str(Path.home()),
         )
         if not escolhido:
-            log.warning("Rafael cancelou a escolha da biblioteca — abrindo com %s",
+            log.warning("Usuário cancelou a escolha da biblioteca — abrindo com %s",
                         configurado)
             return str(configurado)
         novo = Path(escolhido)
@@ -195,7 +200,7 @@ def run(argv: list[str]) -> int:
         return _run_theme_preview(args)
 
     cfg = config.load_config()
-    log.info("AssetDeck %s iniciando — biblioteca: %s", __version__, cfg["library_root"])
+    log.info("AssetDeck %s iniciando — biblioteca: %s", __version__, cfg.get("library_root") or "(nenhuma)")
 
     conn = connect(config.db_path())
     version = apply_migrations(conn)
@@ -247,10 +252,13 @@ def run(argv: list[str]) -> int:
         # (mesmo que fora da tela) interferir na captura determinística.
         win.prewarm_gl_viewers()
     if varrer_na_abertura(cfg):
-        win.start_scan()
+        if raiz:
+            win.start_scan()
+        else:
+            log.info("Varredura automática ignorada: nenhuma biblioteca configurada.")
     else:
         log.info("Varredura automática desligada — a biblioteca só é varrida "
-                 "quando o Rafael pedir (botão Reindexar).")
+                 "quando o usuário pedir (botão Reindexar).")
 
     _schedule_screenshot(app, win, args)
 
