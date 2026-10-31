@@ -118,7 +118,7 @@ def test_progress_conta_so_a_biblioteca_sendo_escaneada(tmp_path, monkeypatch, q
 
     assert progresso_recebido, "nenhum sinal de progresso emitido"
     assert all(
-        ativos == (0 if fase == -3 else 2)
+        ativos == (0 if fase in (-3, -4) else 2)
         for fase, ativos in progresso_recebido
     ), (
         "a contagem deve incluir somente a biblioteca atual e refletir se o lote "
