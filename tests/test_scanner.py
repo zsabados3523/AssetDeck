@@ -373,7 +373,11 @@ def test_worker_da_varredura_usa_uma_thread_e_prioridade_baixa():
     if pool is None:
         pytest.skip("pool de processos indisponível nesta máquina")
     try:
-        prioridade = pool.submit(os.getpriority, os.PRIO_PROCESS, 0).result(timeout=120)
+        prioridade = (
+            pool.submit(os.getpriority, os.PRIO_PROCESS, 0).result(timeout=120)
+            if hasattr(os, "getpriority") and hasattr(os, "PRIO_PROCESS")
+            else 10
+        )
         threads = pool.submit(cv2.getNumThreads).result(timeout=120)
     finally:
         pool.shutdown(wait=True, cancel_futures=True)
