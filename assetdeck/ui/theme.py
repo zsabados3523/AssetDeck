@@ -554,6 +554,21 @@ def build_tokens(variant: Variant = DEFAULT) -> dict[str, str]:
     }
 
 
+_QSS_CACHE: dict[Path, tuple[float, Template]] = {}
+
+
+def _get_qss_template() -> Template:
+    if not QSS_FILE.exists():
+        raise FileNotFoundError(f"Folha de estilo do tema não encontrada: {QSS_FILE}")
+    mtime = QSS_FILE.stat().st_mtime
+    cached = _QSS_CACHE.get(QSS_FILE)
+    if cached is None or cached[0] != mtime:
+        tpl = Template(QSS_FILE.read_text(encoding="utf-8"))
+        _QSS_CACHE[QSS_FILE] = (mtime, tpl)
+        return tpl
+    return cached[1]
+
+
 def build_qss(variant: Variant = DEFAULT) -> str:
     """Lê o theme.qss e substitui os tokens.
 
@@ -561,9 +576,7 @@ def build_qss(variant: Variant = DEFAULT) -> str:
     esquecido levanta `KeyError` na hora, em vez de vazar um "$nome" para
     dentro do QSS, onde o Qt descartaria a regra em silêncio.
     """
-    if not QSS_FILE.exists():
-        raise FileNotFoundError(f"Folha de estilo do tema não encontrada: {QSS_FILE}")
-    return Template(QSS_FILE.read_text(encoding="utf-8")).substitute(build_tokens(variant))
+    return _get_qss_template().substitute(build_tokens(variant))
 
 
 def build_palette(variant: Variant = DEFAULT):
@@ -654,16 +667,29 @@ def make_card(inner, *, titulo: str | None = None, sombra: bool = True):
     return card
 
 
+_FONT_FAMILIES_CACHE: set[str] | None = None
+
+
+def _available_font_families() -> set[str]:
+    global _FONT_FAMILIES_CACHE
+    if _FONT_FAMILIES_CACHE is None:
+        from PySide6.QtGui import QFontDatabase
+        _FONT_FAMILIES_CACHE = set(QFontDatabase.families())
+    return _FONT_FAMILIES_CACHE
+
+
 def apply_theme(app, variant: Variant = DEFAULT) -> None:
     """Aplica estilo, paleta, fonte e QSS na aplicação inteira."""
     from PySide6.QtGui import QFont, QFontDatabase
     from PySide6.QtWidgets import QStyleFactory
 
-    estilo = QStyleFactory.create("Fusion")
-    if estilo is None:  # nunca deve acontecer: Fusion é embutido no Qt
-        log.error("Estilo Fusion indisponível; seguindo com o estilo padrão do sistema.")
-    else:
-        app.setStyle(estilo)
+    if not app.property("assetdeck_fusion_style_set"):
+        estilo = QStyleFactory.create("Fusion")
+        if estilo is None:  # nunca deve acontecer: Fusion é embutido no Qt
+            log.error("Estilo Fusion indisponível; seguindo com o estilo padrão do sistema.")
+        else:
+            app.setStyle(estilo)
+            app.setProperty("assetdeck_fusion_style_set", True)
 
     familia = FONTS[variant.font]
     if variant.font == "manrope" and not app.property("assetdeck_manrope_font_registered"):
@@ -687,6 +713,8 @@ def apply_theme(app, variant: Variant = DEFAULT) -> None:
 
         app.setProperty("assetdeck_manrope_font_ids", font_ids)
         app.setProperty("assetdeck_manrope_font_registered", True)
+        global _FONT_FAMILIES_CACHE
+        _FONT_FAMILIES_CACHE = None
         estilos_disponiveis = set(QFontDatabase.styles(familia))
         estilos_esperados = set(MANROPE_FONT_FILES)
         if estilos_faltantes := estilos_esperados - estilos_disponiveis:
@@ -695,7 +723,8 @@ def apply_theme(app, variant: Variant = DEFAULT) -> None:
                 sorted(estilos_faltantes), sorted(estilos_disponiveis),
             )
     if familia:
-        if familia in QFontDatabase.families():
+        familias = _available_font_families()
+        if familia in familias:
             fonte = QFont(familia)
             fonte.setPointSize(10)
             app.setFont(fonte)
@@ -703,14 +732,16 @@ def apply_theme(app, variant: Variant = DEFAULT) -> None:
             log.warning(
                 "Fonte %r não está instalada; usando a fonte padrão do sistema.", familia
             )
-    if familia and DISPLAY_FONT not in QFontDatabase.families():
-        log.warning(
-            "Fonte de títulos %r não está instalada; usando o fallback do Qt.",
-            DISPLAY_FONT,
-        )
+        if DISPLAY_FONT not in familias:
+            log.warning(
+                "Fonte de títulos %r não está instalada; usando o fallback do Qt.",
+                DISPLAY_FONT,
+            )
 
     app.setPalette(build_palette(variant))
-    app.setStyleSheet(build_qss(variant))
+    novo_qss = build_qss(variant)
+    if app.styleSheet() != novo_qss:
+        app.setStyleSheet(novo_qss)
     install_popup_corner_mask(app, variant)
 
     global _CURRENT_VARIANT
@@ -722,6 +753,18 @@ def apply_theme(app, variant: Variant = DEFAULT) -> None:
     )
 
 
+_POPUP_CLASSES = None
+
+
+def _get_popup_classes():
+    global _POPUP_CLASSES
+    if _POPUP_CLASSES is None:
+        from PySide6.QtCore import QEvent
+        from PySide6.QtWidgets import QDialog, QDialogButtonBox, QMessageBox, QMenu
+        _POPUP_CLASSES = (QEvent, QDialog, QDialogButtonBox, QMessageBox, QMenu)
+    return _POPUP_CLASSES
+
+
 class _PopupCornerMask:
     """Prepara diálogos e registra que os cantos são desenhados pelo tema.
 
@@ -731,15 +774,13 @@ class _PopupCornerMask:
     """
 
     def __call__(self, obj, event) -> bool:
-        from PySide6.QtCore import QEvent
-        from PySide6.QtWidgets import QDialog, QDialogButtonBox, QMessageBox, QMenu
-
-        if event.type() != QEvent.Type.Show:
+        q_event, q_dialog, q_btn_box, q_msg_box, q_menu = _get_popup_classes()
+        if event.type() != q_event.Type.Show:
             return False
-        if isinstance(obj, QMenu):
+        if isinstance(obj, q_menu):
             obj.setProperty("_assetdeck_corner_renderer", "qss")
-        elif isinstance(obj, QDialog):
-            self._prepare_dialog(obj, QDialogButtonBox, QMessageBox)
+        elif isinstance(obj, q_dialog):
+            self._prepare_dialog(obj, q_btn_box, q_msg_box)
             obj.setProperty("_assetdeck_corner_renderer", "qss")
         return False
 
@@ -790,22 +831,12 @@ def install_popup_corner_mask(app, variant: Variant = DEFAULT) -> None:
 
     O nome é mantido para compatibilidade interna; os cantos agora são
     antisserrilhados pelo QSS e não recebem mais recorte por máscara.
-
-    Bug pego rodando a suíte inteira: `apply_theme()` é chamado várias vezes
-    em sequência em teste (`test_todas_as_variantes_aplicam_sem_erro` chama
-    24x seguidas). Sem remover o filtro ANTERIOR antes de instalar o novo,
-    eles se acumulavam no `QApplication` — que dura a sessão inteira de
-    testes — e cada evento Show passava a ser reprocessado por dezenas de
-    filtros ao mesmo tempo, travando a suíte por minutos. Por isso remove o
-    filtro velho primeiro: nunca mais de um instalado.
     """
     global _popup_filter_ref
     from PySide6.QtCore import QObject
 
     if _popup_filter_ref is not None:
-        app.removeEventFilter(_popup_filter_ref)
-        _popup_filter_ref.deleteLater()
-        _popup_filter_ref = None
+        return
 
     _ = variant  # os raios são consumidos diretamente pelo QSS do tema.
     chrome = _PopupCornerMask()

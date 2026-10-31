@@ -202,6 +202,8 @@ def _preparar_worker() -> None:
     pressa, e não pode deixar a máquina inutilizável enquanto roda.
     """
     try:
+        os.environ["OPENCV_FOR_THREADS_NUM"] = "1"
+        os.environ["OPENCV_NUM_THREADS"] = "1"
         import cv2
 
         cv2.setNumThreads(1)
@@ -209,7 +211,8 @@ def _preparar_worker() -> None:
         log.warning("Não consegui limitar as threads do OpenCV no worker.",
                     exc_info=True)
     try:
-        os.nice(10)
+        if hasattr(os, "nice"):
+            os.nice(10)
     except OSError:
         log.warning("Não consegui baixar a prioridade do worker.", exc_info=True)
 
@@ -223,6 +226,8 @@ _AMBIENTE_1_THREAD = {
     "OPENBLAS_NUM_THREADS": "1",
     "MKL_NUM_THREADS": "1",
     "NUMEXPR_NUM_THREADS": "1",
+    "OPENCV_FOR_THREADS_NUM": "1",
+    "OPENCV_NUM_THREADS": "1",
 }
 
 
