@@ -2467,7 +2467,11 @@ class MainWindow(QMainWindow):
         Daí conferir repetidamente por um intervalo, reafirmando sempre que
         não estiver maximizada, em vez de apostar num instante certo.
         """
+        import shiboken6
         from PySide6.QtCore import QTimer
+
+        if not shiboken6.isValid(self):
+            return
 
         # Insiste pelo INTERVALO INTEIRO, sem sair mais cedo (Fatia 97).
         #
@@ -2490,7 +2494,7 @@ class MainWindow(QMainWindow):
                 log.warning("O gerenciador de janelas não aceitou maximizar "
                             "a janela — ela abre em tamanho normal.")
             return
-        QTimer.singleShot(150, lambda: self._repor_maximizada(tentativa + 1))
+        QTimer.singleShot(150, self, lambda: self._repor_maximizada(tentativa + 1))
 
     def _save_ui_state(self) -> None:
         """Grava geometria, painéis, splitters, tamanho do slider, tags

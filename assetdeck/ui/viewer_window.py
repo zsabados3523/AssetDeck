@@ -397,7 +397,7 @@ class VisualizadorWindow(QDialog):
         # janela continua com ela maximizada no próximo asset.
         self.setWindowState(self.windowState() & ~Qt.WindowState.WindowMinimized)
         self._abrindo = True
-        QTimer.singleShot(2000, self._desistir_de_insistir)
+        QTimer.singleShot(2000, self, self._desistir_de_insistir)
         self.show()
         self.raise_()
         self.activateWindow()
@@ -425,6 +425,9 @@ class VisualizadorWindow(QDialog):
         super().changeEvent(event)
 
     def _desistir_de_insistir(self) -> None:
+        import shiboken6
+        if not shiboken6.isValid(self):
+            return
         self._abrindo = False
 
     def centralizar_no_app(self) -> None:

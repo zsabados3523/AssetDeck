@@ -1269,7 +1269,7 @@ def test_a_reposicao_da_maximizacao_nao_desiste_no_falso_positivo(janela, monkey
     # O relógio é dublado: o teste dispara as tentativas na mão, sem esperar.
     agendados = []
     monkeypatch.setattr("PySide6.QtCore.QTimer.singleShot",
-                        staticmethod(lambda ms, fn: agendados.append(fn)))
+                        staticmethod(lambda *args: agendados.append(args[-1])))
 
     janela._repor_maximizada(0)      # 1ª leitura: "sim" (mentira)
     assert agendados, "o laço parou na primeira leitura"

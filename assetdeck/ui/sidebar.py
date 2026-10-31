@@ -437,10 +437,15 @@ class Sidebar(QWidget):
         após a mudança fazia as seções abertas ficarem pequenas, deixando um
         vazio grande no meio da lateral.
         """
-        QTimer.singleShot(0, self.rebalance_sections)
+        QTimer.singleShot(0, self, self.rebalance_sections)
 
     @Slot()
     def rebalance_sections(self) -> None:
+        import shiboken6
+
+        if not shiboken6.isValid(self) or not hasattr(self, "splitter") or not shiboken6.isValid(self.splitter):
+            return
+
         tamanhos_atuais = self.splitter.sizes()
         visiveis = [
             (indice, secao)
