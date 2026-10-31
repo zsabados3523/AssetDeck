@@ -843,6 +843,9 @@ def install_popup_corner_mask(app, variant: Variant = DEFAULT) -> None:
 
     class _Filter(QObject):
         def eventFilter(self, obj, event) -> bool:  # noqa: N802
+            import shiboken6
+            if not shiboken6.isValid(obj) or not shiboken6.isValid(event):
+                return False
             return chrome(obj, event)
 
     _popup_filter_ref = _Filter(app)
