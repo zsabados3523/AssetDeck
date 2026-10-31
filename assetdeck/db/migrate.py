@@ -5,12 +5,16 @@ from __future__ import annotations
 import logging
 import re
 import sqlite3
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
 log = logging.getLogger(__name__)
 
-MIGRATIONS_DIR = Path(__file__).parent / "migrations"
+if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+    MIGRATIONS_DIR = Path(sys._MEIPASS) / "assetdeck" / "db" / "migrations"
+else:
+    MIGRATIONS_DIR = Path(__file__).parent / "migrations"
 _NAME_RE = re.compile(r"^(\d{3})_.+\.sql$")
 
 

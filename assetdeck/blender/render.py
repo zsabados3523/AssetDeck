@@ -12,6 +12,7 @@ from __future__ import annotations
 import logging
 import shutil
 import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -41,10 +42,14 @@ def hex_to_linear_rgb(hex_str: str) -> tuple[float, float, float]:
 
 
 def script_path() -> Path:
+    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+        return Path(sys._MEIPASS) / "assetdeck" / "blender" / "scripts" / "render_thumb.py"
     return Path(__file__).parent / "scripts" / "render_thumb.py"
 
 
 def export_obj_script_path() -> Path:
+    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+        return Path(sys._MEIPASS) / "assetdeck" / "blender" / "scripts" / "export_obj.py"
     return Path(__file__).parent / "scripts" / "export_obj.py"
 
 

@@ -1,0 +1,2 @@
+# Dependências de desenvolvimento e empacotamento do AssetDeck
+pyinstaller>=6.10.0
