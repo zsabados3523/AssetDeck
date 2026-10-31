@@ -41,6 +41,10 @@ class ScanWorker(QObject):
         try:
             from assetdeck import config
 
+            if not self._library_root or not str(self._library_root).strip() or str(self._library_root) == ".":
+                self.failed.emit("Nenhuma pasta de biblioteca configurada.")
+                return
+
             conn = connect(self._db_path)
             try:
                 library_id = libraries_repo.get_or_create(conn, self._library_root)
@@ -115,6 +119,10 @@ class ScanController(QObject):
     def start(self, on_progress, on_finished, on_failed) -> None:
         if self.running:
             log.info("Varredura já em andamento — pedido ignorado.")
+            return
+        if not self._library_root or not str(self._library_root).strip() or str(self._library_root) == ".":
+            log.warning("Varredura solicitada sem biblioteca configurada.")
+            on_failed("Nenhuma pasta de biblioteca configurada.")
             return
         self._thread = QThread()
         self._worker = ScanWorker(self._db_path, self._library_root)

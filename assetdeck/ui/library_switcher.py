@@ -96,7 +96,7 @@ class _LinhaBiblioteca(QWidget):
 class LibrarySwitcher(QToolButton):
     switch_requested = Signal(str)  # root_path escolhido — AINDA não é o ativo
 
-    def __init__(self, conn: sqlite3.Connection, active_library_id: int,
+    def __init__(self, conn: sqlite3.Connection, active_library_id: int | None,
                  parent: QWidget | None = None) -> None:
         super().__init__(parent)
         # objectName próprio (Fatia 77): era "ghost", o mesmo dos ícones
@@ -118,11 +118,12 @@ class LibrarySwitcher(QToolButton):
         widgets que pintam à mão — ver `CategoryButton.refresh_theme`)."""
         self.setIcon(icons.icon("nav-colecoes", theme.current_colors()["text_muted"], 15))
 
-    def refresh(self, conn: sqlite3.Connection, active_library_id: int) -> None:
+    def refresh(self, conn: sqlite3.Connection, active_library_id: int | None) -> None:
         """Repopula o menu — chamado no início e depois de "Adicionar
         biblioteca…", pra ela aparecer sem precisar reabrir o app."""
         self._active_library_id = active_library_id
         self._menu.clear()
+        found_active = False
         for lib in libraries_repo.list_all(conn):
             n = assets_repo.count_for_library(conn, lib["id"])
             ativa = lib["id"] == active_library_id
@@ -138,6 +139,9 @@ class LibrarySwitcher(QToolButton):
             self._menu.addAction(acao)
             if ativa:
                 self.setText(lib["name"])
+                found_active = True
+        if not found_active:
+            self.setText("Sem biblioteca")
         self._menu.addSeparator()
         # Continua `QAction` normal de propósito: é a única entrada que o
         # teclado ainda alcança (um `QWidgetAction` sai da navegação por
@@ -157,3 +161,5 @@ class LibrarySwitcher(QToolButton):
             return
         libraries_repo.get_or_create(conn, Path(escolhido))
         self.refresh(conn, self._active_library_id)
+        if not self._active_library_id:
+            self.switch_requested.emit(escolhido)

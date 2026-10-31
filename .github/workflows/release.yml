@@ -88,13 +88,8 @@ jobs:
       - name: Package archive (macOS)
         if: runner.os == 'macOS'
         run: |
-          cd dist
-          if [ -d "AssetDeck.app" ]; then
-            zip -r ../AssetDeck-macos.zip AssetDeck.app assetdeck
-          else
-            zip -r ../AssetDeck-macos.zip assetdeck
-          fi
-          cd ..
+          rm -rf dist/assetdeck
+          ditto -c -k --keepParent dist/AssetDeck.app AssetDeck-macos.zip
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

@@ -209,6 +209,8 @@ class AssetGridModel(QAbstractListModel):
     def _warmup(self) -> None:
         """Gera em background as thumbs da biblioteca TODA — inclusive os
         mapas não-capa dos sets (o modo expandido precisa deles prontos)."""
+        if not self._root or str(self._root) in ("", "."):
+            return
         # UM `Path` por linha, não dois (Fatia 88). A versão anterior montava
         # o caminho no filtro e de novo na tupla — com as ~143 mil linhas da
         # biblioteca real do Rafael, isso é 286 mil objetos pra usar 127 mil.
