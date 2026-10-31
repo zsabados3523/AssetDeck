@@ -1,106 +1,107 @@
-name: Relato de Erro (Bug Report)
-description: Relate um problema ou comportamento inesperado no AssetDeck.
+name: Bug Report / Relato de Erro
+description: Report a bug or unexpected behavior / Relate um problema ou comportamento inesperado no AssetDeck.
 title: "[Bug]: "
 labels: ["bug"]
 body:
   - type: markdown
     attributes:
       value: |
-        Obrigado por dedicar seu tempo para relatar um erro! Por favor, forneça as informações abaixo para nos ajudar a identificar e corrigir o problema.
+        Thank you for taking the time to report an issue! Please provide the information below to help us reproduce and fix it.
+        *Obrigado por dedicar seu tempo para relatar um erro! Por favor, forneça as informações abaixo para nos ajudar a identificar e corrigir o problema.*
   - type: dropdown
     id: os
     attributes:
-      label: Sistema Operacional
-      description: Em qual sistema operacional o problema ocorreu?
+      label: Operating System / Sistema Operacional
+      description: Which operating system did the problem occur on? / Em qual sistema operacional o problema ocorreu?
       options:
         - Linux (Ubuntu, Zorin OS, Fedora, Debian, Arch, etc.)
         - Windows (Windows 10, Windows 11)
-        - macOS (Apple Silicon ou Intel)
-        - Outro
+        - macOS (Apple Silicon / Intel)
+        - Other / Outro
     validations:
       required: true
   - type: input
     id: os-details
     attributes:
-      label: Versão detalhada do Sistema Operacional
-      description: "Ex.: Zorin OS 17.2, Ubuntu 24.04 LTS, Windows 11 Pro 23H2, macOS 14.5"
-      placeholder: "ex.: Linux Mint 21.3"
+      label: Detailed OS Version / Versão detalhada do Sistema Operacional
+      description: "e.g. / Ex.: Ubuntu 24.04 LTS, Windows 11 Pro 23H2, macOS 14.5, Zorin OS 17.2"
+      placeholder: "e.g. Linux Mint 21.3 / Windows 11 23H2"
     validations:
       required: false
   - type: dropdown
     id: origin
     attributes:
-      label: Origem / Como você executa o AssetDeck?
-      description: Você está usando o binário executável pré-compilado das Releases ou rodando a partir do código-fonte?
+      label: Execution Source / Origem da Execução
+      description: Are you running a pre-compiled binary or from source? / Binário pré-compilado das Releases ou código-fonte?
       options:
-        - Executável pré-compilado (GitHub Releases)
-        - Código-fonte clonado do Git (Python 3.12 + venv)
-        - Outro
+        - Pre-compiled binary (GitHub Releases) / Executável pré-compilado
+        - Cloned from source (Python 3.12 + venv) / Código-fonte clonado
+        - Other / Outro
     validations:
       required: true
   - type: input
     id: version
     attributes:
-      label: Versão do AssetDeck ou commit
-      description: "Ex.: 0.1.0 ou hash do commit git"
-      placeholder: "ex.: 0.1.0"
+      label: AssetDeck Version or Git Commit / Versão do AssetDeck ou commit
+      description: "e.g. / Ex.: 0.1.0 or git commit hash"
+      placeholder: "e.g. / ex.: 0.1.0"
     validations:
       required: false
   - type: textarea
     id: description
     attributes:
-      label: Descrição do problema
-      description: Uma explicação clara e objetiva do que aconteceu de errado.
+      label: Problem Description / Descrição do problema
+      description: A clear and concise explanation of what went wrong / Uma explicação clara e objetiva do que aconteceu de errado.
     validations:
       required: true
   - type: textarea
     id: steps
     attributes:
-      label: Passos para reproduzir o comportamento
-      description: Passo a passo detalhado para que outra pessoa consiga reproduzir o erro.
+      label: Steps to Reproduce / Passos para reproduzir o comportamento
+      description: Detailed step-by-step reproduction instructions / Passo a passo detalhado para reproduzir o erro.
       placeholder: |
-        1. Abra o AssetDeck com a biblioteca X
-        2. Selecione o asset Y
-        3. Clique em '...'
-        4. Ocorreu o erro Z
+        1. Open AssetDeck with library X / Abra o AssetDeck com a biblioteca X
+        2. Select asset Y / Selecione o asset Y
+        3. Click '...' / Clique em '...'
+        4. Error Z occurs / Ocorreu o erro Z
     validations:
       required: true
   - type: textarea
     id: expected
     attributes:
-      label: Comportamento esperado
-      description: O que você esperava que acontecesse normalmente.
+      label: Expected Behavior / Comportamento esperado
+      description: What you expected to happen / O que você esperava que acontecesse normalmente.
     validations:
       required: true
   - type: textarea
     id: actual
     attributes:
-      label: Comportamento obtido
-      description: O que realmente aconteceu (mensagem de erro exibida, encerramento inesperado, travamento, etc.).
+      label: Actual Behavior / Comportamento obtido
+      description: What actually happened (error message, crash, freeze, etc.) / O que realmente aconteceu (mensagem de erro, travamento, encerramento inesperado, etc.).
     validations:
       required: true
   - type: textarea
     id: logs
     attributes:
-      label: Conteúdo dos Logs (`assetdeck.log` ou `quedas.txt`)
+      label: Log Contents (`assetdeck.log` or `quedas.txt`) / Conteúdo dos Logs
       description: |
-        Cole aqui as linhas finais de `assetdeck.log` ou o conteúdo de `quedas.txt`.
-        Você pode abrir a pasta de logs diretamente pelo app em:
-        **Configurações → Manutenção → Abrir pasta de logs** (ou pelo menu **Ajuda → Abrir pasta de logs**).
+        Paste the final lines of `assetdeck.log` or contents of `quedas.txt` here.
+        Open the logs directory directly from **Settings → Maintenance → Open logs folder** (or **Help → Open logs folder**).
+        *Cole aqui as linhas finais de `assetdeck.log` ou o conteúdo de `quedas.txt`. Abra pelo app em **Configurações → Manutenção → Abrir pasta de logs**.*
 
-        Caminhos de arquivo no sistema:
-        - **Linux:** `~/.local/share/assetdeck/logs/` (ou `$XDG_DATA_HOME/assetdeck/logs/`)
-        - **Windows:** `%LOCALAPPDATA%\assetdeck\logs\` (ou `%USERPROFILE%\.local\share\assetdeck\logs\`)
-        - **macOS:** `~/Library/Application Support/assetdeck/logs/` (ou `~/.local/share/assetdeck/logs/`)
+        System paths / Caminhos no sistema:
+        - **Linux:** `~/.local/share/assetdeck/logs/` (or `$XDG_DATA_HOME/assetdeck/logs/`)
+        - **Windows:** `%LOCALAPPDATA%\assetdeck\logs\` (or `%USERPROFILE%\.local\share\assetdeck\logs\`)
+        - **macOS:** `~/Library/Application Support/assetdeck/logs/` (or `~/.local/share/assetdeck/logs/`)
       render: text
     validations:
       required: false
   - type: checkboxes
     id: checklist
     attributes:
-      label: Verificações adicionais
+      label: Additional Checks / Verificações adicionais
       options:
-        - label: Confirmo que removi eventuais dados confidenciais ou sensíveis dos logs colados.
+        - label: I confirm that I removed confidential or sensitive data from the logs. / Confirmo que removi dados confidenciais dos logs.
           required: false
-        - label: Pesquisei nas issues abertas e fechadas do repositório para evitar duplicatas.
+        - label: I searched open and closed issues on GitHub to avoid duplicates. / Pesquisei nas issues abertas e fechadas para evitar duplicatas.
           required: false
