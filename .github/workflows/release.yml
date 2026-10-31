@@ -74,6 +74,41 @@ jobs:
         run: |
           ./dist/assetdeck/assetdeck --help
 
+      - name: Smoke test do executavel
+        timeout-minutes: 2
+        shell: bash
+        env:
+          QT_QPA_PLATFORM: offscreen
+          ASSETDECK_CONFIG_DIR: ${{ runner.temp }}/config
+          ASSETDECK_DATA_DIR: ${{ runner.temp }}/data
+          ASSETDECK_CACHE_DIR: ${{ runner.temp }}/cache
+        run: |
+          case "${{ runner.os }}" in
+            Linux)
+              BIN="dist/assetdeck/assetdeck"
+              ;;
+            Windows)
+              BIN="dist/assetdeck/assetdeck.exe"
+              ;;
+            macOS)
+              BIN="dist/AssetDeck.app/Contents/MacOS/assetdeck"
+              ;;
+            *)
+              echo "SO desconhecido: ${{ runner.os }}"
+              exit 1
+              ;;
+          esac
+
+          SCREENSHOT="${{ runner.temp }}/screenshot.png"
+          rm -f "$SCREENSHOT"
+
+          "$BIN" --screenshot "$SCREENSHOT"
+
+          if [ ! -s "$SCREENSHOT" ]; then
+            echo "Smoke test falhou: screenshot não foi gerado ou está vazio ($SCREENSHOT)"
+            exit 1
+          fi
+
       - name: Package archive (Linux)
         if: runner.os == 'Linux'
         run: |
