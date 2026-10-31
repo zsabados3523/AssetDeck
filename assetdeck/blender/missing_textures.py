@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import logging
 import subprocess
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -21,6 +22,8 @@ _MARCADOR = "ASSETDECK_TEXTURAS_JSON "
 
 
 def script_path() -> Path:
+    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+        return Path(sys._MEIPASS) / "assetdeck" / "blender" / "scripts" / "list_missing_textures.py"
     return Path(__file__).parent / "scripts" / "list_missing_textures.py"
 
 

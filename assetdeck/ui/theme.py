@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from string import Template
@@ -32,7 +33,12 @@ from assetdeck import config
 
 log = logging.getLogger(__name__)
 
-QSS_FILE = Path(__file__).parent / "theme.qss"
+if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+    _UI_DIR = Path(sys._MEIPASS) / "assetdeck" / "ui"
+else:
+    _UI_DIR = Path(__file__).parent
+
+QSS_FILE = _UI_DIR / "theme.qss"
 
 # --------------------------------------------------------------------------
 # Paleta base
@@ -232,10 +238,10 @@ DISPLAY_FONT = "Manrope"
 # A fonte da prévia aprovada acompanha o app. Arquivos estáticos separados
 # fazem o Qt reconhecer os pesos que a interface usa, sem síntese de negrito.
 MANROPE_FONT_FILES = {
-    "Regular": Path(__file__).parent / "fonts" / "Manrope-Regular.ttf",
-    "Medium": Path(__file__).parent / "fonts" / "Manrope-Medium.ttf",
-    "SemiBold": Path(__file__).parent / "fonts" / "Manrope-SemiBold.ttf",
-    "Bold": Path(__file__).parent / "fonts" / "Manrope-Bold.ttf",
+    "Regular": _UI_DIR / "fonts" / "Manrope-Regular.ttf",
+    "Medium": _UI_DIR / "fonts" / "Manrope-Medium.ttf",
+    "SemiBold": _UI_DIR / "fonts" / "Manrope-SemiBold.ttf",
+    "Bold": _UI_DIR / "fonts" / "Manrope-Bold.ttf",
 }
 
 BACKGROUNDS = ("liso", "grao")

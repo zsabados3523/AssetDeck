@@ -7,6 +7,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import threading
 import time
 import uuid
@@ -43,8 +44,12 @@ def render_material_preview(name: str, maps: dict[str, Path], dest: Path,
 
     dest.parent.mkdir(parents=True, exist_ok=True)
     temp = dest.with_name(f".{dest.stem}.{uuid.uuid4().hex}.png")
-    script = Path(__file__).parent / "scripts" / "render_material_preview.py"
-    materials = Path(__file__).parents[2] / "blender_addon/assetdeck_bridge/materials.py"
+    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+        script = Path(sys._MEIPASS) / "assetdeck" / "blender" / "scripts" / "render_material_preview.py"
+        materials = Path(sys._MEIPASS) / "blender_addon" / "assetdeck_bridge" / "materials.py"
+    else:
+        script = Path(__file__).parent / "scripts" / "render_material_preview.py"
+        materials = Path(__file__).parents[2] / "blender_addon/assetdeck_bridge/materials.py"
     args = [blender, "-b", "-t", "1", "--factory-startup", "-P", str(script),
             "--", str(materials), str(temp), name, str(size),
             json.dumps({role: str(path) for role, path in maps.items()})]

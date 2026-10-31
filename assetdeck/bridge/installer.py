@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import logging
 import shutil
+import sys
 from pathlib import Path
 
 from assetdeck.bridge import protocol as proto
@@ -27,6 +28,8 @@ STANDARD_CONFIG = Path.home() / ".config/blender"
 
 def source_dir() -> Path:
     """Onde mora o código-fonte do add-on dentro do projeto."""
+    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+        return Path(sys._MEIPASS) / "blender_addon" / ADDON_NAME
     return Path(__file__).resolve().parents[2] / "blender_addon" / ADDON_NAME
 
 

@@ -51,7 +51,10 @@ def _set_app_icon(app) -> None:
 
     app.setDesktopFileName(DESKTOP_FILE_ID)
 
-    caminho = Path(__file__).parent / "ui" / "icons" / "app-icon.png"
+    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+        caminho = Path(sys._MEIPASS) / "assetdeck" / "ui" / "icons" / "app-icon.png"
+    else:
+        caminho = Path(__file__).parent / "ui" / "icons" / "app-icon.png"
     if not caminho.exists():
         log.warning("Ícone do app não encontrado em %s", caminho)
         return
