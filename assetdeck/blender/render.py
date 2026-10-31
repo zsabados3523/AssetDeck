@@ -12,6 +12,7 @@ from __future__ import annotations
 import logging
 import shutil
 import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -41,10 +42,14 @@ def hex_to_linear_rgb(hex_str: str) -> tuple[float, float, float]:
 
 
 def script_path() -> Path:
+    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+        return Path(sys._MEIPASS) / "assetdeck" / "blender" / "scripts" / "render_thumb.py"
     return Path(__file__).parent / "scripts" / "render_thumb.py"
 
 
 def export_obj_script_path() -> Path:
+    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+        return Path(sys._MEIPASS) / "assetdeck" / "blender" / "scripts" / "export_obj.py"
     return Path(__file__).parent / "scripts" / "export_obj.py"
 
 
@@ -132,7 +137,8 @@ def _motivo(proc) -> str:
 
 
 def export_to_obj(blend_path: Path, dest: Path,
-                  comando: list[str] | None = None) -> RenderResult:
+                  comando: list[str] | None = None,
+                  manifest_only: bool = False) -> RenderResult:
     """Exporta a geometria de um .blend pra .obj, chamando o Blender
     headless — é assim que o visualizador 3D (Fase 6) "lê" um .blend, já
     que o formato binário dele não tem parser de terceiros confiável (só
@@ -151,6 +157,8 @@ def export_to_obj(blend_path: Path, dest: Path,
     dest.parent.mkdir(parents=True, exist_ok=True)
     cmd = [*cmd_base, "-b", "--factory-startup", "-P", str(export_obj_script_path()), "--",
            str(blend_path), str(dest)]
+    if manifest_only:
+        cmd.append("--manifest-only")
     try:
         proc = subprocess.run(cmd, capture_output=True, text=True,
                               timeout=TIMEOUT_S, check=False)
@@ -159,32 +167,43 @@ def export_to_obj(blend_path: Path, dest: Path,
     except OSError as exc:
         return RenderResult(False, erro=f"Falha ao executar o Blender: {exc}")
 
-    if dest.is_file() and dest.stat().st_size > 0:
-        return RenderResult(True, dest=dest)
+    expected = dest.with_suffix(".materials.json") if manifest_only else dest
+    if expected.is_file() and expected.stat().st_size > 0:
+        return RenderResult(True, dest=expected)
 
     log.error("Exportação pra .obj falhou para %s: %s", blend_path.name,
               (proc.stderr or proc.stdout or "").strip()[-1500:])
     return RenderResult(False, erro=_motivo(proc))
 
 
-def models_without_cover(conn, library_id: int, library_root: Path,
-                         asset_ids: list[int] | None = None) -> list[tuple]:
-    """(asset_id, nome, caminho absoluto) dos modelos que ainda não têm capa.
+def export_material_manifest(blend_path: Path, obj_path: Path,
+                             comando: list[str] | None = None) -> RenderResult:
+    """Lê só materiais do .blend; reaproveita a geometria OBJ já cacheada."""
+    return export_to_obj(blend_path, obj_path, comando=comando, manifest_only=True)
 
-    `asset_ids` (Fatia 101, pedido do Rafael): restringe a um subconjunto —
-    "gerar preview só de alguns assets", via botão direito na grade, em vez
-    do lote inteiro da biblioteca. `None` continua sendo "todos", igual
-    sempre foi.
+
+def models_for_render(conn, library_id: int, library_root: Path,
+                      asset_ids: list[int] | None = None,
+                      overwrite_existing: bool = False) -> list[tuple]:
+    """(id, nome, caminho absoluto, já tem capa) dos modelos elegíveis.
+
+    `asset_ids` restringe a fila à seleção da grade. Por padrão, retorna só
+    modelos sem capa; `overwrite_existing=True` também inclui os cobertos e
+    informa esse estado para a confirmação antes de iniciar o render.
     """
-    sql = """SELECT a.id, a.name, f.rel_path
+    sql = """SELECT a.id, a.name, f.rel_path,
+                    EXISTS (SELECT 1 FROM previews p
+                            WHERE p.asset_id = a.id AND p.is_cover = 1
+                              AND p.deleted_at IS NULL) AS has_cover
              FROM assets a JOIN files f ON f.asset_id = a.id AND f.is_primary = 1
              WHERE a.library_id = ? AND a.deleted_at IS NULL AND f.deleted_at IS NULL
                AND a.asset_type IN ('model', 'scene')
                AND f.missing_since IS NULL
-               AND LOWER(f.rel_path) LIKE '%.blend'
-               AND NOT EXISTS (SELECT 1 FROM previews p
-                               WHERE p.asset_id = a.id AND p.is_cover = 1
-                                 AND p.deleted_at IS NULL)"""
+               AND LOWER(f.rel_path) LIKE '%.blend'"""
+    if not overwrite_existing:
+        sql += """ AND NOT EXISTS (SELECT 1 FROM previews p
+                                   WHERE p.asset_id = a.id AND p.is_cover = 1
+                                     AND p.deleted_at IS NULL)"""
     params: list = [library_id]
     if asset_ids is not None:
         if not asset_ids:
@@ -193,4 +212,17 @@ def models_without_cover(conn, library_id: int, library_root: Path,
         params.extend(asset_ids)
     sql += " ORDER BY a.name COLLATE NOCASE"
     linhas = conn.execute(sql, params).fetchall()
-    return [(r["id"], r["name"], library_root / r["rel_path"]) for r in linhas]
+    return [(r["id"], r["name"], library_root / r["rel_path"],
+             bool(r["has_cover"])) for r in linhas]
+
+
+def models_without_cover(conn, library_id: int, library_root: Path,
+                         asset_ids: list[int] | None = None) -> list[tuple]:
+    """(asset_id, nome, caminho absoluto) dos modelos que ainda não têm capa.
+
+    `asset_ids` (Fatia 101) restringe o resultado à seleção da grade; `None`
+    mantém a fila geral da biblioteca.
+    """
+    return [job[:3] for job in models_for_render(
+        conn, library_id, library_root, asset_ids=asset_ids,
+    )]

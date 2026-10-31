@@ -1,6 +1,6 @@
 # AssetDeck
 
-Gerenciador de assets 2D/3D local para Linux — texturas, HDRIs, modelos,
+Gerenciador de assets 2D/3D local para Windows, macOS e Linux (versões para Windows e macOS em fase de testes) — texturas, HDRIs, modelos,
 materiais PBR, LUTs, perfis de luz IES, vetores — com integração direta ao
 Blender. Feito para uso pessoal: **100% offline**, sem conta, sem nuvem, sem
 telemetria.
@@ -19,12 +19,20 @@ perder, os metadados voltam sozinhos na próxima indexação.
   <img src="docs/screenshots/biblioteca-escuro.png" alt="AssetDeck em modo escuro, com um HDRI selecionado" width="860">
 </p>
 
+## Baixar
+
+Executáveis prontos para uso em Windows, macOS e Linux estão disponíveis na página de [Releases](https://github.com/zsabados3523/AssetDeck/releases).
+
+> **Aviso sobre executáveis não assinados:** Como o AssetDeck é mantido de forma independente e aberta, os binários ainda não possuem assinatura digital com certificado comercial:
+> - No **Windows**, o Windows SmartScreen pode exibir um aviso ("O Windows protegeu o seu computador"). Clique em *Mais informações* e depois em *Executar assim mesmo*.
+> - No **macOS**, o Gatekeeper pode bloquear a abertura do aplicativo. Caso ocorra, acesse *Ajustes do Sistema → Privacidade e Segurança* e selecione *Abrir mesmo assim*.
+
 ## Para que serve
 
 Você aponta o AssetDeck para uma pasta de assets já organizada no disco. Ele
 indexa em segundo plano (sem travar a janela), gera miniaturas — inclusive
-para `.hdr`/`.exr` com tonemap, que o Linux não teria como abrir de outro
-jeito — e agrupa automaticamente os arquivos de um mesmo material PBR
+para `.hdr`/`.exr` com tonemap (formatos que o sistema operacional normalmente
+não abre nativamente) — e agrupa automaticamente os arquivos de um mesmo material PBR
 (`_basecolor`, `_normal`, `_roughness`...) num card só. Daí em diante:
 
 - **Organiza sem mexer no disco.** Tags hierárquicas com cor e apelido
@@ -85,8 +93,8 @@ reenquadrar o modelo.
 
 ## Requisitos
 
-- Linux (desenvolvido e testado no Zorin OS)
-- Python 3.12
+- Windows, macOS ou Linux (desenvolvido originalmente no Linux / Zorin OS; versões para Windows e macOS em fase de testes)
+- Python 3.12 (se for executar via código-fonte)
 - [Blender](https://www.blender.org/) 5.2, opcional — necessário para a
   ponte (arrastar assets direto pra cena), para gerar capas de modelos e
   para abrir `.blend` no visualizador 3D. O app aceita o Blender instalado
@@ -185,9 +193,14 @@ pytest -q
   arrasta e aciona o menu nativo do Blender)
 - `tests/` — suíte de testes (`pytest`)
 - `docs/screenshots/` — imagens usadas neste README
-- `PROJECT.md` — visão geral, decisões de arquitetura
-- `SCHEMA.md` — modelo de dados do banco (fonte da verdade)
-- `TODO.md` — roadmap e estado atual do projeto
+
+## Contribuir
+
+Contribuições são bem-vindas! Consulte o guia em [CONTRIBUTING.md](CONTRIBUTING.md) para detalhes sobre configuração do ambiente, execução de testes e diretrizes do projeto.
+
+## Licença
+
+Distribuído sob a licença MIT. Consulte o arquivo [LICENSE](LICENSE) para mais informações.
 
 ## Sobre a biblioteca de teste
 

@@ -6,11 +6,19 @@ import logging
 import sqlite3
 from pathlib import Path
 
-from PySide6.QtCore import QModelIndex, QSize, Qt, QTimer
-from PySide6.QtGui import QPixmapCache
+from PySide6.QtCore import (
+    QEasingCurve,
+    QModelIndex,
+    QPropertyAnimation,
+    QSize,
+    Qt,
+    QTimer,
+)
+from PySide6.QtGui import QPixmap, QPixmapCache
 from PySide6.QtWidgets import (
     QApplication,
     QFrame,
+    QGraphicsOpacityEffect,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -23,7 +31,6 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from assetdeck import __version__
 from assetdeck import batch_rename
 from assetdeck.db.repos import assets as assets_repo
 from assetdeck.db.repos import collections as collections_repo
@@ -36,6 +43,7 @@ from assetdeck.indexer import duplicates as duplicates_finder
 from assetdeck.indexer import relocator
 from assetdeck.model3d import loader as model3d_loader
 from assetdeck.indexer.scanner import ScanStats
+from assetdeck.blender.material_preview import preview_key, preview_path
 from assetdeck.thumbs.hdr import can_hdr
 from assetdeck.thumbs.pipeline import ThumbnailPipeline
 from assetdeck.ui import asset_grid
@@ -53,7 +61,7 @@ from assetdeck.ui.property_defs_dialog import PropertyDefsDialog
 from assetdeck.ui.relocate_dialog import RelocateDialog
 from assetdeck.ui.scan_worker import ScanController
 from assetdeck.ui.smart_collection_panel import SmartCollectionPanel
-from assetdeck.ui import icons, sidebar as sidebar_mod, theme
+from assetdeck.ui import icons, theme
 from assetdeck.ui.sidebar import Sidebar
 from assetdeck.ui.status_led import StatusLed
 from assetdeck.ui.tag_dialogs import QuickTagDialog
@@ -67,7 +75,7 @@ log = logging.getLogger(__name__)
 # Altura da faixa de cima (marca à esquerda, biblioteca e modo à direita).
 # É a faixa INTEIRA que aparece na tela: desde a Fatia 95 o layout central
 # não tem mais margem em cima, então não existe "meio espaço" fora dela.
-ALTURA_FAIXA_TOPO = 42
+ALTURA_FAIXA_TOPO = 58
 
 # Paleta fixa do filtro de busca por cor (Fatia 39) — decisão do Rafael:
 # botões de cor pré-definidos em vez de um seletor livre. Um hex
@@ -102,6 +110,9 @@ class MainWindow(QMainWindow):
         super().__init__()
         self._conn = conn  # conexão da thread da UI: SÓ leitura
         self._library_root = Path(library_root)
+        self._library_display_name = (
+            self._library_root.name or str(self._library_root)
+        )
         # Biblioteca ATIVA (Fatia 69) — resolvida uma vez, usada pra
         # restringir grade/árvore de pastas/contagens a ela. Sem isso, um
         # banco com mais de uma biblioteca indexada (ex.: sobra de um
@@ -110,6 +121,8 @@ class MainWindow(QMainWindow):
         self._thumbs_dir = thumbs_dir
         self._db_path = db_path
         self._scan = ScanController(db_path, self._library_root, parent=self)
+        self._closing_after_scan = False
+        self._scan_calc_total = 0
         self._pipeline = ThumbnailPipeline(thumbs_dir, parent=self)
 
         # Maximização (Fatia 94). `_maximizada_desejada` é o que veio do
@@ -135,11 +148,12 @@ class MainWindow(QMainWindow):
         # enorme"). Largura fixa em vez de esticar; a dica de sintaxe (E/OU)
         # que cabia no placeholder virou tooltip, já que o campo encolheu.
         self.search_box = QLineEdit()
-        self.search_box.setPlaceholderText("Buscar por nome…")
+        self.search_box.setPlaceholderText("Buscar assets")
         self.search_box.setToolTip(
             "Buscar por nome — ex.: concreto, wood 4k, madeira E rústico, pedra OU metal"
         )
-        self.search_box.setFixedWidth(220)
+        self.search_box.setMinimumWidth(170)
+        self.search_box.setMaximumWidth(320)
         self.search_box.setClearButtonEnabled(True)
         self._search_icon_action = self.search_box.addAction(
             icons.icon("search", theme.current_colors()["text_muted"]),
@@ -164,16 +178,19 @@ class MainWindow(QMainWindow):
             "resolution",
             [("Resolução: todas", None), ("≥ 1K", 1024), ("≥ 2K", 2048),
              ("≥ 4K", 4096), ("≥ 8K", 8192)],
+            caption="Resolução",
         )
         self.res_filter.changed.connect(self._apply_filters)
 
         # Busca por cor dominante (Fatia 39) — cor média do arquivo
         # principal, comparada contra uma paleta fixa de botões.
-        self.color_filter = FilterButton("palette", PALETA_CORES, swatch=True)
+        self.color_filter = FilterButton(
+            "palette", PALETA_CORES, swatch=True, caption="Cor"
+        )
         self.color_filter.changed.connect(self._apply_filters)
 
         # Ordenação (Fatia 63) — mesmo padrão dos filtros acima: um botão
-        # ícone-only com popup de escolha única. O valor é o par
+        # compacto com ícone e rótulo, com popup de escolha única. O valor é o par
         # (coluna, direção) direto, sem widget de direção separado — cada
         # opção do menu já é uma combinação completa e legível.
         self.sort_filter = FilterButton(
@@ -188,6 +205,7 @@ class MainWindow(QMainWindow):
                 ("Resolução (maior)", ("resolution", "desc")),
                 ("Resolução (menor)", ("resolution", "asc")),
             ],
+            caption="Ordenar",
         )
         self.sort_filter.changed.connect(self._apply_filters)
 
@@ -209,6 +227,10 @@ class MainWindow(QMainWindow):
                                     library_id=self._library_id, parent=self)
         self.grid = AssetGridView()
         self.grid.setModel(self.model)
+        from assetdeck import config
+
+        self._reduce_motion = bool(config.load_config().get("reduce_motion", False))
+        self.grid.itemDelegate().set_reduced_motion(self._reduce_motion)
         self.grid.selectionModel().currentChanged.connect(self._on_selection)
         self.model.dataChanged.connect(self._on_data_changed)
         self.grid.image_dropped.connect(self._on_image_dropped)
@@ -244,26 +266,20 @@ class MainWindow(QMainWindow):
             lambda: self.smart_collections.reload(self._conn)
         )
 
-        # Lateral (Fatia 45): rail de ícones + UM painel com as quatro seções,
-        # cada uma com contador e recolhível pelo cabeçalho. Antes eram quatro
-        # QFrame#card empilhados num splitter, todos do mesmo tamanho e sem
-        # contador — não dava pra saber, olhando, o que tinha conteúdo.
-        # O card em volta continua obrigatório pelo mesmo motivo da Fatia 24:
-        # o viewport de uma QTreeWidget/QListView pinta retângulo no canto e
-        # vaza por cima de qualquer border-radius posto nela diretamente.
-        # Agora é um card só, envolvendo o splitter inteiro (ver ui/sidebar.py).
+        # Navegação e filtros laterais ficam numa coluna contínua ao lado da
+        # grade; as quatro seções continuam recolhíveis e redimensionáveis.
         self.sidebar = Sidebar([
             ("pastas", "Pastas", "nav-pastas", self.folders),
             ("tags", "Tags", "nav-tags", self.tags),
             ("colecoes", "Coleções", "nav-colecoes", self.collections),
             ("smart", "Smart Collections", "nav-smart", self.smart_collections),
-        ])
+        ], library_name=self._library_display_name,
+           library_path=str(self._library_root))
         left = self.sidebar
-        self._left_default_sizes = [280, 200, 200, 200]
+        self._left_default_sizes = [300, 150, 150, 140]
         self.sidebar.splitter.setSizes(self._left_default_sizes)
-        # O piso vem do próprio Sidebar (cabeçalho mais largo + rail); aqui só
-        # o teto, que é escolha de proporção da janela.
-        left.setMaximumWidth(340 + sidebar_mod.LARGURA_RAIL)
+        left.setMinimumWidth(max(196, self.sidebar.minimumWidth()))
+        left.setMaximumWidth(280)
         # Segue exposto com o nome antigo: é o splitter DAS SEÇÕES, que
         # `_restaurar_layout` redimensiona e o teste de layout confere.
         self._left_splitter = self.sidebar.splitter
@@ -271,8 +287,8 @@ class MainWindow(QMainWindow):
         # DetailsPanel é o próprio card (objectName="card" nele mesmo) — não
         # precisa de embrulho extra, então o min/max width fica nele direto.
         self.details = DetailsPanel(self._library_root)
-        self.details.setMinimumWidth(300)
-        self.details.setMaximumWidth(380)
+        self.details.setMinimumWidth(224)
+        self.details.setMaximumWidth(280)
         # SEM sombra (Fatia 76) — o Rafael viu "a sombra do painel de detalhes
         # parece estar vazando, tente deixar que nem no grid de assets". Era o
         # único dos três painéis com `apply_card_shadow`: a lateral e a grade
@@ -294,6 +310,21 @@ class MainWindow(QMainWindow):
             lambda recado: self.statusBar().showMessage(recado, 8000))
         self.details.check_textures_requested.connect(self._check_textures)
 
+        self.favorite_nav = QToolButton()
+        self.favorite_nav.setObjectName("sidebarNavItem")
+        self.favorite_nav.setText("Favoritos")
+        self.favorite_nav.setIcon(
+            icons.icon("star-outline", theme.current_colors()["text_muted"], 16)
+        )
+        self.favorite_nav.setIconSize(QSize(16, 16))
+        self.favorite_nav.setToolButtonStyle(
+            Qt.ToolButtonStyle.ToolButtonTextBesideIcon
+        )
+        self.favorite_nav.setCheckable(True)
+        self.favorite_nav.setToolTip("Mostrar apenas assets favoritos")
+        self.favorite_nav.setAccessibleName("Favoritos")
+        self.sidebar.add_quick_action(self.favorite_nav)
+
         # Caminho navegável acima da grade (Fatia 28, estilo Connecter): a
         # única pista de "onde estou" antes disso era o item selecionado na
         # árvore de pastas — fácil de perder de vista depois de rolar.
@@ -308,23 +339,48 @@ class MainWindow(QMainWindow):
         self.list_scope.setObjectName("listScope")
         self.list_count = QLabel()
         self.list_count.setObjectName("listCount")
+        self.page_title = QLabel(self._library_display_name)
+        self.page_title.setObjectName("pageTitle")
+        self.page_title.setToolTip(str(self._library_root))
 
         self._update_breadcrumb("")
 
-        # Slider de tamanho da miniatura (pedido do Rafael, estilo Connecter):
-        # a grade e o modelo mudam JUNTOS — ver AssetGridView.set_icon_size.
-        # Fatia 56: saiu do rodapé (longe da grade, alça "bola" destoando dos
-        # botões de filtro ao lado) e foi pra faixa 3, junto de nota/
-        # resolução/cor — mesma linha que já refina o que está na tela.
-        # Mais estreito que os 110px de antes: cabe ao lado de 3 botões
-        # ícone-only sem empurrar o contador pra fora.
+        # Slider contínuo de tamanho da miniatura (pedido do Rafael, estilo
+        # Connecter): cada valor inteiro entre MIN_ICON e MAX_ICON vale — sem
+        # tamanhos predefinidos — e grade/modelo mudam JUNTOS. Ele fica na
+        # faixa de filtros finos, junto de resolução/cor, e ganha largura para
+        # o ajuste ser fácil de mirar sem tomar a linha do breadcrumb.
         from PySide6.QtWidgets import QSlider
 
         self.size_slider = QSlider(Qt.Orientation.Horizontal)
         self.size_slider.setRange(asset_grid.MIN_ICON, asset_grid.MAX_ICON)
+        self.size_slider.setSingleStep(1)
+        self.size_slider.setPageStep(8)
         self.size_slider.setValue(asset_grid.DEFAULT_ICON)
-        self.size_slider.setFixedWidth(72)
-        self.size_slider.setToolTip("Tamanho das miniaturas")
+        self.size_slider.setFixedWidth(190)
+        self.size_slider.setFixedHeight(34)
+        self.size_slider.setToolTip(
+            f"Tamanho das miniaturas: {asset_grid.MIN_ICON}–"
+            f"{asset_grid.MAX_ICON} px. Use as setas para ajustar de 1 em 1."
+        )
+        self.size_slider.setAccessibleName("Tamanho das miniaturas")
+        self.size_slider.setAccessibleDescription(
+            f"Ajuste contínuo de {asset_grid.MIN_ICON} a {asset_grid.MAX_ICON} pixels."
+        )
+        self.size_value = QLabel(f"{self.size_slider.value()} px")
+        self.size_value.setObjectName("gridSizeValue")
+        self.size_value.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.size_value.setFixedSize(58, 30)
+        self.size_value.setToolTip(
+            "Tamanho atual das miniaturas. O valor muda de 1 em 1 pixel."
+        )
+        self._size_value_effect = QGraphicsOpacityEffect(self.size_value)
+        self.size_value.setGraphicsEffect(self._size_value_effect)
+        self._size_value_animation = QPropertyAnimation(
+            self._size_value_effect, b"opacity", self)
+        self._size_value_animation.setDuration(140)
+        self._size_value_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self.size_slider.valueChanged.connect(self._on_icon_size_changed)
         self.size_slider.valueChanged.connect(self.grid.set_icon_size)
 
         # Voltar / Avançar / Subir (Fatia 32): a árvore lateral era o único
@@ -336,82 +392,85 @@ class MainWindow(QMainWindow):
         self.up_btn = self._nav_button("arrow-up", "Subir um nível (Alt+↑)",
                                        self._go_up)
 
-        # Topo em DUAS faixas (Fatia 66, era três desde a Fatia 46). O
-        # Rafael pediu pra parar de dedicar uma faixa própria só pra busca
-        # ("barra de pesquisa enorme") — ela virou um campo compacto na
-        # MESMA linha da navegação, junto dos filtros finos que já moravam
-        # ali do lado (resolução/cor/ordenar/tamanho) e do botão de
-        # reindexar (que tinha uma faixa só pra ele também). Mockup
-        # aprovado por ele antes de mexer no código:
-        #
-        #   1. onde estou + refino     → setas + caminho + busca + filtros +
-        #                                 tamanho + reindexar
-        #   2. o que quero ver + conta → as 6 categorias + quantos itens
-        #
-        # A contagem ("N assets") desce pra linha das categorias — não tinha
-        # mais faixa própria sobrando pra ela.
+        # As faixas acompanham a prévia aprovada: título e contagem, busca e
+        # refinamentos, tipos de asset, e a grade com ajuste contínuo de tamanho.
+        page_row = QHBoxLayout()
+        page_row.setContentsMargins(0, 0, 0, 0)
+        page_row.setSpacing(9)
+        page_row.addWidget(self.page_title)
+        page_row.addWidget(self.list_count)
+        page_row.addStretch(1)
+        page_row.addWidget(self.search_box, stretch=1)
+        page_row.addWidget(self.progress)
+        page_row.addWidget(self.rescan_btn)
+        page_row_widget = QWidget()
+        page_row_widget.setObjectName("pageHeader")
+        page_row_widget.setLayout(page_row)
+
         path_row = QHBoxLayout()
-        path_row.setSpacing(6)
+        path_row.setContentsMargins(0, 0, 0, 0)
+        path_row.setSpacing(7)
         path_row.addWidget(self.back_btn)
         path_row.addWidget(self.fwd_btn)
         path_row.addWidget(self.up_btn)
-        path_row.addSpacing(4)
         path_row.addWidget(self.breadcrumb, stretch=1)
-        path_row.addWidget(self.search_box)
-        path_row.addWidget(self.sort_filter)
-        path_row.addWidget(self.res_filter)
-        path_row.addWidget(self.color_filter)
-        path_row.addSpacing(4)
-        path_row.addWidget(self.size_slider)
-        path_row.addSpacing(4)
-        path_row.addWidget(self.progress)
-        path_row.addWidget(self.rescan_btn)
-        # objectName próprio: controles mais baixos SÓ nesta fileira
-        # (padding menor) — pedido do Rafael de enxutar verticalmente,
-        # herdado de quando só a busca morava aqui (Fatia 28d).
         path_row_widget = QWidget()
-        path_row_widget.setObjectName("searchBar")
+        path_row_widget.setObjectName("assetToolbar")
         path_row_widget.setLayout(path_row)
 
         category_row = QHBoxLayout()
         category_row.setContentsMargins(0, 0, 0, 0)
+        category_row.setSpacing(7)
         category_row.addWidget(self.categories)
         category_row.addStretch(1)
-        category_row.addWidget(self.list_scope)
-        category_row.addWidget(self.list_count)
+        category_row.addWidget(self.sort_filter)
+        category_row.addWidget(self.res_filter)
+        category_row.addWidget(self.color_filter)
+        category_row_widget = QWidget()
+        category_row_widget.setObjectName("typeFiltersRow")
+        category_row_widget.setLayout(category_row)
+
+        grid_header = QHBoxLayout()
+        grid_header.setContentsMargins(0, 0, 0, 0)
+        grid_header.setSpacing(9)
+        grid_header.addWidget(self.list_scope)
+        grid_header.addStretch(1)
+        self.grid_size_label = QLabel("Tamanho")
+        self.grid_size_label.setObjectName("gridSizeLabel")
+        grid_header.addWidget(self.grid_size_label)
+        grid_header.addWidget(self.size_value)
+        grid_header.addWidget(self.size_slider)
+        grid_header_widget = QWidget()
+        grid_header_widget.setObjectName("gridHeader")
+        grid_header_widget.setLayout(grid_header)
 
         grid_container = QWidget()
+        grid_container.setObjectName("assetWorkspace")
+        grid_container.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         grid_layout = QVBoxLayout(grid_container)
-        grid_layout.setContentsMargins(0, 0, 0, 0)
-        grid_layout.setSpacing(6)
+        grid_layout.setContentsMargins(24, 20, 18, 18)
+        grid_layout.setSpacing(13)
+        grid_layout.addWidget(page_row_widget)
         grid_layout.addWidget(path_row_widget)
+        grid_layout.addWidget(category_row_widget)
+        grid_layout.addWidget(grid_header_widget)
         grid_layout.addWidget(self._breadcrumb_divider(horizontal=True))
-        grid_layout.addLayout(category_row)
         grid_layout.addWidget(self.grid)
 
-        # A grade NUNCA leva sombra: ela rola com centenas de assets, e o
-        # QGraphicsDropShadowEffect força o Qt a renderizar a subárvore
-        # inteira fora da tela a cada quadro (medido ~2,3x mais caro).
-        grid_card = theme.make_card(grid_container, sombra=False)
-
         splitter = QSplitter(Qt.Orientation.Horizontal)
-        splitter.setHandleWidth(10)
+        splitter.setObjectName("mainLayoutSplitter")
+        splitter.setHandleWidth(1)
         splitter.addWidget(left)
-        splitter.addWidget(grid_card)
+        splitter.addWidget(grid_container)
         splitter.addWidget(self.details)
         splitter.setStretchFactor(0, 0)
         splitter.setStretchFactor(1, 1)
         splitter.setStretchFactor(2, 0)
-        # A lateral abre no próprio piso (rail + o cabeçalho mais largo). Antes
-        # da Fatia 45 era 240 fixo — o rail sairia desse orçamento e o
-        # cabeçalho "SMART COLLECTIONS" aparecia cortado.
-        self._main_default_sizes = [self.sidebar.minimumWidth(), 740, 300]
+        self._main_default_sizes = [self.sidebar.minimumWidth(), 820, 244]
         splitter.setSizes(self._main_default_sizes)
         self._main_splitter = splitter
 
-        # A busca não tem mais faixa/card próprio (Fatia 66) — mora dentro
-        # do `grid_card`, junto do resto da navegação. `central` agora só
-        # empilha o splitter (painéis + grade + detalhes).
+        # A área central coloca navegação, grade e inspetor lado a lado.
         central = QWidget()
         central.setObjectName("appSurface")
         central.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
@@ -422,8 +481,8 @@ class MainWindow(QMainWindow):
         # centralizado só na METADE que é a barra, aparecendo acima do meio
         # do espaço que o Rafael enxerga. Foi o que ele descreveu duas vezes:
         # "deixe centralizado verticalmente no espaço em que está".
-        layout.setContentsMargins(14, 0, 14, 0)
-        layout.setSpacing(12)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
         layout.addWidget(splitter)
         self.setCentralWidget(central)
         self._central = central  # host dos overlays (preview, HDRI) — Fatia 65
@@ -431,6 +490,9 @@ class MainWindow(QMainWindow):
         # Duplo clique num asset = preview ampliado, embutido na própria
         # janela (Fatia 65) — precisa do widget central já existir.
         self.preview_popup = PreviewPopup(self._central)
+        self._pipeline.ready.connect(self.preview_popup.material_preview_ready)
+        self._pipeline.material_failed.connect(
+            self.preview_popup.material_preview_failed)
 
         # Navegação de pastas (Fatia 32), mesmas teclas de um navegador.
         # Ctrl+T (tags) virou QAction da Fatia 36 — ver _setup_menu_bar
@@ -453,17 +515,18 @@ class MainWindow(QMainWindow):
         from assetdeck.ui.settings_window import SettingsWindow
 
         self.settings_window = SettingsWindow(self)
-        # Ajuste pós-tela: engrenagem no pé do rail lateral (canto
-        # inferior-esquerdo), não na barra de menus — pedido do Rafael.
+        # Acesso às configurações no fim da navegação lateral.
         self.sidebar.rail.settings_clicked.connect(self._abrir_configuracoes)
+        self.favorite_nav.toggled.connect(self.fav_check.setChecked)
+        self.fav_check.toggled.connect(self.favorite_nav.setChecked)
         self._setup_atalhos_globais()
         self._setup_bridge()  # ponte com o Blender + RenderController (F2)
         self._setup_brand_bar()  # Fatia 50 — marca e contexto na mesma faixa
 
-        # Contagem sempre visível no rodapé (Fatia 28) — antes vivia num
-        # QLabel solto na barra de filtros, junto de mais 10 widgets.
-        self.footer_count = QLabel()
-        self.statusBar().addPermanentWidget(self.footer_count)
+        # Mantém o rótulo para integrações internas; a contagem agora está no
+        # cabeçalho da biblioteca, junto ao título.
+        self.footer_count = QLabel(self)
+        self.footer_count.hide()
 
         # Tamanho da biblioteca (Fatia 49). O rodapé da referência que o
         # Rafael escolheu informa; o nosso só contava assets. Soma em `files`,
@@ -481,7 +544,7 @@ class MainWindow(QMainWindow):
         # (ver `setContentsMargins` acima). O espaço embaixo é o mesmo de
         # sempre; a diferença é que agora ele pertence todo à barra, e o texto
         # cai no meio dele.
-        self.statusBar().setFixedHeight(46)
+        self.statusBar().setFixedHeight(34)
         self.statusBar().setSizeGripEnabled(False)  # o canto pontilhado comia a margem direita
         # Margem lateral do rodapé (Fatia 78, "colocar margens maiores das
         # bordas"). Vale para os widgets permanentes da direita — contagem,
@@ -496,7 +559,6 @@ class MainWindow(QMainWindow):
         # registrado caso o Rafael queira.
         self.statusBar().layout().setContentsMargins(18, 0, 18, 0)
 
-        self.statusBar().showMessage(f"v{__version__} · banco: {db_path}")
         self._reload_all()
         # Precisa vir DEPOIS de `_reload_all()`: restaurar filtro/tag/pasta
         # exige pastas e tags já carregadas na árvore (Fatia 54).
@@ -580,10 +642,10 @@ class MainWindow(QMainWindow):
     def _update_breadcrumb(self, dir_prefix: str) -> None:
         """"" -> biblioteca inteira; "A/B" -> "Biblioteca › A › B"."""
         if not dir_prefix:
-            self._breadcrumb_full = "BIBLIOTECA (TUDO)"
+            self._breadcrumb_full = self._library_display_name
         else:
             trilha = " › ".join(dir_prefix.split("/"))
-            self._breadcrumb_full = f"BIBLIOTECA › {trilha}".upper()
+            self._breadcrumb_full = f"{self._library_display_name} › {trilha}"
         self._elide_breadcrumb()
         # Escopo da faixa 3 (Fatia 46). O caminho na faixa 1 responde "onde
         # estou"; este responde "o que esta lista contém", que é diferente
@@ -814,7 +876,7 @@ class MainWindow(QMainWindow):
         atalho de teclado, navegação por Alt e integração com o gerenciador
         de janelas.
         """
-        from PySide6.QtWidgets import QHBoxLayout
+        from PySide6.QtWidgets import QGridLayout, QHBoxLayout
 
         barra = self.menuBar()
         # Mesma ideia do rodapé (Fatia 95): a faixa engole a margem que era do
@@ -826,13 +888,22 @@ class MainWindow(QMainWindow):
         marca = QWidget()
         marca_layout = QHBoxLayout(marca)
         marca_layout.setContentsMargins(10, 0, 12, 0)
-        marca_layout.setSpacing(7)
-        ponto = QFrame()
-        ponto.setObjectName("brandDot")
-        ponto.setFixedSize(8, 8)
+        marca_layout.setSpacing(8)
+        simbolo = QWidget()
+        simbolo.setObjectName("brandMark")
+        simbolo.setFixedSize(23, 23)
+        simbolo_layout = QGridLayout(simbolo)
+        simbolo_layout.setContentsMargins(0, 0, 0, 0)
+        simbolo_layout.setHorizontalSpacing(3)
+        simbolo_layout.setVerticalSpacing(3)
+        for linha, coluna in ((0, 0), (0, 1), (1, 0), (1, 1)):
+            glifo = QFrame(simbolo)
+            glifo.setObjectName("brandGlyph")
+            glifo.setFixedSize(10, 10)
+            simbolo_layout.addWidget(glifo, linha, coluna)
         rotulo = QLabel("AssetDeck")
         rotulo.setObjectName("brandName")
-        marca_layout.addWidget(ponto)
+        marca_layout.addWidget(simbolo)
         marca_layout.addWidget(rotulo)
 
         # A referência em `self` é OBRIGATÓRIA. A documentação do Qt diz que a
@@ -861,11 +932,20 @@ class MainWindow(QMainWindow):
         contexto.setFixedHeight(ALTURA_FAIXA_TOPO)
         contexto_layout = QHBoxLayout(contexto)
         contexto_layout.setContentsMargins(0, 0, 12, 0)
-        contexto_layout.setSpacing(2)
+        contexto_layout.setSpacing(10)
         self.library_switcher = LibrarySwitcher(self._conn, self._library_id)
         self.library_switcher.switch_requested.connect(self._on_switch_library)
         self.brand_context = QLabel()
         self.brand_context.setObjectName("brandContext")
+        contexto_divider = QFrame()
+        contexto_divider.setObjectName("topContextDivider")
+        contexto_divider.setFixedSize(1, 20)
+        contexto_layout.addWidget(
+            self._bridge_led, 0, Qt.AlignmentFlag.AlignVCenter)
+        contexto_layout.addWidget(
+            self.bridge_status, 0, Qt.AlignmentFlag.AlignVCenter)
+        contexto_layout.addWidget(
+            contexto_divider, 0, Qt.AlignmentFlag.AlignVCenter)
         # AlignVCenter explícito (Fatia 78, pedido do Rafael: "deixe a parte
         # de trocar a biblioteca centralizada verticalmente nesse espaço").
         # Sem isso o QHBoxLayout ESTICA os dois na altura toda do canto da
@@ -875,6 +955,7 @@ class MainWindow(QMainWindow):
             self.library_switcher, 0, Qt.AlignmentFlag.AlignVCenter)
         contexto_layout.addWidget(
             self.brand_context, 0, Qt.AlignmentFlag.AlignVCenter)
+        self.brand_context.hide()
 
         # Mesmo motivo do `_brand_widget` acima: sem a referência em `self`,
         # o Python coleta `contexto` assim que a função retorna.
@@ -964,6 +1045,33 @@ class MainWindow(QMainWindow):
         self._update_brand_context()  # o canto direito da faixa diz o modo
         self.statusBar().showMessage(f"Modo {modo} aplicado.")
 
+    def _toggle_reduce_motion(self, reduzir: bool) -> None:
+        from assetdeck import config
+
+        self._reduce_motion = bool(reduzir)
+        cfg = config.load_config()
+        cfg["reduce_motion"] = self._reduce_motion
+        config.save_config(cfg)
+        self.grid.itemDelegate().set_reduced_motion(self._reduce_motion)
+        if self._reduce_motion:
+            self._size_value_animation.stop()
+            self._size_value_effect.setOpacity(1.0)
+        estado = "reduzido" if self._reduce_motion else "normal"
+        self.statusBar().showMessage(f"Movimento {estado} aplicado.")
+
+    def _on_icon_size_changed(self, pixels: int) -> None:
+        """Atualiza o valor visível e dá um retorno breve ao ajuste contínuo."""
+        self.size_value.setText(f"{pixels} px")
+        if self._reduce_motion:
+            self._size_value_effect.setOpacity(1.0)
+            return
+
+        self._size_value_animation.stop()
+        self._size_value_effect.setOpacity(0.72)
+        self._size_value_animation.setStartValue(0.72)
+        self._size_value_animation.setEndValue(1.0)
+        self._size_value_animation.start()
+
     def _refresh_theme_dependent_widgets(self) -> None:
         """Widgets que pintam cor "à mão" (fora do QSS) precisam ser
         avisados na hora de trocar de modo claro/escuro — o QSS/paleta do
@@ -981,6 +1089,10 @@ class MainWindow(QMainWindow):
         self.color_filter.refresh_theme()
         self.details.refresh_theme()
         self.sidebar.refresh_theme()
+        self.favorite_nav.setIcon(
+            icons.icon("star-filled" if self.favorite_nav.isChecked() else "star-outline",
+                       pal["text"] if self.favorite_nav.isChecked() else pal["text_muted"], 16)
+        )
         self._bridge_led.refresh_theme()
         self.library_switcher.refresh_theme()  # ícone tingido à mão (Fatia 77)
         self.settings_window.refresh_theme()   # ícones da lateral (Fatia 80)
@@ -1546,11 +1658,33 @@ class MainWindow(QMainWindow):
             self._visualizador().abrir_modelo(caminho, row["content_hash"])
             return
         maps = None
+        material_preview = None
+        material_failed = False
+        thumb = self._thumb_from_disk(row)
         if row["asset_type"] == "pbr_set" and self.group_check.isChecked():
             # PBR Material Viewer: botões para alternar entre os mapas do set
             maps = assets_repo.list_files(self._conn, row["id"])
+            key = preview_key(maps)
+            material_preview = preview_path(self._thumbs_dir, key, size=640)
+            map_paths = {}
+            for file in maps:
+                role = file["map_role"] or "basecolor"
+                map_paths.setdefault(role, self._library_root / file["rel_path"])
+            if map_paths:
+                self._pipeline.get_or_request_material(
+                    row["id"], row["name"], map_paths, key,
+                    size=640, priority=2)
+                material_failed = self._pipeline.material_failed_for(
+                    row["id"], key, 640)
+            grid_preview = preview_path(self._thumbs_dir, key)
+            if grid_preview.is_file():
+                pix = QPixmap(str(grid_preview))
+                if not pix.isNull():
+                    thumb = pix
         self.preview_popup.show_for(row, self._library_root,
-                                    self._thumb_from_disk(row), maps=maps)
+                                    thumb, maps=maps,
+                                    material_preview=material_preview,
+                                    material_failed=material_failed)
 
     def _visualizador(self):
         """Janela dos visualizadores 3D (HDRI e modelo na mesma casca desde
@@ -1670,28 +1804,35 @@ class MainWindow(QMainWindow):
                 lambda: self._remove_from_current_collection(ids),
             )
 
-        # Gerar capa (Fatia 101, pedido do Rafael: "gerar preview porém
-        # somente de alguns assets"). Candidato = modelo .blend, presente no
-        # disco, sem capa hoje — os mesmos três critérios de
-        # `models_without_cover`, checados aqui em cima dos dados que a
-        # grade JÁ tem (evita uma consulta extra só pra decidir se o item de
-        # menu aparece). A ação some quando ninguém qualifica, em vez de
-        # aparecer desabilitada sem dizer por quê.
-        sem_capa = [
+        # Gerar (sem capa) ou regenerar (com capa) os modelos selecionados.
+        # Os dois grupos seguem os mesmos critérios de `models_for_render`.
+        modelos = [
             r for r in selecionados
             if r["asset_type"] in ("model", "scene")
             and r["rel_path"].lower().endswith(".blend")
-            and not r["cover_path"]
             and r["missing_since"] is None
         ]
-        if sem_capa:
-            menu.addSeparator()
-            n = len(sem_capa)
-            rotulo = f"Gerar capa ({n})…" if n > 1 else "Gerar capa…"
-            menu.addAction(
-                rotulo,
-                lambda: self._render_covers([r["id"] for r in sem_capa]),
-            )
+        if modelos:
+            sem_capa = [r for r in modelos if not r["cover_path"]]
+            com_capa = [r for r in modelos if r["cover_path"]]
+            if sem_capa or com_capa:
+                menu.addSeparator()
+            if sem_capa:
+                n = len(sem_capa)
+                rotulo = f"Gerar capa ({n})…" if n > 1 else "Gerar capa…"
+                menu.addAction(
+                    rotulo,
+                    lambda: self._render_covers([r["id"] for r in sem_capa]),
+                )
+            if com_capa:
+                n = len(com_capa)
+                rotulo = f"Regenerar capa ({n})…" if n > 1 else "Regenerar capa…"
+                menu.addAction(
+                    rotulo,
+                    lambda: self._render_covers(
+                        [r["id"] for r in com_capa], overwrite_existing=True,
+                    ),
+                )
 
         # Batch rename (Fatia 23) — a única exceção ao somente-leitura
         menu.addSeparator()
@@ -1756,13 +1897,10 @@ class MainWindow(QMainWindow):
         from assetdeck.bridge.server import BridgeServer
         from assetdeck.ui.render_worker import RenderController
 
-        # LED + texto (Fatia 49). Só o texto ("Blender: ouvindo :45017") exige
-        # ler para saber se está tudo bem; o ponto colorido responde de
-        # relance, que é o que se quer de um rodapé.
+        # LED e texto ficam no cabeçalho, junto do seletor de biblioteca.
         self._bridge_led = StatusLed()
-        self.statusBar().addPermanentWidget(self._bridge_led)
         self.bridge_status = QLabel()
-        self.statusBar().addPermanentWidget(self.bridge_status)
+        self.bridge_status.setObjectName("topBlenderStatus")
 
         # RenderController roda o Blender headless por conta própria — não
         # depende da ponte estar ligada. Bug achado nesta fatia ao mover os
@@ -1812,14 +1950,21 @@ class MainWindow(QMainWindow):
         posicional com o `bool` do sinal, não com uma lista de ids."""
         self._render_covers(None)
 
-    def _render_covers(self, asset_ids: list[int] | None) -> None:
-        """Gera capa dos modelos `.blend` sem capa — todos (`None`, o botão
-        de Configurações) ou só o SUBCONJUNTO selecionado na grade (Fatia
-        101, pedido do Rafael: "gerar preview porém somente de alguns
-        assets", via botão direito)."""
+    def _render_covers(self, asset_ids: list[int] | None,
+                       overwrite_existing: bool = False) -> None:
+        """Gera capas `.blend` sem capa ou substitui as capas da seleção.
+
+        O botão de Configurações mantém a fila geral sem sobrescrita; o menu
+        de contexto passa `overwrite_existing=True` para renderizar a seleção
+        mesmo quando alguns assets já têm capa.
+        """
         from PySide6.QtWidgets import QMessageBox
 
-        from assetdeck.blender.render import blender_command, models_without_cover
+        from assetdeck.blender.render import (
+            blender_command,
+            models_for_render,
+            models_without_cover,
+        )
         from assetdeck.db.repos import libraries as libraries_repo
 
         if self._render.running:
@@ -1839,21 +1984,42 @@ class MainWindow(QMainWindow):
             return
 
         lib_id = libraries_repo.get_or_create(self._conn, self._library_root)
-        pendentes = models_without_cover(self._conn, lib_id, self._library_root,
-                                         asset_ids=asset_ids)
+        if overwrite_existing:
+            jobs = models_for_render(
+                self._conn, lib_id, self._library_root, asset_ids=asset_ids,
+                overwrite_existing=True,
+            )
+            pendentes = [job[:3] for job in jobs]
+            com_capa = sum(job[3] for job in jobs)
+        else:
+            pendentes = models_without_cover(
+                self._conn, lib_id, self._library_root, asset_ids=asset_ids,
+            )
+            com_capa = 0
         if not pendentes:
-            recado = ("Nenhum dos assets selecionados é modelo .blend sem "
-                      "capa." if asset_ids is not None else
-                      "Todos os modelos .blend já têm capa.")
+            if overwrite_existing and asset_ids is not None:
+                recado = "Nenhum asset selecionado é um modelo .blend disponível para renderizar."
+            elif asset_ids is not None:
+                recado = "Nenhum dos assets selecionados é modelo .blend sem capa."
+            else:
+                recado = "Todos os modelos .blend já têm capa."
             QMessageBox.information(self, "Nada a fazer", recado)
             return
 
         if asset_ids is not None:
-            pergunta = (
-                f"{len(pendentes)} modelo(s) selecionado(s) sem capa serão "
-                "renderizados pelo Blender, um por vez, em segundo "
-                "plano.\n\nComeçar?"
-            )
+            if overwrite_existing:
+                pergunta = (f"{len(pendentes)} modelo(s) selecionado(s) terão "
+                            "a capa regenerada pelo Blender, um por vez, em segundo plano.")
+                if com_capa == 1:
+                    pergunta += ("\n\nA capa atual de 1 asset será substituída; "
+                                 "a capa anterior continuará na galeria.")
+                elif com_capa > 1:
+                    pergunta += (f"\n\nAs capas atuais de {com_capa} assets serão "
+                                 "substituídas; as capas anteriores continuarão na galeria.")
+            else:
+                pergunta = (f"{len(pendentes)} modelo(s) selecionado(s) sem capa serão "
+                            "renderizados pelo Blender, um por vez, em segundo plano.")
+            pergunta += "\n\nComeçar?"
         else:
             pergunta = (
                 f"{len(pendentes)} modelo(s) sem capa serão renderizados pelo "
@@ -1861,7 +2027,9 @@ class MainWindow(QMainWindow):
                 "Leva alguns segundos por modelo e você pode continuar usando o "
                 "AssetDeck normalmente. Começar?"
             )
-        resposta = QMessageBox.question(self, "Gerar capas dos modelos", pergunta)
+        titulo = ("Regenerar capas dos modelos" if overwrite_existing
+                  else "Gerar capas dos modelos")
+        resposta = QMessageBox.question(self, titulo, pergunta)
         if resposta != QMessageBox.StandardButton.Yes:
             return
 
@@ -1870,7 +2038,8 @@ class MainWindow(QMainWindow):
         self.progress.setVisible(True)
         self.progress.setRange(0, len(pendentes))
         self._render.start(self._on_render_progress, self._on_render_finished,
-                           self._on_render_failed, asset_ids=asset_ids)
+                           self._on_render_failed, asset_ids=asset_ids,
+                           overwrite_existing=overwrite_existing)
 
     def _stop_render(self) -> None:
         self._render.shutdown()
@@ -2160,20 +2329,49 @@ class MainWindow(QMainWindow):
     def start_scan(self) -> None:
         if self._scan.running:
             return
+        self._pipeline.set_scan_active(True)
         self.rescan_btn.setEnabled(False)
         self.progress.setVisible(True)
         self.progress.setRange(0, 0)
-        self.statusBar().showMessage("Indexando biblioteca…")
+        self.statusBar().showMessage("Preparando varredura…")
         self._scan.start(self._on_progress, self._on_finished, self._on_failed)
 
     def _on_progress(self, done: int, total: int, live_count: int) -> None:
-        if self.progress.maximum() != total:
+        if total == -1:
+            message = f"Descobrindo arquivos… {done} encontrados"
+            self._scan_calc_total = 0
+        elif total == -2:
+            message = f"Processando arquivos… {done} processados"
+            self._scan_calc_total = 0
+        elif total == -3:
+            self._scan_calc_total = done
+            message = f"Calculando fingerprints… 0/{done} neste lote"
+            self.progress.setRange(0, max(done, 1))
+            self.progress.setValue(0)
+        elif total == -4:
+            limite = max(self._scan_calc_total, 1)
+            message = f"Calculando fingerprints… {done}/{self._scan_calc_total} neste lote"
+            self.progress.setRange(0, limite)
+            self.progress.setValue(min(done, limite))
+        elif total <= 0:
+            message = f"Varredura em andamento… {done} arquivos percorridos"
+            self._scan_calc_total = 0
+        else:
+            message = f"Indexando… {done}/{total} arquivos"
+            self._scan_calc_total = 0
+
+        if total <= 0 and total not in (-3, -4):
+            if self.progress.maximum() != 0:
+                self.progress.setRange(0, 0)
+        elif total > 0 and self.progress.maximum() != total:
             self.progress.setRange(0, total)
-        self.progress.setValue(done)
+        if total > 0:
+            self.progress.setValue(done)
         self.footer_count.setText(f"{live_count} assets")
-        self.statusBar().showMessage(f"Indexando… {done}/{total} arquivos")
+        self.statusBar().showMessage(message)
 
     def _on_finished(self, stats: ScanStats) -> None:
+        self._pipeline.set_scan_active(False)
         self.progress.setVisible(False)
         self.rescan_btn.setEnabled(True)
         # Fatia 64: só `added`/`updated`/`reappeared`/`grouped_sets` podem
@@ -2204,6 +2402,7 @@ class MainWindow(QMainWindow):
         log.info("UI: indexação concluída — %s", stats.summary())
 
     def _on_failed(self, message: str) -> None:
+        self._pipeline.set_scan_active(False)
         self.progress.setVisible(False)
         self.rescan_btn.setEnabled(True)
         self.statusBar().showMessage(f"ERRO na indexação: {message} (detalhes no log)")
@@ -2268,7 +2467,11 @@ class MainWindow(QMainWindow):
         Daí conferir repetidamente por um intervalo, reafirmando sempre que
         não estiver maximizada, em vez de apostar num instante certo.
         """
+        import shiboken6
         from PySide6.QtCore import QTimer
+
+        if not shiboken6.isValid(self):
+            return
 
         # Insiste pelo INTERVALO INTEIRO, sem sair mais cedo (Fatia 97).
         #
@@ -2291,7 +2494,7 @@ class MainWindow(QMainWindow):
                 log.warning("O gerenciador de janelas não aceitou maximizar "
                             "a janela — ela abre em tamanho normal.")
             return
-        QTimer.singleShot(150, lambda: self._repor_maximizada(tentativa + 1))
+        QTimer.singleShot(150, self, lambda: self._repor_maximizada(tentativa + 1))
 
     def _save_ui_state(self) -> None:
         """Grava geometria, painéis, splitters, tamanho do slider, tags
@@ -2359,6 +2562,7 @@ class MainWindow(QMainWindow):
         tam_esq = estado.get("left_splitter_sizes")
         if tam_esq:
             self._left_splitter.setSizes(tam_esq)
+        self.sidebar.schedule_rebalance_sections()
         tam_main = estado.get("main_splitter_sizes")
         if tam_main:
             self._main_splitter.setSizes(tam_main)
@@ -2384,11 +2588,34 @@ class MainWindow(QMainWindow):
     # ---- encerramento limpo ----
 
     def closeEvent(self, event) -> None:  # noqa: N802 (nome vem do Qt)
+        if self._closing_after_scan:
+            event.ignore()
+            return
+        if not self._scan.shutdown():
+            event.ignore()
+            self._closing_after_scan = True
+            self.statusBar().showMessage(
+                "Encerrando a varredura antes de fechar… aguarde."
+            )
+            self._scan.stopped.connect(self._close_after_scan_stops)
+            # A thread pode terminar entre o timeout e a conexão do sinal.
+            if not self._scan.running:
+                self._close_after_scan_stops()
+            return
         self._save_ui_state()
-        self._scan.shutdown()
         self._pipeline.shutdown()
         if getattr(self, "_bridge", None) is not None:
             self._bridge.stop()
         if getattr(self, "_render", None) is not None:
             self._render.shutdown()
         super().closeEvent(event)
+
+    def _close_after_scan_stops(self) -> None:
+        if not self._closing_after_scan:
+            return
+        self._closing_after_scan = False
+        try:
+            self._scan.stopped.disconnect(self._close_after_scan_stops)
+        except RuntimeError:
+            log.exception("Falha ao desconectar o encerramento adiado da varredura.")
+        self.close()

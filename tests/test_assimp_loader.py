@@ -2,14 +2,15 @@
 
 Usa um .obj simples como fixture: `assimp_py.import_file` não liga pra
 extensão do arquivo de teste, só pro CONTEÚDO — o que este teste cobre é
-a conversão do resultado do assimp pro `Mesh` da assetdeck (achatamento
-de índices, posição+normal), não o parser interno do assimp em si (já é
+a conversão do resultado do assimp pro `Mesh` da assetdeck (vértices
+compartilhados, índices e materiais), não o parser interno do assimp (já é
 biblioteca madura e testada por fora). Não precisa de arquivo .fbx real
 nem do Blender.
 """
 
 import sys
 
+import numpy as np
 import pytest
 
 from assetdeck.model3d.assimp_loader import load_via_assimp
@@ -64,7 +65,34 @@ v 0 1 0
 f 1 2 3 4
 """)
     mesh = load_via_assimp(caminho)
-    assert len(mesh.positions) == 6  # 2 triângulos × 3 vértices (Process_Triangulate)
+    assert len(mesh.positions) == 4  # vértices compartilhados preservados
+    assert len(mesh.indices) == 6  # 2 triângulos × 3 cantos
+
+
+@requer_assimp
+def test_uv_cor_e_textura_de_material(tmp_path):
+    (tmp_path / "cor.png").write_bytes(b"referencia")
+    (tmp_path / "tri.mtl").write_text("newmtl Cor\nKd 0.2 0.4 0.6\nmap_Kd cor.png\n")
+    caminho = tmp_path / "tri.obj"
+    caminho.write_text("mtllib tri.mtl\nv 0 0 0\nv 1 0 0\nv 0 1 0\n"
+                       "vt 0 0\nvt 1 0\nvt 0 1\nusemtl Cor\nf 1/1 2/2 3/3\n")
+    mesh = load_via_assimp(caminho)
+    np.testing.assert_allclose(mesh.uvs, [(0, 0), (1, 0), (0, 1)])
+    assert mesh.materials[0].color == pytest.approx((0.2, 0.4, 0.6))
+    assert mesh.materials[0].texture == tmp_path / "cor.png"
+
+
+@requer_assimp
+def test_prioriza_difusa_quando_material_tem_normal_e_opacidade(tmp_path):
+    for nome in ("cor.png", "normal.png", "opacidade.png"):
+        (tmp_path / nome).write_bytes(b"referencia")
+    (tmp_path / "tri.mtl").write_text(
+        "newmtl Cor\nmap_Kd cor.png\nmap_Bump normal.png\nmap_d opacidade.png\n")
+    caminho = tmp_path / "tri.obj"
+    caminho.write_text("mtllib tri.mtl\nv 0 0 0\nv 1 0 0\nv 0 1 0\n"
+                       "usemtl Cor\nf 1 2 3\n")
+    mesh = load_via_assimp(caminho)
+    assert mesh.materials[0].texture == tmp_path / "cor.png"
 
 
 @requer_assimp

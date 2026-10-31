@@ -14,7 +14,7 @@ from PySide6.QtWidgets import QMenu, QToolButton
 
 from assetdeck.ui import icons, theme
 
-_SWATCH_SIZE = 12
+_SWATCH_SIZE = 16
 
 
 def _swatch_icon(hex_color: str) -> QIcon:
@@ -30,7 +30,8 @@ class FilterButton(QToolButton):
     changed = Signal()
 
     def __init__(self, icon_name: str, options: list[tuple[str, object]],
-                 parent=None, swatch: bool = False) -> None:
+                 parent=None, swatch: bool = False,
+                 caption: str | None = None) -> None:
         """`options`: [(rótulo, valor), ...] — o PRIMEIRO é o padrão/"sem filtro".
 
         `swatch`: True faz cada opção (exceto a padrão) mostrar um
@@ -38,10 +39,7 @@ class FilterButton(QToolButton):
         "#rrggbb") em vez de só o texto — usado pela paleta de busca por
         cor (Fatia 39)."""
         super().__init__(parent)
-        # Mesma pastilha dos botões de categoria (Fatia 76) — ordenar,
-        # resolução e cor moram na mesma barra e precisam ler como a mesma
-        # família de controle.
-        self.setObjectName("pill")
+        self.setObjectName("toolbarFilter")
         self._options = options
         self._default = options[0][1]
         self._value = self._default
@@ -49,12 +47,19 @@ class FilterButton(QToolButton):
 
         self.setIcon(icons.icon(icon_name, theme.current_colors()["text_muted"]))
         self.setIconSize(QSize(16, 16))
-        self.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
+        self.setText(caption or "")
+        self.setToolButtonStyle(
+            Qt.ToolButtonStyle.ToolButtonTextBesideIcon
+            if caption else Qt.ToolButtonStyle.ToolButtonIconOnly
+        )
         self.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        self.setFixedHeight(34)
+        self.setAccessibleName(caption or options[0][0])
         self.setCheckable(True)  # reaproveita QToolButton:checked do tema —
         # um filtro ativo já se destaca sozinho, sem QSS novo.
 
         self._menu = QMenu(self)
+        self._menu.setObjectName("filterPopup")
         self._grupo = QActionGroup(self._menu)
         self._grupo.setExclusive(True)
         self._acoes: list[tuple[QAction, object]] = []

@@ -15,7 +15,7 @@ from PySide6.QtCore import QObject, QThread, Signal, Slot
 from assetdeck.db.connection import connect
 from assetdeck.db.repos import assets as assets_repo
 from assetdeck.db.repos import libraries as libraries_repo
-from assetdeck.indexer.scanner import ScanStats, scan_library
+from assetdeck.indexer.scanner import WORKERS_PADRAO, ScanStats, scan_library
 
 log = logging.getLogger(__name__)
 
@@ -23,7 +23,7 @@ log = logging.getLogger(__name__)
 class ScanWorker(QObject):
     """Executa uma varredura completa e emite sinais de progresso."""
 
-    progress = Signal(int, int, int)   # processados, total, assets ativos agora
+    progress = Signal(int, int, int)   # contagem/fase, total ou marcador, assets ativos
     finished = Signal(object)          # ScanStats
     failed = Signal(str)               # mensagem legível
 
@@ -39,27 +39,36 @@ class ScanWorker(QObject):
     @Slot()
     def run(self) -> None:
         try:
+            from assetdeck import config
+
             conn = connect(self._db_path)
             try:
                 library_id = libraries_repo.get_or_create(conn, self._library_root)
+                active_at_start = assets_repo.count_active(conn, library_id=library_id)
+                scan_workers = config.load_config().get(
+                    "scan_workers", WORKERS_PADRAO)
+                if type(scan_workers) is not int or scan_workers not in (1, 2, 4, 8):
+                    log.warning(
+                        "Config scan_workers inválida (%r); usando %d processos.",
+                        scan_workers, WORKERS_PADRAO,
+                    )
+                    scan_workers = WORKERS_PADRAO
 
                 def on_progress(done: int, total: int, _stats: ScanStats) -> None:
-                    # A cada 10 arquivos (e no último) atualiza a UI
-                    if done % 10 == 0 or done == total:
-                        self.progress.emit(
-                            done, total,
-                            assets_repo.count_active(conn, library_id=library_id))
+                    # A contagem muda apenas quando entram assets novos. Uma
+                    # única consulta no início evita COUNT(*) a cada 10 itens.
+                    self.progress.emit(done, total, active_at_start + _stats.added)
 
                 stats = scan_library(
                     conn, library_id, self._library_root,
                     progress=on_progress,
                     should_stop=self._stop.is_set,
+                    workers=scan_workers,
                 )
                 if not stats.aborted:
                     # Pós-processamento, tudo nesta thread (a UI não trava):
                     # agrupar sets PBR → marcar dependências → capas de pack
                     # → capas por nome igual (Fatia 57, opt-in)
-                    from assetdeck import config
                     from assetdeck.indexer.dependencies import (
                         attach_pack_previews,
                         attach_stem_match_previews,
@@ -90,6 +99,8 @@ class ScanWorker(QObject):
 class ScanController(QObject):
     """Dono da QThread: cria, conecta e desmonta com segurança."""
 
+    stopped = Signal()
+
     def __init__(self, db_path: Path, library_root: Path, parent: QObject | None = None) -> None:
         super().__init__(parent)
         self._db_path = db_path
@@ -108,6 +119,7 @@ class ScanController(QObject):
         self._thread = QThread()
         self._worker = ScanWorker(self._db_path, self._library_root)
         self._worker.moveToThread(self._thread)
+        self._thread.finished.connect(self.stopped)
 
         self._thread.started.connect(self._worker.run)
         self._worker.progress.connect(on_progress)
@@ -120,11 +132,16 @@ class ScanController(QObject):
         self._thread.start()
         log.info("Varredura iniciada em background.")
 
-    def shutdown(self, timeout_ms: int = 5000) -> None:
-        """Pede parada e espera a thread morrer (chamado ao fechar a janela)."""
+    def shutdown(self, timeout_ms: int = 5000) -> bool:
+        """Pede parada; False indica que a janela deve aguardar `stopped`."""
         if self._worker:
             self._worker.request_stop()
         if self._thread and self._thread.isRunning():
             self._thread.quit()
             if not self._thread.wait(timeout_ms):
-                log.error("Thread de varredura não terminou em %dms.", timeout_ms)
+                log.warning(
+                    "Varredura ainda encerrando após %dms; mantendo a janela "
+                    "aberta até a thread terminar.", timeout_ms,
+                )
+                return False
+        return True

@@ -18,6 +18,7 @@ from assetdeck.indexer.scanner import scan_library
 from assetdeck.thumbs.pipeline import ThumbnailPipeline
 from assetdeck.ui import asset_grid
 from assetdeck.ui.asset_card_delegate import CELL, AssetCardDelegate
+from assetdeck.ui.categories import type_label_of
 
 
 @pytest.fixture
@@ -57,6 +58,17 @@ def _asset_id(conn, nome: str) -> int:
 def test_view_usa_o_delegate_novo(grid):
     view, _modelo, _conn = grid
     assert isinstance(view.itemDelegate(), AssetCardDelegate)
+
+
+@pytest.mark.parametrize(("asset_type", "esperado"), [
+    ("model", "Modelo 3D"),
+    ("pbr_set", "Material PBR"),
+    ("hdri", "HDRI"),
+    ("texture", "Textura"),
+    ("tipo_desconhecido", "tipo_desconhecido"),
+])
+def test_tipo_de_asset_tem_rotulo_de_card(asset_type, esperado):
+    assert type_label_of(asset_type) == esperado
 
 
 def test_size_hint_e_exatamente_cell(grid):
@@ -361,3 +373,14 @@ def test_o_hover_zera_quando_a_grade_recarrega(grid, qapp):
     assert not delegate._hover_progress, "sobrou progresso de hover após a recarga"
     assert not delegate._hover_target, "sobrou alvo de hover após a recarga"
     assert not delegate._hover_timer.isActive(), "o timer continuou rodando à toa"
+
+
+def test_reduzir_movimento_desliga_timer_sem_remover_hover(grid):
+    view, modelo, _conn = grid
+    delegate = view.itemDelegate()
+    delegate.set_reduced_motion(True)
+    delegate.set_hover(None, modelo.index(0))
+
+    assert delegate._reduced_motion is True
+    assert not delegate._hover_target
+    assert not delegate._hover_timer.isActive()

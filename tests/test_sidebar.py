@@ -123,6 +123,20 @@ def test_clicar_no_cabecalho_alterna(arvore, qapp):
     assert not secao.is_collapsed()
 
 
+def test_cabecalho_de_secao_responde_a_teclado(arvore, qapp):
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+
+    secao = SidebarSection("tags", "Tags", arvore)
+    assert secao.header.accessibleName() == "Tags"
+    assert secao.header.focusPolicy() == Qt.FocusPolicy.StrongFocus
+
+    QTest.keyClick(secao.header, Qt.Key.Key_Space)
+    assert secao.is_collapsed()
+    QTest.keyClick(secao.header, Qt.Key.Key_Return)
+    assert not secao.is_collapsed()
+
+
 def test_recolher_duas_vezes_seguidas_nao_faz_nada(arvore, qapp):
     """`set_collapsed(True)` repetido não pode encolher o teto de altura de
     novo em cima do valor já encolhido."""
@@ -184,6 +198,73 @@ def test_sincronizar_o_rail_nao_dispara_o_sinal(lateral):
     lateral.rail.section_toggled.connect(lambda k, v: recebidos.append((k, v)))
     lateral.set_section_visible("tags", False)
     assert recebidos == []
+
+
+def test_configuracoes_fica_ancorado_no_fim_com_margem(lateral):
+    layout = lateral.layout()
+    margens = layout.contentsMargins()
+
+    assert layout.itemAt(layout.count() - 1).widget() is lateral.rail.settings_btn
+    assert margens.bottom() == 6
+
+
+def test_painel_aberto_usa_espaco_de_secao_oculta(lateral, qapp):
+    lateral.resize(260, 500)
+    lateral.show()
+    qapp.processEvents()
+
+    lateral.set_section_visible("tags", False)
+    qapp.processEvents()
+    qapp.processEvents()
+
+    tamanhos = lateral.splitter.sizes()
+    assert tamanhos[1] == 0
+    assert tamanhos[0] >= lateral.splitter.height() - lateral.splitter.handleWidth() - 2
+    lateral.close()
+
+
+def test_secoes_recolhidas_ficam_compactas_e_sem_folga_no_splitter(lateral, qapp):
+    lateral.resize(260, 500)
+    lateral.show()
+    qapp.processEvents()
+
+    tags = lateral.section_widget("tags")
+    tags.set_collapsed(True)
+    qapp.processEvents()
+    qapp.processEvents()
+
+    tamanhos = lateral.splitter.sizes()
+    assert abs(tamanhos[1] - tags.header.sizeHint().height()) <= 2
+    assert abs(
+        sum(tamanhos) + lateral.splitter.handleWidth() - lateral.splitter.height()
+    ) <= 2
+    lateral.close()
+
+
+def test_secoes_recolhidas_ficam_no_topo_da_lateral(lateral, qapp):
+    lateral.resize(260, 800)
+    lateral.show()
+    qapp.processEvents()
+
+    for secao in lateral.sections.values():
+        secao.set_collapsed(True)
+    qapp.processEvents()
+    qapp.processEvents()
+
+    primeira = lateral.section_widget("pastas")
+    segunda = lateral.section_widget("tags")
+    altura_esperada = (
+        primeira.header.sizeHint().height()
+        + segunda.header.sizeHint().height()
+        + lateral.splitter.handleWidth()
+    )
+    assert abs(lateral.splitter.maximumHeight() - altura_esperada) <= 2
+    assert primeira.geometry().top() < lateral.height() // 2
+    assert segunda.geometry().top() < lateral.height() // 2
+    assert lateral.heading.geometry().top() < lateral.height() // 4
+    assert lateral.quick_actions.geometry().top() < lateral.height() // 3
+    assert lateral.rail.settings_btn.geometry().bottom() >= lateral.height() - 8
+    lateral.close()
 
 
 def test_secao_desconhecida_e_erro_logado_nao_excecao(lateral, caplog):

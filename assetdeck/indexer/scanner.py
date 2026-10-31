@@ -14,9 +14,13 @@ import hashlib
 import logging
 import os
 import sqlite3
+import sys
+import time
 import uuid as uuid_mod
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from functools import partial
 from pathlib import Path
 from typing import Callable
 
@@ -132,13 +136,13 @@ def classify(path: Path) -> str | None:
     return EXT_MAP.get(path.suffix.lower().lstrip("."))
 
 
-def fingerprint(path: Path) -> str:
+def fingerprint(path: Path, size_bytes: int | None = None) -> str:
     """Impressão digital rápida: blake2b de tamanho + primeiro/último 1MB.
 
     Suficiente para relocalização e barata mesmo em .blend de gigabytes.
     O algoritmo fica registrado em files.hash_algo ('blake2b-fp1m').
     """
-    size = path.stat().st_size
+    size = path.stat().st_size if size_bytes is None else size_bytes
     h = hashlib.blake2b(digest_size=20)
     h.update(str(size).encode())
     with path.open("rb") as f:
@@ -161,8 +165,16 @@ WORKERS_PADRAO = 4
 # inteira, cancelar no meio não teria efeito nenhum até o fim.
 _BLOCO = 100
 
+# `stat()` em caminhos SMB/GVFS espera resposta da rede e quase não consome
+# CPU. Sobrepor algumas consultas reduz o tempo ocioso sem abrir conteúdo em
+# paralelo nem multiplicar a carga de leitura do NAS. Medição com 512 arquivos
+# reais no NAS do Rafael: 1 e 2 threads ficaram praticamente empatadas; 4 levou
+# cerca de 18% mais tempo e 8 cerca de 75% mais tempo que 1. Usamos 2 para
+# manter alguma sobreposição sem saturar a conexão/servidor.
+_STAT_WORKERS = 2
 
-def calcular_pesado(path: Path) -> tuple:
+
+def calcular_pesado(path: Path, size_bytes: int | None = None) -> tuple:
     """A parte cara de um arquivo: impressão digital + metadados de imagem.
 
     Módulo de nível de topo e sem estado de propósito — é isto que roda nos
@@ -173,7 +185,7 @@ def calcular_pesado(path: Path) -> tuple:
     IGUALDADE EXATA na detecção de duplicados — qualquer mudança no cálculo
     faria arquivos indexados antes e depois pararem de casar entre si.
     """
-    return fingerprint(path), image_meta(path)
+    return fingerprint(path, size_bytes), image_meta(path)
 
 
 def _preparar_worker() -> None:
@@ -191,15 +203,26 @@ def _preparar_worker() -> None:
     pressa, e não pode deixar a máquina inutilizável enquanto roda.
     """
     try:
+        os.environ["OPENCV_FOR_THREADS_NUM"] = "1"
+        os.environ["OPENCV_NUM_THREADS"] = "1"
         import cv2
 
+        if hasattr(cv2, "ocl"):
+            cv2.ocl.setUseOpenCL(False)
         cv2.setNumThreads(1)
     except Exception:
         log.warning("Não consegui limitar as threads do OpenCV no worker.",
                     exc_info=True)
     try:
-        os.nice(10)
-    except OSError:
+        if sys.platform == "win32":
+            import ctypes
+            # BELOW_NORMAL_PRIORITY_CLASS = 0x00004000
+            ctypes.windll.kernel32.SetPriorityClass(
+                ctypes.windll.kernel32.GetCurrentProcess(), 0x00004000
+            )
+        elif hasattr(os, "nice"):
+            os.nice(10)
+    except Exception:
         log.warning("Não consegui baixar a prioridade do worker.", exc_info=True)
 
 
@@ -212,6 +235,8 @@ _AMBIENTE_1_THREAD = {
     "OPENBLAS_NUM_THREADS": "1",
     "MKL_NUM_THREADS": "1",
     "NUMEXPR_NUM_THREADS": "1",
+    "OPENCV_FOR_THREADS_NUM": "1",
+    "OPENCV_NUM_THREADS": "1",
 }
 
 
@@ -237,23 +262,26 @@ def _abrir_pool(workers: int):
         from concurrent.futures import ProcessPoolExecutor
 
         os.environ.update(_AMBIENTE_1_THREAD)
-        return ProcessPoolExecutor(
+        pool = ProcessPoolExecutor(
             max_workers=workers, mp_context=multiprocessing.get_context("spawn"),
             initializer=_preparar_worker)
+        log.info("Pool de fingerprints iniciado com %d processo(s).", workers)
+        return pool
     except Exception:
         log.warning("Pool de processos indisponível — varrendo em série.",
                     exc_info=True)
         return None
 
 
-def _pre_calcular(pool, paths: list[Path], should_stop=None) -> dict[Path, tuple]:
+def _pre_calcular(pool, paths: list[Path], should_stop=None,
+                 on_progress: Callable[[int, int], None] | None = None,
+                 file_sizes: dict[Path, int] | None = None,
+                 ) -> dict[Path, tuple]:
     """Calcula o bloco em paralelo (ou em série, se não houver pool).
 
-    Consome o `map` PREGUIÇOSAMENTE e olha `should_stop` a cada resultado.
-    Sem isso, fechar o app no meio de uma varredura esperava o bloco inteiro
-    terminar — o `ScanController` reclamava "thread não terminou em 5000ms" e
-    matava a thread na marra. Parar aqui ainda espera as tarefas JÁ em voo
-    (no máximo alguns arquivos por processo), não as 200 do bloco.
+    Consome cada resultado assim que seu worker termina e olha `should_stop`
+    entre resultados. Com tarefas individuais, o progresso não fica preso
+    esperando um arquivo lento anterior na ordem do lote.
     """
     if not paths:
         return {}
@@ -262,31 +290,81 @@ def _pre_calcular(pool, paths: list[Path], should_stop=None) -> dict[Path, tuple
         for p in paths:
             if should_stop and should_stop():
                 break
-            saida[p] = calcular_pesado(p)
+            saida[p] = calcular_pesado(
+                p, file_sizes.get(p) if file_sizes is not None else None)
+            if on_progress:
+                on_progress(len(saida), len(paths))
         return saida
+    saida = {}
     try:
-        saida = {}
-        for path, resultado in zip(paths, pool.map(calcular_pesado, paths, chunksize=4)):
-            saida[path] = resultado
+        futures = {
+            pool.submit(calcular_pesado, path,
+                        file_sizes.get(path) if file_sizes is not None else None): path
+            for path in paths
+        }
+        for future in as_completed(futures):
+            path = futures[future]
+            saida[path] = future.result()
+            if on_progress:
+                on_progress(len(saida), len(paths))
             if should_stop and should_stop():
                 log.info("Pré-cálculo interrompido a pedido (%d de %d do bloco).",
                          len(saida), len(paths))
+                for pendente in futures:
+                    if not pendente.done():
+                        pendente.cancel()
                 break
         return saida
     except Exception:
         # Um pool que morreu no meio não pode levar a varredura junto.
         log.warning("Pool falhou neste bloco — calculando em série.", exc_info=True)
-        return {p: calcular_pesado(p) for p in paths}
+        for path in paths:
+            if path not in saida:
+                saida[path] = calcular_pesado(
+                    path, file_sizes.get(path) if file_sizes is not None else None)
+            if on_progress:
+                on_progress(len(saida), len(paths))
+        return saida
 
 
-def iter_library_files(root: Path):
-    """Percorre a biblioteca pulando ocultos e sidecars do próprio AssetDeck."""
-    for dirpath, dirnames, filenames in os.walk(root):
-        dirnames[:] = [d for d in dirnames if not d.startswith(".")]
-        for name in sorted(filenames):
-            if name.startswith(".") or name.endswith(".assetdeck.json"):
-                continue
-            yield Path(dirpath) / name
+def iter_library_files(root: Path, on_error: Callable[[OSError], None] | None = None):
+    """Percorre em fluxo, sem montar/ordenar uma pasta inteira em memória.
+
+    `os.walk` só entrega os arquivos de uma pasta depois de enumerá-los todos.
+    Em pastas enormes sobre NAS isso pode atrasar o primeiro lote. `scandir`
+    permite entregar cada arquivo conforme o servidor o retorna. Diretórios
+    ocultos e links para diretórios continuam fora da árvore, como em `os.walk`
+    com `followlinks=False`.
+    """
+    pendentes = [Path(root)]
+    while pendentes:
+        pasta = pendentes.pop()
+        try:
+            with os.scandir(pasta) as entradas:
+                for entrada in entradas:
+                    if entrada.name.startswith("."):
+                        continue
+                    try:
+                        if entrada.is_dir(follow_symlinks=False):
+                            pendentes.append(Path(entrada.path))
+                            continue
+                        if entrada.is_symlink() and entrada.is_dir(follow_symlinks=True):
+                            continue
+                    except OSError as exc:
+                        if on_error:
+                            on_error(exc)
+                        else:
+                            log.warning("Não consegui inspecionar %s", entrada.path,
+                                        exc_info=True)
+                        continue
+                    if entrada.name.endswith(".assetdeck.json"):
+                        continue
+                    yield Path(entrada.path)
+        except OSError as exc:
+            if on_error:
+                on_error(exc)
+            else:
+                log.warning("Não consegui listar a pasta %s", pasta, exc_info=True)
 
 
 def _now() -> str:
@@ -323,65 +401,139 @@ def scan_library(
         )
     }
 
-    paths = list(iter_library_files(root))
-    total = len(paths)
-    log.info("Varredura de %s: %d arquivos no disco, %d já no banco.",
-             root, total, len(known))
-
     seen: set[str] = set()
     since_commit = 0
     done = 0
-    pool = _abrir_pool(workers)
+    discovered = 0
+    walk_had_errors = False
+    pool = None
+    pool_attempted = False
+    stat_pool = ThreadPoolExecutor(max_workers=_STAT_WORKERS,
+                                   thread_name_prefix="assetdeck-stat")
+    bloco: list[Path] = []
+    started_at = time.monotonic()
+
+    def on_walk_error(exc: OSError) -> None:
+        nonlocal walk_had_errors
+        walk_had_errors = True
+        stats.errors += 1
+        log.warning("Erro durante a enumeração da biblioteca (%s)", exc,
+                    exc_info=(type(exc), exc, exc.__traceback__))
+
+    def processar_bloco(paths: list[Path]) -> None:
+        nonlocal pool, pool_attempted, since_commit, done
+        if not paths:
+            return
+        if should_stop and should_stop():
+            stats.aborted = True
+            return
+
+        def processar_arquivo(path: Path, *, cached_stat=None, cache=None) -> None:
+            nonlocal since_commit, done
+            if should_stop and should_stop():
+                stats.aborted = True
+                return
+            done += 1
+            try:
+                _process_file(conn, library_id, root, path, known, seen, stats,
+                              cache=cache, cached_stat=cached_stat)
+            except OSError:
+                # Arquivo ilegível não derruba a varredura, mas fica no log.
+                stats.errors += 1
+                log.exception("Erro ao ler %s — pulando.", path)
+
+            since_commit += 1
+            if since_commit >= batch_size:
+                conn.commit()
+                since_commit = 0
+            if progress and done % 10 == 0:
+                # -2 identifica processamento; o total ainda é desconhecido.
+                progress(done, -2, stats)
+            if done % 500 == 0:
+                elapsed = max(time.monotonic() - started_at, 0.001)
+                log.info("Varredura: %d arquivo(s) processados (%.1f/s).",
+                         done, done / elapsed)
+
+        candidatos: list[Path] = []
+        candidato_stats: dict[Path, os.stat_result] = {}
+        # Arquivos conhecidos e intocados são resolvidos logo após um único
+        # stat. Além de cortar uma ida de metadados ao NAS, não ficam esperando
+        # o hash de outros arquivos do mesmo bloco terminar.
+        avaliar = partial(_avaliar_calculo, root, known=known)
+        for path, (precisa, st) in zip(paths, stat_pool.map(avaliar, paths)):
+            if precisa:
+                candidatos.append(path)
+                candidato_stats[path] = st
+            else:
+                processar_arquivo(path, cached_stat=st)
+                if stats.aborted:
+                    return
+
+        # Reindexações sem arquivos novos/alterados não precisam iniciar os
+        # processos filhos, que têm custo de inicialização perceptível.
+        if candidatos and not pool_attempted:
+            pool = _abrir_pool(workers)
+            pool_attempted = True
+        if candidatos:
+            if progress:
+                # -3 inicia a fase; -4 atualiza done/total do pré-cálculo.
+                progress(len(candidatos), -3, stats)
+            inicio_calculo = time.monotonic()
+            log.info("Varredura: calculando fingerprints/metadados de %d arquivo(s).",
+                     len(candidatos))
+
+            def atualizar_calculo(done: int, _total: int) -> None:
+                if progress:
+                    progress(done, -4, stats)
+
+            cache = _pre_calcular(pool, candidatos, should_stop=should_stop,
+                                  on_progress=atualizar_calculo,
+                                  file_sizes={path: st.st_size
+                                              for path, st in candidato_stats.items()})
+            log.info("Varredura: lote de cálculo concluído em %.1fs (%d arquivo(s)).",
+                     time.monotonic() - inicio_calculo, len(cache))
+        else:
+            cache = {}
+        for path in candidatos:
+            processar_arquivo(path, cache=cache,
+                              cached_stat=candidato_stats.get(path))
+            if stats.aborted:
+                log.warning("Varredura interrompida a pedido (%d arquivos processados).", done)
+                break
+
     try:
-      for inicio in range(0, total, _BLOCO):
-          if should_stop and should_stop():
-              stats.aborted = True
-              log.warning("Varredura interrompida a pedido (%d/%d processados).",
-                          done, total)
-              break
-
-          bloco = paths[inicio:inicio + _BLOCO]
-          # Pré-calcula em paralelo SÓ o que vai precisar. Arquivo já indexado
-          # e intocado não paga nada — é o caso da maioria numa reindexação.
-          cache = _pre_calcular(
-              pool, [p for p in bloco if _precisa_calcular(root, p, known)],
-              should_stop=should_stop)
-
-          for path in bloco:
-              # Checagem POR ARQUIVO, não só por bloco: com só a do bloco, o
-              # "Parar" levava até 200 arquivos pra surtir efeito — e numa
-              # biblioteca menor que um bloco não surtia efeito nenhum (foi o
-              # que o teste de parada pegou).
-              if should_stop and should_stop():
-                  stats.aborted = True
-                  log.warning("Varredura interrompida a pedido (%d/%d processados).",
-                              done, total)
-                  break
-              done += 1
-              try:
-                  _process_file(conn, library_id, root, path, known, seen, stats,
-                                cache=cache)
-              except OSError:
-                  # Arquivo ilegível não derruba a varredura, mas fica no log.
-                  stats.errors += 1
-                  log.exception("Erro ao ler %s — pulando.", path)
-
-              since_commit += 1
-              if since_commit >= batch_size:
-                  conn.commit()
-                  since_commit = 0
-              if progress:
-                  progress(done, total, stats)
-
-          if stats.aborted:
-              break
+        for path in iter_library_files(root, on_error=on_walk_error):
+            if should_stop and should_stop():
+                stats.aborted = True
+                break
+            discovered += 1
+            bloco.append(path)
+            # Também atualiza a tela durante uma enumeração longa. O total
+            # ainda é desconhecido até a árvore terminar de ser percorrida.
+            if progress and discovered % 100 == 0:
+                progress(discovered, -1, stats)
+            if discovered % 500 == 0:
+                elapsed = max(time.monotonic() - started_at, 0.001)
+                log.info("Varredura: %d arquivo(s) descobertos (%.1f/s).",
+                         discovered, discovered / elapsed)
+            if len(bloco) >= _BLOCO:
+                processar_bloco(bloco)
+                bloco = []
+                if stats.aborted:
+                    break
+        if not stats.aborted:
+            processar_bloco(bloco)
     finally:
         if pool is not None:
             # `cancel_futures` descarta o que ainda não começou — sem isso,
             # fechar no meio da varredura esperava a fila inteira.
             pool.shutdown(wait=True, cancel_futures=True)
+        stat_pool.shutdown(wait=True, cancel_futures=True)
 
-    if not stats.aborted:
+    log.info("Varredura de %s: %d arquivos encontrados, %d já no banco.",
+             root, discovered, len(known))
+
+    if not stats.aborted and not walk_had_errors:
         # Quem está no banco mas não no disco: marca sumido (nunca apaga)
         for rel_path, row in known.items():
             if rel_path not in seen and row["missing_since"] is None:
@@ -391,8 +543,13 @@ def scan_library(
                 )
                 stats.missing += 1
                 log.warning("Arquivo sumido da biblioteca: %s", rel_path)
+    elif walk_had_errors:
+        log.warning("Itens sumidos não foram atualizados: a enumeração teve erros.")
 
     conn.commit()
+    if progress:
+        # Sinal final: agora o total é conhecido e a barra pode fechar em 100%.
+        progress(done, discovered, stats)
     # Índice de busca sempre em dia (barato: milissegundos nessa escala)
     from assetdeck.db.repos.assets import rebuild_fts
 
@@ -415,7 +572,16 @@ def _pesado(path: Path, cache: dict | None) -> tuple:
     return calcular_pesado(path)
 
 
-def _precisa_calcular(root: Path, path: Path, known: dict) -> bool:
+def _precisa_backfill_imagem(path: Path, row) -> bool:
+    from assetdeck.thumbs.raster import RASTER_EXTS
+
+    if path.suffix.lower().lstrip(".") not in RASTER_EXTS:
+        return False
+    return (row["width"] is None or row["phash"] is None
+            or row["dominant_color"] is None)
+
+
+def _avaliar_calculo(root: Path, path: Path, known: dict):
     """Este arquivo vai exigir hash/metadados nesta passada?
 
     Decide ANTES de mandar pro pool: arquivo já indexado, do mesmo tamanho,
@@ -424,23 +590,29 @@ def _precisa_calcular(root: Path, path: Path, known: dict) -> bool:
     paralelização justamente onde ela não é necessária.
     """
     if classify(path) is None:
-        return False
+        return False, None
     try:
         rel = path.relative_to(root).as_posix()
         st = path.stat()
     except OSError:
-        return False   # ilegível: o laço serial trata e loga
+        return False, None   # ilegível: o laço serial trata e loga
     row = known.get(rel)
     if row is None:
-        return True                                   # novo
+        return True, st                                # novo
     if row["size_bytes"] != st.st_size or row["mtime_ns"] != st.st_mtime_ns:
-        return True                                   # mudou
-    return (row["width"] is None or row["phash"] is None
-            or row["dominant_color"] is None)         # backfill
+        return True, st                                # mudou
+    precisa = _precisa_backfill_imagem(path, row)
+    return precisa, st
+
+
+def _precisa_calcular(root: Path, path: Path, known: dict) -> bool:
+    """Versão booleana mantida para chamadores e testes existentes."""
+    precisa, _st = _avaliar_calculo(root, path, known)
+    return precisa
 
 
 def _process_file(conn, library_id, root, path, known, seen, stats,
-                  cache: dict | None = None) -> None:
+                  cache: dict | None = None, cached_stat=None) -> None:
     asset_type = classify(path)
     if asset_type is None:
         ext = path.suffix.lower().lstrip(".") or "(sem extensão)"
@@ -450,7 +622,7 @@ def _process_file(conn, library_id, root, path, known, seen, stats,
 
     rel_path = path.relative_to(root).as_posix()
     seen.add(rel_path)
-    st = path.stat()
+    st = cached_stat if cached_stat is not None else path.stat()
 
     row = known.get(rel_path)
     if row is None:
@@ -525,7 +697,7 @@ def _process_file(conn, library_id, root, path, known, seen, stats,
         return
 
     if row["size_bytes"] == st.st_size and row["mtime_ns"] == st.st_mtime_ns:
-        if row["width"] is None or row["phash"] is None or row["dominant_color"] is None:
+        if _precisa_backfill_imagem(path, row):
             # Backfill: linhas antigas (pré-Fatia 9 / pré-Fatia 20 / pré-Fatia
             # 39) ainda sem dimensões e/ou sem phash e/ou sem cor média
             _fp, (w, h, alpha, depth, phash, dominant_color) = _pesado(path, cache)

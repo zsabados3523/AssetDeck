@@ -13,3 +13,21 @@ cache/
 
 # Cache do pytest
 .pytest_cache/
+
+# PyInstaller build e dist
+build/
+dist/
+
+# Docs internas e arquivos de agentes (ficam so no PC do dono)
+CLAUDE.md
+AGENTS.md
+HISTORICO.md
+PROJECT.md
+REDESIGN.md
+REDESIGN-V2.md
+SCHEMA.md
+TODO.md
+.claude/
+.agents/
+.codex/
+graphify-out/

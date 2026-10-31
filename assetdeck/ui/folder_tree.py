@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import sqlite3
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtWidgets import QTreeWidget, QTreeWidgetItem, QTreeWidgetItemIterator
 
 log = logging.getLogger(__name__)
@@ -47,7 +47,10 @@ class FolderTree(QTreeWidget):
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
+        self.setObjectName("folderTree")
         self.setHeaderHidden(True)
+        self.setIconSize(QSize(16, 16))
+        self.setUniformRowHeights(True)
         self.currentItemChanged.connect(self._on_current)
         # Só RECEBE arrasto; a árvore nunca inicia um (arrastar pasta pra
         # pasta é outra história, e bem mais arriscada).

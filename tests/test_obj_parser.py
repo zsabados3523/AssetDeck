@@ -63,7 +63,7 @@ f 1//1 2//1 3//1
     assert all(n == (0.0, 0.0, -1.0) for n in mesh.normals)
 
 
-def test_vt_e_ignorado_sem_quebrar(tmp_path):
+def test_vt_e_lido(tmp_path):
     caminho = _escrever(tmp_path, "vt.obj", """
 v 0 0 0
 v 1 0 0
@@ -75,6 +75,48 @@ f 1/1 2/2 3/3
 """)
     mesh = parse_obj(caminho)
     assert len(mesh.positions) == 3
+    assert mesh.uvs == [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0)]
+
+
+def test_mtl_cor_textura_e_troca_de_material(tmp_path):
+    (tmp_path / "cor.png").write_bytes(b"arquivo referenciado")
+    (tmp_path / "materiais.mtl").write_text(
+        "newmtl Azul\nKd 0.1 0.2 0.8\nmap_Kd cor.png\n"
+        "newmtl Vermelho\nKd 0.9 0.1 0.1\n")
+    caminho = _escrever(tmp_path, "duas_faces.obj", """
+mtllib materiais.mtl
+v 0 0 0
+v 1 0 0
+v 0 1 0
+v 1 1 0
+vt 0 0
+vt 1 0
+vt 0 1
+vt 1 1
+usemtl Azul
+f 1/1 2/2 3/3
+usemtl Vermelho
+f 2/2 4/4 3/3
+""")
+    mesh = parse_obj(caminho)
+    assert [(r.start, r.count) for r in mesh.materials] == [(0, 3), (3, 3)]
+    assert mesh.materials[0].color == pytest.approx((0.1, 0.2, 0.8))
+    assert mesh.materials[0].texture == tmp_path / "cor.png"
+    assert mesh.materials[1].color == pytest.approx((0.9, 0.1, 0.1))
+
+
+def test_textura_realocada_para_pasta_irma_do_modelo(tmp_path):
+    (tmp_path / "modelos" / "maps").mkdir(parents=True)
+    imagem = tmp_path / "modelos" / "maps" / "cor.png"
+    imagem.write_bytes(b"referencia")
+    modelo = tmp_path / "modelos" / "cubo"
+    modelo.mkdir(parents=True)
+    (modelo / "cubo.mtl").write_text(
+        f"newmtl Cor\nmap_Kd {modelo / 'maps' / 'cor.png'}\n")
+    caminho = _escrever(modelo, "cubo.obj", "mtllib cubo.mtl\n"
+                        "v 0 0 0\nv 1 0 0\nv 0 1 0\n"
+                        "usemtl Cor\nf 1 2 3\n")
+    assert parse_obj(caminho).materials[0].texture == imagem
 
 
 def test_comentarios_e_linhas_vazias_sao_ignorados(tmp_path):
