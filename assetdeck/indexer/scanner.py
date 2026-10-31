@@ -14,6 +14,7 @@ import hashlib
 import logging
 import os
 import sqlite3
+import sys
 import time
 import uuid as uuid_mod
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -206,14 +207,22 @@ def _preparar_worker() -> None:
         os.environ["OPENCV_NUM_THREADS"] = "1"
         import cv2
 
+        if hasattr(cv2, "ocl"):
+            cv2.ocl.setUseOpenCL(False)
         cv2.setNumThreads(1)
     except Exception:
         log.warning("Não consegui limitar as threads do OpenCV no worker.",
                     exc_info=True)
     try:
-        if hasattr(os, "nice"):
+        if sys.platform == "win32":
+            import ctypes
+            # BELOW_NORMAL_PRIORITY_CLASS = 0x00004000
+            ctypes.windll.kernel32.SetPriorityClass(
+                ctypes.windll.kernel32.GetCurrentProcess(), 0x00004000
+            )
+        elif hasattr(os, "nice"):
             os.nice(10)
-    except OSError:
+    except Exception:
         log.warning("Não consegui baixar a prioridade do worker.", exc_info=True)
 
 
