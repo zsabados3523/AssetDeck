@@ -1,38 +1,39 @@
-name: Proposta de Funcionalidade (Feature Request)
-description: Sugira uma nova ideia, funcionalidade ou melhoria para o AssetDeck.
+name: Feature Request / Proposta de Funcionalidade
+description: Suggest a new idea, feature, or improvement / Sugira uma nova ideia, funcionalidade ou melhoria para o AssetDeck.
 title: "[Feature]: "
 labels: ["enhancement"]
 body:
   - type: markdown
     attributes:
       value: |
-        Obrigado por ajudar a aprimorar o AssetDeck! Lembre-se de que o aplicativo é voltado para gerenciamento local de assets 2D/3D, 100% offline, com foco em estabilidade e integração fluida com o Blender.
+        Thank you for helping improve AssetDeck! Keep in mind that AssetDeck is designed for local 2D/3D asset management, 100% offline, focused on stability and seamless Blender integration.
+        *Obrigado por ajudar a aprimorar o AssetDeck! Lembre-se de que o aplicativo é voltado para gerenciamento local de assets 2D/3D, 100% offline, com foco em estabilidade e integração fluida com o Blender.*
   - type: textarea
     id: problem
     attributes:
-      label: A proposta está associada a algum problema ou limitação existente?
-      description: Uma explicação objetiva da dificuldade ou limitação que motivou a ideia.
-      placeholder: 'ex.: "Atualmente é trabalhoso identificar..."'
+      label: Is this proposal related to an existing problem or limitation? / A proposta está associada a algum problema ou limitação existente?
+      description: A clear explanation of the difficulty or workflow bottleneck that motivated this idea / Explicação objetiva da dificuldade que motivou a ideia.
+      placeholder: 'e.g. "Currently it is difficult to identify..." / ex.: "Atualmente é trabalhoso identificar..."'
     validations:
       required: true
   - type: textarea
     id: solution
     attributes:
-      label: Descrição da funcionalidade desejada
-      description: Explique como a funcionalidade deveria se comportar e como você imagina sua utilização na interface.
+      label: Proposed Solution / Descrição da funcionalidade desejada
+      description: Explain how the feature should behave and how you envision interacting with it in the UI / Explique como a funcionalidade deveria se comportar na interface.
     validations:
       required: true
   - type: textarea
     id: alternatives
     attributes:
-      label: Alternativas ou soluções de contorno que você considerou
-      description: Você considerou alguma abordagem alternativa ou conhece algum outro software com fluxo semelhante?
+      label: Alternatives Considered / Alternativas ou soluções de contorno que você considerou
+      description: Have you considered any alternative approaches or seen similar workflows in other software? / Considerou alguma abordagem alternativa ou conhece outro software semelhante?
     validations:
       required: false
   - type: textarea
     id: context
     attributes:
-      label: Contexto adicional ou referências
-      description: Capturas de tela, mockups conceituais ou detalhes sobre formatos/fluxos no Blender.
+      label: Additional Context or References / Contexto adicional ou referências
+      description: Screenshots, UI mockups, or details about Blender asset workflows / Capturas de tela, mockups ou detalhes sobre fluxos no Blender.
     validations:
       required: false

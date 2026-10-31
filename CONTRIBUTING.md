@@ -1,70 +1,74 @@
-# Contribuindo com o AssetDeck
+# Contributing to AssetDeck
 
-Obrigado pelo interesse em contribuir com o AssetDeck! Este documento resume como configurar o ambiente, executar o projeto, rodar os testes e as diretrizes a seguir ao enviar um Pull Request.
+English | [Português (Brasil)](CONTRIBUTING.pt-BR.md)
 
-## Código de Conduta e Segurança
+Thank you for your interest in contributing to AssetDeck! This document outlines how to set up your development environment, run the project, execute tests, and follow project guidelines when submitting a Pull Request.
 
-- Ao participar deste projeto, você concorda em seguir o nosso [Código de Conduta](CODE_OF_CONDUCT.md).
-- Para relatar vulnerabilidades ou falhas de segurança de forma privada e responsável, consulte a nossa [Política de Segurança](SECURITY.md).
+## Code of Conduct and Security
 
-## Como reportar bugs
+- By participating in this project, you agree to abide by our [Code of Conduct](CODE_OF_CONDUCT.md).
+- To report security vulnerabilities privately and responsibly, please refer to our [Security Policy](SECURITY.md).
 
-Se você encontrou um erro no AssetDeck:
+## How to Report Bugs
 
-1. Verifique se o problema já não foi relatado nas [Issues do repositório](https://github.com/zsabados3523/AssetDeck/issues).
-2. Abra um novo relato usando o formulário de [Bug Report](.github/ISSUE_TEMPLATE/bug.yml).
-3. Informe seu sistema operacional, forma de execução (executável pré-compilado ou código-fonte) e passos para reprodução.
-4. Anexe trechos relevantes dos logs (`assetdeck.log` ou `quedas.txt`). No aplicativo, você pode abrir a pasta de logs diretamente pelo menu **Configurações → Manutenção → Abrir pasta de logs** ou **Ajuda → Abrir pasta de logs** (localizada em `~/.local/share/assetdeck/logs` no Linux, `%LOCALAPPDATA%\assetdeck\logs` no Windows e `~/Library/Application Support/assetdeck/logs` no macOS).
+If you find a bug in AssetDeck:
 
-## Como propor funcionalidades
+1. Check whether the problem has already been reported in the [repository Issues](https://github.com/zsabados3523/AssetDeck/issues).
+2. Open a new report using the [Bug Report](.github/ISSUE_TEMPLATE/bug.yml) form.
+3. Specify your operating system, execution mode (pre-compiled binary or from source), and detailed reproduction steps.
+4. Attach relevant log excerpts (`assetdeck.log` or `quedas.txt`). In the application, you can open the logs directory directly from **Settings → Maintenance → Open logs folder** or **Help → Open logs folder** (located at `~/.local/share/assetdeck/logs` on Linux, `%LOCALAPPDATA%\assetdeck\logs` on Windows, and `~/Library/Application Support/assetdeck/logs` on macOS).
 
-Novas ideias e melhorias são muito bem-vindas:
+## How to Propose Features
 
-1. Para discussões conceituais ou dúvidas de design, considere abrir um tópico nas [Discussões da Comunidade](https://github.com/zsabados3523/AssetDeck/discussions).
-2. Para propostas formais, abra uma issue utilizando o formulário de [Feature Request](.github/ISSUE_TEMPLATE/feature.yml).
-3. Descreva a motivação prática no seu fluxo de trabalho 3D/artístico e detalhe como imagina o comportamento esperado no app.
+New ideas and improvements are warmly welcomed:
 
-## Áreas onde ajuda é bem-vinda
+1. For conceptual discussions or design questions, consider starting a thread in [Community Discussions](https://github.com/zsabados3523/AssetDeck/discussions).
+2. For formal feature proposals, submit an issue using the [Feature Request](.github/ISSUE_TEMPLATE/feature.yml) form.
+3. Describe the practical motivation in your 3D/artistic workflow and detail the expected behavior in the app.
 
-Se você deseja colaborar com código ou testes, destacamos algumas áreas prioritárias:
+## Areas Where Help is Welcome
 
-- **Testes em Windows e macOS reais:** verificação de atalhos, renderização de fontes, caminhos de arquivo e estabilidade da interface gráfica em diferentes versões dos sistemas operacionais.
-- **Traduções e localização (i18n):** expansão e refinamento do suporte a outros idiomas na interface.
-- **Empacotamento e distribuição:** geração de instaladores, suporte a assinaturas digitais de binários para Windows (SmartScreen) e macOS (Gatekeeper / notarização com Apple ID).
-- **Documentação:** guias de uso, tutoriais de integração com o Blender e documentação de arquitetura.
+If you would like to collaborate on code or testing, here are some priority areas:
 
-## Como rodar o projeto
+- **Testing on real Windows and macOS systems:** Verifying shortcuts, font rendering, file paths, and GUI stability across various operating system versions.
+- **Translations and UI localization (i18n):** Today, the UI is hardcoded in Portuguese (pt-BR) with no internationalization framework implemented yet; contributions to enable i18n (gettext / Qt Linguist) and translate the app into English and other languages are welcomed.
+- **Packaging and distribution:** Creating installers, digital code signing and notarization for Windows (SmartScreen) and macOS (Gatekeeper / Apple Developer ID), and Linux packages (AppImage / Flatpak).
+- **Documentation and tutorials:** Usage guides, Blender integration tutorials, and technical architecture documentation.
+- **New asset formats:** Loaders and importers for additional 3D model formats, materials, textures, or vector files.
+- **Bug fixing and improvements:** Check open issues tagged with [`good first issue`](https://github.com/zsabados3523/AssetDeck/labels/good%20first%20issue) and [`help wanted`](https://github.com/zsabados3523/AssetDeck/labels/help%20wanted).
 
-1. **Clone o repositório e crie um ambiente virtual com Python 3.12:**
+## Running the Project
+
+1. **Clone the repository and set up a virtual environment with Python 3.12:**
    ```bash
    python3 -m venv .venv
-   source .venv/bin/activate  # No Windows: .venv\Scripts\activate
+   source .venv/bin/activate  # On Windows: .venv\Scripts\activate
    ```
 
-2. **Instale as dependências:**
+2. **Install dependencies:**
    ```bash
    pip install -r requirements.txt
    ```
 
-3. **Execute o aplicativo:**
+3. **Launch the application:**
    ```bash
    python -m assetdeck
    ```
 
-## Como testar
+## Running Tests
 
-Antes de abrir um Pull Request, execute a suíte de testes em modo headless (sem abrir janelas gráficas):
+Before submitting a Pull Request, run the automated test suite in headless mode (without opening GUI windows):
 
 ```bash
 QT_QPA_PLATFORM=offscreen pytest -q
 ```
 
-Todos os testes devem passar.
+All tests must pass.
 
-## Diretrizes e regras de desenvolvimento
+## Development Guidelines and Rules
 
-- **Uma mudança por PR:** mantenha Pull Requests pequenos, atômicos e focados em um único objetivo.
-- **Biblioteca somente-leitura:** a biblioteca de arquivos do usuário é estritamente somente-leitura. O app nunca move, renomeia ou apaga arquivos do usuário por conta própria. As únicas duas exceções permitidas no app são o renomeador em lote (`batch_rename`) e a ação explícita de mover assets (`mover`), que sempre exigem confirmação do usuário e operam com segurança.
-- **Nenhum `except` silencioso:** trate exceções com contexto e registre-as no log (`log.warning`, `log.error` ou `log.exception`). Nunca use `except: pass` sem tratamento ou logging adequado.
-- **Nenhum `setStyleSheet` fora de `assetdeck/ui/theme.py`:** cores, raios, espaçamentos e fontes devem ser declarados como tokens em `theme.py` e usados via `$nome` em `theme.qss`.
-- **Não enfraqueça testes:** se um teste falhar, conserte o código e a implementação, nunca relaxe ou desative as asserções de um teste para que ele passe.
+- **One change per PR:** Keep Pull Requests small, atomic, and focused on a single objective.
+- **Read-only library:** The user's asset library is strictly read-only. The app never moves, renames, or deletes files on its own. The only two permitted disk-modifying operations are batch rename (`batch_rename`) and moving assets (`mover`), which always require explicit user confirmation and operate safely.
+- **No silent exceptions:** Handle exceptions with context and record them in the log (`log.warning`, `log.error`, or `log.exception`). Never use bare `except: pass` without proper handling or logging.
+- **No `setStyleSheet` outside `assetdeck/ui/theme.py`:** Colors, radii, spacing, and fonts must be declared as tokens in `theme.py` and referenced via `$name` in `theme.qss`.
+- **Do not weaken tests:** If a test fails, fix the code and implementation; never relax or disable test assertions to make a test pass.

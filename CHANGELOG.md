@@ -1,31 +1,33 @@
 # Changelog
 
-Todas as alterações notáveis neste projeto serão documentadas neste arquivo.
+English | [Português (Brasil)](CHANGELOG.pt-BR.md)
 
-O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/),
-e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
 ## [0.1.0] - 2026-10-31
 
-### Adicionado
-- Gerenciador de assets 2D e 3D local para Linux, Windows e macOS (texturas, HDRIs, modelos 3D, materiais PBR, LUTs, perfis de luz IES e vetores).
-- Filosofia 100% offline: sem telemetria, sem contas de usuário e sem dependência de serviços externos ou nuvem.
-- Biblioteca de arquivos estritamente somente-leitura por padrão, garantindo que o acervo original não seja modificado sem autorização explícita.
-- Indexação e varredura de diretórios em segundo plano acionada sob demanda pelo usuário.
-- Agrupamento automático de texturas de conjuntos de materiais PBR (`_basecolor`, `_normal`, `_roughness`, etc.) em um único card na grade.
-- Geração e cache de miniaturas de alta qualidade, incluindo suporte a tonemap para imagens de alto alcance dinâmico (`.hdr` e `.exr`).
-- Detecção de duplicatas por hash perceptual de conteúdo visual (identifica imagens semelhantes mesmo com redimensionamento ou mudança de formato).
-- Sistema de organização com tags hierárquicas (com suporte a cores e apelidos), coleções manuais, coleções inteligentes por regras de filtro, favoritos e avaliação por estrelas.
-- Armazenamento de metadados em banco de dados SQLite local, com rotina de backup automático e espelho `.json` sidecar ao lado de cada asset para recuperação de dados.
-- Busca avançada por texto com operadores booleanos (`E`, `OU`, `NÃO`) e filtragem combinada por tipo de asset, extensão de arquivo, avaliação, resolução e cor dominante.
-- Visualizador interativo integrado de HDRIs (projeção esférica 360° e esfera de reflexo espelhada) e modelos 3D (`.blend`, `.fbx`, `.obj`) com órbita de câmera e enquadramento.
-- Associação automática de arquivos de capa a modelos 3D por correspondência de nome (`Cadeira.blend` + `Cadeira.jpg`) e suporte a variações numeradas.
-- Ferramenta de renomeação em lote de arquivos com regras de substituição de texto e pré-visualização das alterações em disco.
-- Funcionalidade de movimentação de assets arrastando cards da grade para pastas da árvore, movendo dependências (texturas e sidecars) com diálogo de confirmação.
-- Ponte local com o Blender via socket TCP em `127.0.0.1` com autenticação por token seguro:
-  - Add-on do Blender para inserção direta de HDRIs no World, materiais PBR com node groups configurados e modelos por Append/Link.
-  - Renderização headless de capas e miniaturas diretamente através do executável do Blender.
-- Suporte a múltiplos diretórios raiz de biblioteca com seletor rápido no topo da janela.
-- Interface gráfica construída em PySide6/Qt com suporte nativo a modo claro e modo escuro.
+### Added
+- Local 2D and 3D digital asset manager for Linux, Windows, and macOS (textures, HDRIs, 3D models, PBR materials, LUTs, IES light profiles, and vectors).
+- 100% offline philosophy: no telemetry, no user accounts, and no dependencies on external services or cloud infrastructure.
+- File library strictly read-only by default, ensuring original assets are never altered without explicit authorization.
+- On-demand background directory scanning and indexing triggered by the user.
+- Automatic grouping of PBR material texture maps (`_basecolor`, `_normal`, `_roughness`, etc.) into a single grid card.
+- High-quality thumbnail generation and caching, including tonemapping for high-dynamic-range images (`.hdr` and `.exr`).
+- Visual duplicate detection using perceptual hashing (identifies similar images across resizes or format conversions).
+- Organization system with hierarchical tags (custom colors and aliases), manual collections, filter-based smart collections, favorites, and star ratings.
+- Metadata storage in local SQLite database with automatic backup routine and `.json` sidecar mirror alongside each asset for disaster recovery.
+- Advanced search with boolean operators (`AND`, `OR`, `NOT`) and combined filters for asset type, file extension, rating, resolution, and dominant color.
+- Integrated interactive 3D viewers for HDRIs (360° spherical projection and mirror reflection sphere) and 3D models (`.blend`, `.fbx`, `.obj`) with orbit camera and automatic framing.
+- Automatic association of cover/preview images with 3D models via name matching (`Chair.blend` + `Chair.jpg`) and numbered variant support.
+- Batch file rename utility with text replacement rules and live on-disk conflict preview.
+- Asset relocation feature by dragging cards into folder tree items, moving dependencies (textures and sidecars) with a safety confirmation dialog.
+- Local Blender bridge over TCP socket on `127.0.0.1` with secure token authentication:
+  - Blender add-on for direct insertion of HDRIs into World, PBR materials with pre-configured node groups, and model linking/appending.
+  - Headless model thumbnail and cover rendering executed through the Blender binary.
+- Multi-library support with quick switching between library roots in the top toolbar.
+- Desktop graphical user interface built with PySide6/Qt featuring native light and dark modes.
