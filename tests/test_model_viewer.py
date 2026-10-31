@@ -53,3 +53,39 @@ def test_fov_da_camera_bate_com_o_da_matriz_de_projecao():
     cam = OrbitCamera()
     cam.enquadrar(centro=(0.0, 0.0, 0.0), raio=1.0, tan_meio_fov=model_viewer.TAN_MEIO_FOV)
     assert cam.distancia == pytest.approx((1.0 / model_viewer.TAN_MEIO_FOV) * 1.3)
+
+
+# ---- carregamento multiplataforma de OpenGL nativo ----
+
+def test_gl_nativo_carrega_no_ambiente_atual():
+    """No ambiente em execução, a biblioteca nativa e glDrawElements devem estar disponíveis."""
+    assert model_viewer._gl_native is not None
+    assert callable(model_viewer._gl_draw_elements)
+
+
+def test_candidatos_gl_por_plataforma():
+    """Valida que cada SO procura as bibliotecas nativas corretas."""
+    candidatos_win = model_viewer._candidatos_gl_por_plataforma("win32")
+    assert "opengl32" in candidatos_win
+
+    candidatos_mac = model_viewer._candidatos_gl_por_plataforma("darwin")
+    assert any("OpenGL" in c for c in candidatos_mac)
+
+    candidatos_linux = model_viewer._candidatos_gl_por_plataforma("linux")
+    assert "libGL.so.1" in candidatos_linux
+
+
+def test_carregar_gl_nativo_com_falha_loga_e_retorna_none(monkeypatch, caplog):
+    """Quando o carregamento falha, deve logar o erro com contexto e não lançar exceção."""
+    import ctypes
+
+    def _falha_cdll(_nome):
+        raise OSError("Falha simulada de carregamento")
+
+    monkeypatch.setattr(ctypes, "CDLL", _falha_cdll)
+    with caplog.at_level("DEBUG"):
+        lib, func = model_viewer._carregar_gl_nativo()
+    assert lib is None
+    assert func is None
+    assert any("Falha simulada de carregamento" in record.message for record in caplog.records)
+
