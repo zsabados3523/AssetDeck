@@ -382,6 +382,11 @@ def scan_library(
 ) -> ScanStats:
     """Uma passada completa de indexação. Retorna estatísticas do que fez."""
     stats = ScanStats()
+    if not root or not str(root).strip() or str(root).strip() == "." or Path(root) == Path(""):
+        raise RuntimeError(
+            "A raiz da biblioteca não foi configurada ou é inválida. "
+            "Confira library_root no config.json."
+        )
     root = root.resolve()
     if not root.is_dir():
         raise RuntimeError(

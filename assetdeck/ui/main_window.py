@@ -109,15 +109,21 @@ class MainWindow(QMainWindow):
                  db_path: Path, thumbs_dir: Path) -> None:
         super().__init__()
         self._conn = conn  # conexão da thread da UI: SÓ leitura
-        self._library_root = Path(library_root)
+        raw_root = str(library_root or "").strip()
+        self._has_library = bool(raw_root and raw_root != ".")
+        self._library_root = Path(raw_root) if self._has_library else None
         self._library_display_name = (
-            self._library_root.name or str(self._library_root)
+            self._library_root.name if self._has_library and self._library_root.name
+            else (str(self._library_root) if self._has_library else "Sem biblioteca")
         )
         # Biblioteca ATIVA (Fatia 69) — resolvida uma vez, usada pra
         # restringir grade/árvore de pastas/contagens a ela. Sem isso, um
         # banco com mais de uma biblioteca indexada (ex.: sobra de um
         # teste anterior nunca limpa) mistura os assets das duas.
-        self._library_id = libraries_repo.get_or_create(conn, self._library_root)
+        if self._has_library:
+            self._library_id = libraries_repo.get_or_create(conn, self._library_root)
+        else:
+            self._library_id = None
         self._thumbs_dir = thumbs_dir
         self._db_path = db_path
         self._scan = ScanController(db_path, self._library_root, parent=self)
@@ -223,7 +229,7 @@ class MainWindow(QMainWindow):
         self.rescan_btn.clicked.connect(self.start_scan)
 
         # --- pastas + grid + detalhes ---
-        self.model = AssetGridModel(conn, self._library_root, self._pipeline,
+        self.model = AssetGridModel(conn, self._library_root or Path(""), self._pipeline,
                                     library_id=self._library_id, parent=self)
         self.grid = AssetGridView()
         self.grid.setModel(self.model)
@@ -274,7 +280,7 @@ class MainWindow(QMainWindow):
             ("colecoes", "Coleções", "nav-colecoes", self.collections),
             ("smart", "Smart Collections", "nav-smart", self.smart_collections),
         ], library_name=self._library_display_name,
-           library_path=str(self._library_root))
+           library_path=str(self._library_root) if self._library_root else "")
         left = self.sidebar
         self._left_default_sizes = [300, 150, 150, 140]
         self.sidebar.splitter.setSizes(self._left_default_sizes)
@@ -286,7 +292,7 @@ class MainWindow(QMainWindow):
 
         # DetailsPanel é o próprio card (objectName="card" nele mesmo) — não
         # precisa de embrulho extra, então o min/max width fica nele direto.
-        self.details = DetailsPanel(self._library_root)
+        self.details = DetailsPanel(self._library_root or Path(""))
         self.details.setMinimumWidth(224)
         self.details.setMaximumWidth(280)
         # SEM sombra (Fatia 76) — o Rafael viu "a sombra do painel de detalhes
@@ -341,7 +347,8 @@ class MainWindow(QMainWindow):
         self.list_count.setObjectName("listCount")
         self.page_title = QLabel(self._library_display_name)
         self.page_title.setObjectName("pageTitle")
-        self.page_title.setToolTip(str(self._library_root))
+        if self._library_root:
+            self.page_title.setToolTip(str(self._library_root))
 
         self._update_breadcrumb("")
 
@@ -455,6 +462,8 @@ class MainWindow(QMainWindow):
         grid_layout.addWidget(category_row_widget)
         grid_layout.addWidget(grid_header_widget)
         grid_layout.addWidget(self._breadcrumb_divider(horizontal=True))
+        self.empty_state_widget = self._build_empty_library_widget()
+        grid_layout.addWidget(self.empty_state_widget)
         grid_layout.addWidget(self.grid)
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -563,6 +572,7 @@ class MainWindow(QMainWindow):
         # Precisa vir DEPOIS de `_reload_all()`: restaurar filtro/tag/pasta
         # exige pastas e tags já carregadas na árvore (Fatia 54).
         self._restore_ui_state()
+        self._update_library_state_view()
 
     # ---- filtros e contagem ----
 
@@ -605,6 +615,8 @@ class MainWindow(QMainWindow):
     def _category_counts(self) -> dict:
         """Contagem por categoria respeitando os filtros ativos (menos o de
         categoria) — é o número que cada botão da barra exibe."""
+        if not self._has_library or self._library_id is None:
+            return {}
         return assets_repo.count_by_category(
             self._conn, CATEGORIES, library_id=self._library_id,
             **self._current_filters_dict())
@@ -970,6 +982,74 @@ class MainWindow(QMainWindow):
         modo = "Escuro" if config.load_config().get("theme_mode") == "escuro" else "Claro"
         self.brand_context.setText(f"{modo}   ")
 
+    def _build_empty_library_widget(self) -> QWidget:
+        w = QWidget()
+        w.setObjectName("emptyLibraryState")
+        layout = QVBoxLayout(w)
+        layout.setContentsMargins(40, 60, 40, 60)
+        layout.setSpacing(16)
+        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        card = QFrame()
+        card.setObjectName("card")
+        card_layout = QVBoxLayout(card)
+        card_layout.setContentsMargins(36, 32, 36, 32)
+        card_layout.setSpacing(14)
+        card_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        titulo = QLabel("Nenhuma biblioteca selecionada")
+        titulo.setObjectName("title")
+        titulo.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        desc = QLabel(
+            "Escolha uma pasta no seu computador para indexar e gerenciar seus "
+            "modelos 3D, materiais e texturas."
+        )
+        desc.setObjectName("dialogDescription")
+        desc.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        desc.setWordWrap(True)
+        desc.setMaximumWidth(460)
+
+        self.btn_escolher_biblioteca = QPushButton("Escolher pasta da biblioteca…")
+        self.btn_escolher_biblioteca.setObjectName("primary")
+        self.btn_escolher_biblioteca.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_escolher_biblioteca.setIcon(icons.icon("nav-pastas", theme.current_colors()["on_accent"], 16))
+        self.btn_escolher_biblioteca.clicked.connect(self._escolher_pasta_biblioteca)
+
+        card_layout.addWidget(titulo)
+        card_layout.addWidget(desc)
+        card_layout.addSpacing(6)
+        card_layout.addWidget(self.btn_escolher_biblioteca, 0, Qt.AlignmentFlag.AlignCenter)
+
+        layout.addStretch(1)
+        layout.addWidget(card, 0, Qt.AlignmentFlag.AlignCenter)
+        layout.addStretch(1)
+        return w
+
+    def _escolher_pasta_biblioteca(self) -> None:
+        from PySide6.QtWidgets import QFileDialog
+
+        escolhido = QFileDialog.getExistingDirectory(
+            self, "Onde está a biblioteca?", str(Path.home())
+        )
+        if not escolhido:
+            return
+        self._on_switch_library(escolhido)
+
+    def _update_library_state_view(self) -> None:
+        if self._has_library:
+            self.empty_state_widget.hide()
+            self.grid.show()
+            self.rescan_btn.setEnabled(True)
+        else:
+            self.empty_state_widget.show()
+            self.grid.hide()
+            self.rescan_btn.setEnabled(False)
+            self.list_scope.setText("Nenhuma pasta selecionada")
+            self.list_count.setText("0 assets")
+            self.footer_count.setText("0 assets")
+            self.footer_size.setText("0 B")
+
     def _on_switch_library(self, root_path: str) -> None:
         """Biblioteca escolhida no `LibrarySwitcher` (Fatia 70) — trocar de
         verdade exige reabrir o app: `library_root`/`library_id` são
@@ -983,15 +1063,28 @@ class MainWindow(QMainWindow):
 
         from assetdeck import config
 
-        nome = Path(root_path).name
+        nome = Path(root_path).name or root_path
+        if self._has_library:
+            titulo = "Trocar de biblioteca"
+            msg = (
+                f'Trocar a biblioteca ativa para "{nome}"?\n\n{root_path}\n\n'
+                "O AssetDeck precisa fechar e abrir de novo pra aplicar — a "
+                "próxima abertura reindexa essa pasta (pode demorar se ela "
+                "for grande)."
+            )
+            padrao = QMessageBox.StandardButton.No
+        else:
+            titulo = "Definir biblioteca"
+            msg = (
+                f'Definir a pasta da biblioteca como "{nome}"?\n\n{root_path}\n\n'
+                "O AssetDeck precisa reiniciar para indexar os arquivos desta pasta."
+            )
+            padrao = QMessageBox.StandardButton.Yes
+
         escolha = QMessageBox.question(
-            self, "Trocar de biblioteca",
-            f'Trocar a biblioteca ativa para "{nome}"?\n\n{root_path}\n\n'
-            "O AssetDeck precisa fechar e abrir de novo pra aplicar — a "
-            "próxima abertura reindexa essa pasta (pode demorar se ela "
-            "for grande).",
+            self, titulo, msg,
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No,
+            padrao,
         )
         if escolha != QMessageBox.StandardButton.Yes:
             return
@@ -1242,7 +1335,7 @@ class MainWindow(QMainWindow):
             QMessageBox.StandardButton.Cancel,   # padrão é NÃO mexer
         )
         if escolha != QMessageBox.StandardButton.Yes:
-            log.info("Mover assets cancelado pelo Rafael.")
+            log.info("Mover assets cancelado pelo usuário.")
             return
 
         movidos, falhas = mover.executar(self._conn, self._library_id,
@@ -1550,6 +1643,11 @@ class MainWindow(QMainWindow):
         barra.setValue(min(posicao, barra.maximum()))
 
     def refresh_count(self) -> int:
+        if not self._has_library or self._library_id is None:
+            self.footer_count.setText("0 assets")
+            self.list_count.setText("0 assets")
+            self.footer_size.setText("0 B")
+            return 0
         total = assets_repo.count_active(self._conn, library_id=self._library_id)
         shown = self.model.rowCount()
         texto = f"{total} assets" if shown == total else f"{shown} de {total} assets"
@@ -1911,7 +2009,7 @@ class MainWindow(QMainWindow):
         # botão sempre existe (página própria), criar `self._render`
         # incondicionalmente é obrigatório, não só desejável.
         self._render = RenderController(
-            self._db_path, self._library_root, config.previews_dir(), parent=self
+            self._db_path, self._library_root or Path(""), config.previews_dir(), parent=self
         )
 
         cfg = config.load_config()
@@ -1922,7 +2020,7 @@ class MainWindow(QMainWindow):
 
         token = config.ensure_bridge_token(cfg)
         porta = int(cfg.get("bridge_port", 45017))
-        self._bridge = BridgeServer(self._conn, self._library_root, token,
+        self._bridge = BridgeServer(self._conn, self._library_root or Path(""), token,
                                     thumbs_dir=self._thumbs_dir, parent=self)
         if self._bridge.start(porta):
             self._set_bridge_status("atencao", f"Blender: ouvindo :{self._bridge.port}")
@@ -2327,6 +2425,9 @@ class MainWindow(QMainWindow):
     # ---- varredura ----
 
     def start_scan(self) -> None:
+        if not self._has_library:
+            self.statusBar().showMessage("Nenhuma biblioteca configurada para indexar.")
+            return
         if self._scan.running:
             return
         self._pipeline.set_scan_active(True)

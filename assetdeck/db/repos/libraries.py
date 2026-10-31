@@ -11,7 +11,9 @@ log = logging.getLogger(__name__)
 
 def get_or_create(conn: sqlite3.Connection, root_path: Path, name: str | None = None) -> int:
     """Devolve o id da library desta raiz, criando a linha se for a primeira vez."""
-    root = str(root_path)
+    root = str(root_path).strip() if root_path else ""
+    if not root or root == ".":
+        raise ValueError("root_path não pode ser vazio ou '.'")
     row = conn.execute(
         "SELECT id FROM libraries WHERE root_path = ? AND deleted_at IS NULL", (root,)
     ).fetchone()
