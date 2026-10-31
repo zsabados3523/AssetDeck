@@ -1,0 +1,106 @@
+name: Relato de Erro (Bug Report)
+description: Relate um problema ou comportamento inesperado no AssetDeck.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Obrigado por dedicar seu tempo para relatar um erro! Por favor, forneça as informações abaixo para nos ajudar a identificar e corrigir o problema.
+  - type: dropdown
+    id: os
+    attributes:
+      label: Sistema Operacional
+      description: Em qual sistema operacional o problema ocorreu?
+      options:
+        - Linux (Ubuntu, Zorin OS, Fedora, Debian, Arch, etc.)
+        - Windows (Windows 10, Windows 11)
+        - macOS (Apple Silicon ou Intel)
+        - Outro
+    validations:
+      required: true
+  - type: input
+    id: os-details
+    attributes:
+      label: Versão detalhada do Sistema Operacional
+      description: "Ex.: Zorin OS 17.2, Ubuntu 24.04 LTS, Windows 11 Pro 23H2, macOS 14.5"
+      placeholder: "ex.: Linux Mint 21.3"
+    validations:
+      required: false
+  - type: dropdown
+    id: origin
+    attributes:
+      label: Origem / Como você executa o AssetDeck?
+      description: Você está usando o binário executável pré-compilado das Releases ou rodando a partir do código-fonte?
+      options:
+        - Executável pré-compilado (GitHub Releases)
+        - Código-fonte clonado do Git (Python 3.12 + venv)
+        - Outro
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Versão do AssetDeck ou commit
+      description: "Ex.: 0.1.0 ou hash do commit git"
+      placeholder: "ex.: 0.1.0"
+    validations:
+      required: false
+  - type: textarea
+    id: description
+    attributes:
+      label: Descrição do problema
+      description: Uma explicação clara e objetiva do que aconteceu de errado.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Passos para reproduzir o comportamento
+      description: Passo a passo detalhado para que outra pessoa consiga reproduzir o erro.
+      placeholder: |
+        1. Abra o AssetDeck com a biblioteca X
+        2. Selecione o asset Y
+        3. Clique em '...'
+        4. Ocorreu o erro Z
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Comportamento esperado
+      description: O que você esperava que acontecesse normalmente.
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Comportamento obtido
+      description: O que realmente aconteceu (mensagem de erro exibida, encerramento inesperado, travamento, etc.).
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Conteúdo dos Logs (`assetdeck.log` ou `quedas.txt`)
+      description: |
+        Cole aqui as linhas finais de `assetdeck.log` ou o conteúdo de `quedas.txt`.
+        Você pode abrir a pasta de logs diretamente pelo app em:
+        **Configurações → Manutenção → Abrir pasta de logs** (ou pelo menu **Ajuda → Abrir pasta de logs**).
+
+        Caminhos de arquivo no sistema:
+        - **Linux:** `~/.local/share/assetdeck/logs/` (ou `$XDG_DATA_HOME/assetdeck/logs/`)
+        - **Windows:** `%LOCALAPPDATA%\assetdeck\logs\` (ou `%USERPROFILE%\.local\share\assetdeck\logs\`)
+        - **macOS:** `~/Library/Application Support/assetdeck/logs/` (ou `~/.local/share/assetdeck/logs/`)
+      render: text
+    validations:
+      required: false
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Verificações adicionais
+      options:
+        - label: Confirmo que removi eventuais dados confidenciais ou sensíveis dos logs colados.
+          required: false
+        - label: Pesquisei nas issues abertas e fechadas do repositório para evitar duplicatas.
+          required: false

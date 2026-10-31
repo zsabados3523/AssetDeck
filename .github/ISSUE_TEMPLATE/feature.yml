@@ -1,0 +1,38 @@
+name: Proposta de Funcionalidade (Feature Request)
+description: Sugira uma nova ideia, funcionalidade ou melhoria para o AssetDeck.
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Obrigado por ajudar a aprimorar o AssetDeck! Lembre-se de que o aplicativo é voltado para gerenciamento local de assets 2D/3D, 100% offline, com foco em estabilidade e integração fluida com o Blender.
+  - type: textarea
+    id: problem
+    attributes:
+      label: A proposta está associada a algum problema ou limitação existente?
+      description: Uma explicação objetiva da dificuldade ou limitação que motivou a ideia.
+      placeholder: 'ex.: "Atualmente é trabalhoso identificar..."'
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Descrição da funcionalidade desejada
+      description: Explique como a funcionalidade deveria se comportar e como você imagina sua utilização na interface.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternativas ou soluções de contorno que você considerou
+      description: Você considerou alguma abordagem alternativa ou conhece algum outro software com fluxo semelhante?
+    validations:
+      required: false
+  - type: textarea
+    id: context
+    attributes:
+      label: Contexto adicional ou referências
+      description: Capturas de tela, mockups conceituais ou detalhes sobre formatos/fluxos no Blender.
+    validations:
+      required: false
