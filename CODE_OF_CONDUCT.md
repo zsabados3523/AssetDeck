@@ -1,41 +1,43 @@
-# Código de Conduta da Comunidade — AssetDeck
+# Community Code of Conduct — AssetDeck
 
-## Nosso Compromisso
+English | [Português (Brasil)](CODE_OF_CONDUCT.pt-BR.md)
 
-Como mantenedores, colaboradores e membros da comunidade do AssetDeck, nos comprometemos a fazer da participação em nosso projeto uma experiência livre de assédio e acolhedora para todas as pessoas, independentemente de idade, tamanho corporal, deficiência visível ou invisível, etnia, características sexuais, identidade ou expressão de gênero, nível de experiência, educação, status socioeconômico, nacionalidade, aparência pessoal, raça, religião ou identidade e orientação sexual.
+## Our Pledge
 
-Nos comprometemos a agir e interagir de maneiras que contribuam para uma comunidade aberta, acolhedora, diversificada, inclusiva e saudável.
+As maintainers, contributors, and community members of AssetDeck, we pledge to make participation in our project a harassment-free and welcoming experience for everyone, regardless of age, body size, visible or invisible disability, ethnicity, sex characteristics, gender identity and expression, level of experience, education, socio-economic status, nationality, personal appearance, race, religion, or sexual identity and orientation.
 
-## Nossos Padrões
+We pledge to act and interact in ways that contribute to an open, welcoming, diverse, inclusive, and healthy community.
 
-Exemplos de comportamentos que contribuem para um ambiente positivo:
+## Our Standards
 
-* Demonstrar empatia e gentileza com outras pessoas;
-* Respeitar pontos de vista, opiniões e experiências divergentes;
-* Dar e aceitar críticas construtivas com maturidade;
-* Assumir responsabilidades e pedir desculpas caso erros sejam cometidos, aprendendo com a experiência;
-* Focar no que é melhor não apenas para indivíduos, mas para toda a comunidade.
+Examples of behavior that contributes to a positive environment:
 
-Exemplos de comportamentos inaceitáveis:
+* Demonstrating empathy and kindness toward other people;
+* Being respectful of differing viewpoints, opinions, and experiences;
+* Giving and gracefully accepting constructive criticism;
+* Accepting responsibility and apologizing to those affected by our mistakes, and learning from the experience;
+* Focusing on what is best not just for us as individuals, but for the overall community.
 
-* Uso de linguagem ou imagens sexualizadas, bem como investidas sexuais de qualquer natureza;
-* Provocações maliciosas (*trolling*), comentários depreciativos ou ofensivos e ataques pessoais ou políticos;
-* Assédio público ou privado de qualquer espécie;
-* Publicação de informações privadas de terceiros (como endereços físicos ou eletrônicos) sem permissão explícita;
-* Outras condutas que possam ser razoavelmente consideradas inadequadas em um ambiente profissional e colaborativo.
+Examples of unacceptable behavior:
 
-## Responsabilidades de Moderação
+* The use of sexualized language or imagery, and sexual attention or advances of any kind;
+* Trolling, insulting or derogatory comments, and personal or political attacks;
+* Public or private harassment;
+* Publishing others' private information (such as a physical or email address) without their explicit permission;
+* Other conduct which could reasonably be considered inappropriate in a professional and collaborative setting.
 
-Os mantenedores do projeto são responsáveis por esclarecer e aplicar nossos padrões de conduta aceitável, e tomarão medidas corretivas justas e apropriadas em resposta a qualquer comportamento que considerem inadequado, ameaçador, ofensivo ou prejudicial.
+## Enforcement Responsibilities
 
-Os mantenedores têm o direito e a responsabilidade de remover, editar ou rejeitar comentários, commits, pull requests, issues e outras contribuições que não estejam alinhadas a este Código de Conduta.
+Project maintainers are responsible for clarifying and enforcing our standards of acceptable behavior and will take appropriate and fair corrective action in response to any behavior that they deem inappropriate, threatening, offensive, or harmful.
 
-## Aplicação e Contato
+Project maintainers have the right and responsibility to remove, edit, or reject comments, commits, pull requests, issues, and other contributions that are not aligned to this Code of Conduct.
 
-Instâncias de comportamento abusivo, assédio ou qualquer outra conduta inaceitável podem ser relatadas de forma confidencial abrindo um relatório privado diretamente aos mantenedores por meio do [GitHub Security Advisories](https://github.com/zsabados3523/AssetDeck/security/advisories/new) ou através dos canais privados da organização no GitHub.
+## Scope and Enforcement
 
-Todas as queixas serão avaliadas e investigadas de maneira rápida, justa e com sigilo garantido. Todos os mantenedores são obrigados a respeitar a privacidade e a segurança de quem reporta qualquer incidente.
+Instances of abusive, harassing, or otherwise unacceptable behavior may be reported confidentially directly to project maintainers via [GitHub Security Advisories](https://github.com/zsabados3523/AssetDeck/security/advisories/new) or through private channels on GitHub.
 
-## Atribuição
+All complaints will be reviewed and investigated promptly and fairly, with confidentiality strictly maintained. All maintainers are obligated to respect the privacy and security of the reporter of any incident.
 
-Este Código de Conduta é adaptado do [Contributor Covenant](https://www.contributor-covenant.org), versão 2.1, disponível em [https://www.contributor-covenant.org/version/2/1/code_of_conduct/](https://www.contributor-covenant.org/version/2/1/code_of_conduct/).
+## Attribution
+
+This Code of Conduct is adapted from the [Contributor Covenant](https://www.contributor-covenant.org), version 2.1, available at [https://www.contributor-covenant.org/version/2/1/code_of_conduct/](https://www.contributor-covenant.org/version/2/1/code_of_conduct/).
