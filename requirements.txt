@@ -1,13 +1,13 @@
 # Dependências do AssetDeck — instalar com: .venv/bin/pip install -r requirements.txt
-PySide6==6.11.1
+PySide6==6.12.0
 Pillow==12.3.0
-pytest==9.1.1
+pytest==9.2.0
 # HDR/EXR (Fatia 7): OpenCV lê .hdr; OpenEXR oficial lê .exr.
 # (imageio foi descartado: seu leitor HDR baixa binário em runtime — viola o 100% offline)
 opencv-python-headless==5.0.0.93
-numpy==2.5.1
-OpenEXR==3.4.13
+numpy==2.5.4
+OpenEXR==3.5.2
 # Leitura de .fbx no visualizador 3D (Fase 6) — wheel autocontido, sem
 # pacote de sistema (o binding "oficial" pyassimp quebrou no Python 3.12,
 # ver TODO.md).
-assimp-py==1.1.0
+assimp-py==1.2.0
