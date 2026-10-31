@@ -25,9 +25,12 @@ Desde a Fatia 90 a janela não mora mais aqui: é a `VisualizadorWindow`
 from __future__ import annotations
 
 import ctypes
+import ctypes.util
 import logging
+import sys
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 from PySide6.QtCore import QObject, QRunnable, Qt, QThreadPool, Signal
@@ -56,11 +59,62 @@ _GL_DEPTH_TEST = 0x0B71
 _GL_COLOR_BUFFER_BIT = 0x4000
 _GL_DEPTH_BUFFER_BIT = 0x0100
 
-_gl_native = ctypes.CDLL("libGL.so.1")
-_gl_draw_elements = _gl_native.glDrawElements
-_gl_draw_elements.argtypes = (ctypes.c_uint, ctypes.c_int, ctypes.c_uint,
-                              ctypes.c_void_p)
-_gl_draw_elements.restype = None
+def _candidatos_gl_por_plataforma(plataforma: str) -> list[str]:
+    """Retorna os nomes/caminhos candidatos da biblioteca OpenGL nativa por plataforma."""
+    if plataforma.startswith("win"):
+        return ["opengl32", "opengl32.dll"]
+    if plataforma == "darwin":
+        caminho_mac = (
+            ctypes.util.find_library("OpenGL")
+            or "/System/Library/Frameworks/OpenGL.framework/OpenGL"
+        )
+        return list(dict.fromkeys([caminho_mac, "/System/Library/Frameworks/OpenGL.framework/OpenGL"]))
+    find_gl = ctypes.util.find_library("GL")
+    candidatos = ["libGL.so.1"]
+    if find_gl and find_gl not in candidatos:
+        candidatos.append(find_gl)
+    return candidatos
+
+
+def _carregar_gl_nativo() -> tuple[ctypes.CDLL | None, Any]:
+    """Carrega a biblioteca OpenGL nativa do sistema e prepara `glDrawElements`."""
+    candidatos = _candidatos_gl_por_plataforma(sys.platform)
+    lib: ctypes.CDLL | None = None
+    ultimo_erro: Exception | None = None
+    for nome in candidatos:
+        if not nome:
+            continue
+        try:
+            lib = ctypes.CDLL(nome)
+            break
+        except (OSError, FileNotFoundError) as exc:
+            ultimo_erro = exc
+            log.debug("Candidato de biblioteca OpenGL '%s' falhou: %s", nome, exc)
+
+    if lib is None:
+        log.error(
+            "Não foi possível carregar a biblioteca OpenGL nativa para a plataforma '%s': %s",
+            sys.platform,
+            ultimo_erro,
+        )
+        return None, None
+
+    try:
+        draw_elements = lib.glDrawElements
+        draw_elements.argtypes = (
+            ctypes.c_uint,
+            ctypes.c_int,
+            ctypes.c_uint,
+            ctypes.c_void_p,
+        )
+        draw_elements.restype = None
+        return lib, draw_elements
+    except AttributeError as exc:
+        log.error("Função glDrawElements não encontrada na biblioteca OpenGL carregada: %s", exc)
+        return lib, None
+
+
+_gl_native, _gl_draw_elements = _carregar_gl_nativo()
 
 TAN_MEIO_FOV = 0.6  # ~62° de campo de visão — combina com OrbitCamera.enquadrar
 
@@ -285,8 +339,11 @@ class ModelGLView(QOpenGLWidget):
             if texture is not None:
                 texture.bind(0)
             if self._n_indices:
-                _gl_draw_elements(_GL_TRIANGLES, material.count, _GL_UNSIGNED_INT,
-                                  ctypes.c_void_p(material.start * 4))
+                if _gl_draw_elements is not None:
+                    _gl_draw_elements(_GL_TRIANGLES, material.count, _GL_UNSIGNED_INT,
+                                      ctypes.c_void_p(material.start * 4))
+                else:
+                    log.error("glDrawElements indisponível: biblioteca OpenGL não foi carregada")
             else:
                 self._gl.glDrawArrays(_GL_TRIANGLES, material.start, material.count)
             if texture is not None:
