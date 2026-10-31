@@ -12,7 +12,7 @@ from pathlib import Path
 
 from PySide6.QtCore import Signal
 
-from PySide6.QtCore import QAbstractListModel, QMimeData, QModelIndex, QRect, QSize, Qt
+from PySide6.QtCore import QAbstractListModel, QDir, QMimeData, QModelIndex, QRect, QSize, Qt
 from PySide6.QtGui import QColor, QDrag, QPainter, QPixmap, QPixmapCache
 from PySide6.QtWidgets import QListView
 
@@ -659,7 +659,7 @@ class AssetGridView(QListView):
             return None
         for url in mime.urls():
             if url.isLocalFile():
-                p = url.toLocalFile()
+                p = QDir.toNativeSeparators(url.toLocalFile())
                 if p.rsplit(".", 1)[-1].lower() in RASTER_EXTS:
                     return p
         return None
