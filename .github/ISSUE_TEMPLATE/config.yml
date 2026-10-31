@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Discussões da Comunidade
+    url: https://github.com/zsabados3523/AssetDeck/discussions
+    about: Tire dúvidas, proponha tópicos de discussão ou compartilhe ideias gerais antes de abrir uma issue.
+  - name: Reportar Vulnerabilidade de Segurança
+    url: https://github.com/zsabados3523/AssetDeck/security/advisories/new
+    about: Relate problemas ou potenciais vulnerabilidades de segurança de maneira estritamente confidencial.
