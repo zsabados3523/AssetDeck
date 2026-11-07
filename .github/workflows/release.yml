@@ -120,6 +120,24 @@ jobs:
         run: |
           Compress-Archive -Path dist/assetdeck -DestinationPath AssetDeck-windows.zip
 
+      - name: Build installer (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}".TrimStart("v")
+          if (-not ($version -match '^\d')) { $version = "0.0.0" }
+          choco install innosetup -y --no-progress
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "/DMyAppVersion=$version" packaging/assetdeck.iss
+          Move-Item installer-out/AssetDeck-windows-setup.exe AssetDeck-windows-setup.exe
+
+      - name: Upload installer (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: AssetDeck-windows-setup.exe
+          path: AssetDeck-windows-setup.exe
+          if-no-files-found: error
+
       - name: Package archive (macOS)
         if: runner.os == 'macOS'
         run: |
@@ -154,6 +172,7 @@ jobs:
           files: |
             release-artifacts/AssetDeck-ubuntu.tar.gz
             release-artifacts/AssetDeck-windows.zip
+            release-artifacts/AssetDeck-windows-setup.exe
             release-artifacts/AssetDeck-macos.zip
           generate_release_notes: true
         env:

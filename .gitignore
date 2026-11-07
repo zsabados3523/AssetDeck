@@ -31,4 +31,5 @@ TODO.md
 .agents/
 .codex/
 graphify-out/
+installer-out/
 .coverage
