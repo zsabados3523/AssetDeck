@@ -154,9 +154,9 @@ class MainWindow(QMainWindow):
         # enorme"). Largura fixa em vez de esticar; a dica de sintaxe (E/OU)
         # que cabia no placeholder virou tooltip, já que o campo encolheu.
         self.search_box = QLineEdit()
-        self.search_box.setPlaceholderText("Buscar assets")
+        self.search_box.setPlaceholderText(self.tr("Buscar assets"))
         self.search_box.setToolTip(
-            "Buscar por nome — ex.: concreto, wood 4k, madeira E rústico, pedra OU metal"
+            self.tr("Buscar por nome — ex.: concreto, wood 4k, madeira E rústico, pedra OU metal")
         )
         self.search_box.setMinimumWidth(170)
         self.search_box.setMaximumWidth(320)
@@ -182,16 +182,30 @@ class MainWindow(QMainWindow):
         # removido na Fatia 62 (junto com a nota em si — só favorito ficou).
         self.res_filter = FilterButton(
             "resolution",
-            [("Resolução: todas", None), ("≥ 1K", 1024), ("≥ 2K", 2048),
+            [(self.tr("Resolução: todas"), None), ("≥ 1K", 1024), ("≥ 2K", 2048),
              ("≥ 4K", 4096), ("≥ 8K", 8192)],
-            caption="Resolução",
+            caption=self.tr("Resolução"),
         )
         self.res_filter.changed.connect(self._apply_filters)
 
         # Busca por cor dominante (Fatia 39) — cor média do arquivo
         # principal, comparada contra uma paleta fixa de botões.
+        cores_opcoes = [
+            (self.tr("Cor: todas"), None),
+            (self.tr("Vermelho"), "#c0392b"),
+            (self.tr("Laranja"), "#e67e22"),
+            (self.tr("Amarelo"), "#f1c40f"),
+            (self.tr("Verde"), "#43a047"),
+            (self.tr("Azul"), "#2980b9"),
+            (self.tr("Roxo"), "#8e44ad"),
+            (self.tr("Rosa"), "#e84393"),
+            (self.tr("Marrom"), "#7f5539"),
+            (self.tr("Cinza"), "#7f8c8d"),
+            (self.tr("Branco"), "#f5f5f5"),
+            (self.tr("Preto"), "#1a1a1a"),
+        ]
         self.color_filter = FilterButton(
-            "palette", PALETA_CORES, swatch=True, caption="Cor"
+            "palette", cores_opcoes, swatch=True, caption=self.tr("Cor")
         )
         self.color_filter.changed.connect(self._apply_filters)
 
@@ -202,16 +216,16 @@ class MainWindow(QMainWindow):
         self.sort_filter = FilterButton(
             "sort",
             [
-                ("Nome (A→Z)", ("name", "asc")),
-                ("Nome (Z→A)", ("name", "desc")),
-                ("Modificado (mais recente)", ("modified", "desc")),
-                ("Modificado (mais antigo)", ("modified", "asc")),
-                ("Tamanho (maior)", ("size", "desc")),
-                ("Tamanho (menor)", ("size", "asc")),
-                ("Resolução (maior)", ("resolution", "desc")),
-                ("Resolução (menor)", ("resolution", "asc")),
+                (self.tr("Nome (A→Z)"), ("name", "asc")),
+                (self.tr("Nome (Z→A)"), ("name", "desc")),
+                (self.tr("Modificado (mais recente)"), ("modified", "desc")),
+                (self.tr("Modificado (mais antigo)"), ("modified", "asc")),
+                (self.tr("Tamanho (maior)"), ("size", "desc")),
+                (self.tr("Tamanho (menor)"), ("size", "asc")),
+                (self.tr("Resolução (maior)"), ("resolution", "desc")),
+                (self.tr("Resolução (menor)"), ("resolution", "asc")),
             ],
-            caption="Ordenar",
+            caption=self.tr("Ordenar"),
         )
         self.sort_filter.changed.connect(self._apply_filters)
 
@@ -223,7 +237,7 @@ class MainWindow(QMainWindow):
         self.progress = QProgressBar()
         self.progress.setVisible(False)
         self.progress.setMaximumWidth(140)
-        self.rescan_btn = QPushButton("Reindexar")
+        self.rescan_btn = QPushButton(self.tr("Reindexar"))
         self.rescan_btn.setObjectName("primary")
         self.rescan_btn.setIcon(icons.icon("refresh", theme.current_colors()["on_accent"]))
         self.rescan_btn.clicked.connect(self.start_scan)
@@ -275,10 +289,10 @@ class MainWindow(QMainWindow):
         # Navegação e filtros laterais ficam numa coluna contínua ao lado da
         # grade; as quatro seções continuam recolhíveis e redimensionáveis.
         self.sidebar = Sidebar([
-            ("pastas", "Pastas", "nav-pastas", self.folders),
-            ("tags", "Tags", "nav-tags", self.tags),
-            ("colecoes", "Coleções", "nav-colecoes", self.collections),
-            ("smart", "Smart Collections", "nav-smart", self.smart_collections),
+            ("pastas", self.tr("Pastas"), "nav-pastas", self.folders),
+            ("tags", self.tr("Tags"), "nav-tags", self.tags),
+            ("colecoes", self.tr("Coleções"), "nav-colecoes", self.collections),
+            ("smart", self.tr("Smart Collections"), "nav-smart", self.smart_collections),
         ], library_name=self._library_display_name,
            library_path=str(self._library_root) if self._library_root else "")
         left = self.sidebar
@@ -318,7 +332,7 @@ class MainWindow(QMainWindow):
 
         self.favorite_nav = QToolButton()
         self.favorite_nav.setObjectName("sidebarNavItem")
-        self.favorite_nav.setText("Favoritos")
+        self.favorite_nav.setText(self.tr("Favoritos"))
         self.favorite_nav.setIcon(
             icons.icon("star-outline", theme.current_colors()["text_muted"], 16)
         )
@@ -327,8 +341,8 @@ class MainWindow(QMainWindow):
             Qt.ToolButtonStyle.ToolButtonTextBesideIcon
         )
         self.favorite_nav.setCheckable(True)
-        self.favorite_nav.setToolTip("Mostrar apenas assets favoritos")
-        self.favorite_nav.setAccessibleName("Favoritos")
+        self.favorite_nav.setToolTip(self.tr("Mostrar apenas assets favoritos"))
+        self.favorite_nav.setAccessibleName(self.tr("Favoritos"))
         self.sidebar.add_quick_action(self.favorite_nav)
 
         # Caminho navegável acima da grade (Fatia 28, estilo Connecter): a
@@ -367,19 +381,20 @@ class MainWindow(QMainWindow):
         self.size_slider.setFixedWidth(190)
         self.size_slider.setFixedHeight(34)
         self.size_slider.setToolTip(
-            f"Tamanho das miniaturas: {asset_grid.MIN_ICON}–"
-            f"{asset_grid.MAX_ICON} px. Use as setas para ajustar de 1 em 1."
+            self.tr("Tamanho das miniaturas: %1–%2 px. Use as setas para ajustar de 1 em 1.")
+            .arg(asset_grid.MIN_ICON).arg(asset_grid.MAX_ICON)
         )
-        self.size_slider.setAccessibleName("Tamanho das miniaturas")
+        self.size_slider.setAccessibleName(self.tr("Tamanho das miniaturas"))
         self.size_slider.setAccessibleDescription(
-            f"Ajuste contínuo de {asset_grid.MIN_ICON} a {asset_grid.MAX_ICON} pixels."
+            self.tr("Ajuste contínuo de %1 a %2 pixels.")
+            .arg(asset_grid.MIN_ICON).arg(asset_grid.MAX_ICON)
         )
         self.size_value = QLabel(f"{self.size_slider.value()} px")
         self.size_value.setObjectName("gridSizeValue")
         self.size_value.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.size_value.setFixedSize(58, 30)
         self.size_value.setToolTip(
-            "Tamanho atual das miniaturas. O valor muda de 1 em 1 pixel."
+            self.tr("Tamanho atual das miniaturas. O valor muda de 1 em 1 pixel.")
         )
         self._size_value_effect = QGraphicsOpacityEffect(self.size_value)
         self.size_value.setGraphicsEffect(self._size_value_effect)
@@ -392,11 +407,11 @@ class MainWindow(QMainWindow):
 
         # Voltar / Avançar / Subir (Fatia 32): a árvore lateral era o único
         # jeito de mudar de pasta, sem como desfazer.
-        self.back_btn = self._nav_button("arrow-left", "Voltar (Alt+←)",
+        self.back_btn = self._nav_button("arrow-left", self.tr("Voltar (Alt+←)"),
                                          self._go_back)
-        self.fwd_btn = self._nav_button("arrow-right", "Avançar (Alt+→)",
-                                        self._go_forward)
-        self.up_btn = self._nav_button("arrow-up", "Subir um nível (Alt+↑)",
+        self.fwd_btn = self._nav_button("arrow-right", self.tr("Avançar (Alt+→)"),
+                                         self._go_forward)
+        self.up_btn = self._nav_button("arrow-up", self.tr("Subir um nível (Alt+↑)"),
                                        self._go_up)
 
         # As faixas acompanham a prévia aprovada: título e contagem, busca e
@@ -442,7 +457,7 @@ class MainWindow(QMainWindow):
         grid_header.setSpacing(9)
         grid_header.addWidget(self.list_scope)
         grid_header.addStretch(1)
-        self.grid_size_label = QLabel("Tamanho")
+        self.grid_size_label = QLabel(self.tr("Tamanho"))
         self.grid_size_label.setObjectName("gridSizeLabel")
         grid_header.addWidget(self.grid_size_label)
         grid_header.addWidget(self.size_value)
@@ -663,7 +678,7 @@ class MainWindow(QMainWindow):
         # estou"; este responde "o que esta lista contém", que é diferente
         # assim que um filtro entra.
         self.list_scope.setText(
-            "Toda a biblioteca" if not dir_prefix else "Nesta pasta")
+            self.tr("Toda a biblioteca") if not dir_prefix else self.tr("Nesta pasta"))
 
     def _elide_breadcrumb(self) -> None:
         """A linha divide espaço com 3 botões de navegação, 6 de categoria,
@@ -802,7 +817,7 @@ class MainWindow(QMainWindow):
             tags_repo.assign(self._conn, aid, tag_id)
         nome = tags_repo.tag_path(self._conn, tag_id)
         self._after_tags_changed(
-            asset_ids, f"{len(asset_ids)} asset(s) taggeados com '{nome}' (arrastar)"
+            asset_ids, self.tr("%1 asset(s) taggeados com '%2' (arrastar)").arg(len(asset_ids)).arg(nome)
         )
 
     def _on_tag_toggled(self, asset_id: int, tag_id: int, checked: bool) -> None:
@@ -814,11 +829,13 @@ class MainWindow(QMainWindow):
             else:
                 tags_repo.unassign(self._conn, aid, tag_id)
         nome = tags_repo.tag_path(self._conn, tag_id)
-        sufixo = f" em {len(alvos)} assets" if len(alvos) > 1 else ""
-        self._after_tags_changed(
-            alvos,
-            f"Tag '{nome}' {'adicionada' if checked else 'removida'}{sufixo}",
-        )
+        if len(alvos) > 1:
+            recado = (self.tr("Tag '%1' adicionada em %2 assets").arg(nome).arg(len(alvos))
+                      if checked else self.tr("Tag '%1' removida em %2 assets").arg(nome).arg(len(alvos)))
+        else:
+            recado = (self.tr("Tag '%1' adicionada").arg(nome)
+                      if checked else self.tr("Tag '%1' removida").arg(nome))
+        self._after_tags_changed(alvos, recado)
 
     def _on_starred_changed(self, starred: bool) -> None:
         alvos = self._selected_asset_ids()
@@ -828,10 +845,12 @@ class MainWindow(QMainWindow):
             assets_repo.set_starred(self._conn, aid, starred)
             sidecar_writer.write_for_asset(self._conn, self._library_root, aid)
         self._reload_grid()
-        sufixo = f" em {len(alvos)} assets" if len(alvos) > 1 else ""
-        self.statusBar().showMessage(
-            ("★ Favoritado" if starred else "Favorito removido") + sufixo
-        )
+        if len(alvos) > 1:
+            recado = (self.tr("★ Favoritado em %1 assets").arg(len(alvos))
+                      if starred else self.tr("Favorito removido em %1 assets").arg(len(alvos)))
+        else:
+            recado = self.tr("★ Favoritado") if starred else self.tr("Favorito removido")
+        self.statusBar().showMessage(recado)
         if self.fav_check.isChecked():
             self._apply_filters()
 
@@ -846,7 +865,7 @@ class MainWindow(QMainWindow):
         n = collections_repo.add_items(self._conn, collection_id, asset_ids)
         if self.collections.current_collection_id() == collection_id:
             self._apply_filters()  # a coleção aberta ganhou itens novos
-        self.statusBar().showMessage(f"{n} asset(s) adicionados à coleção (arrastar)")
+        self.statusBar().showMessage(self.tr("%1 asset(s) adicionados à coleção (arrastar)").arg(n))
 
     def _on_collections_structure_changed(self) -> None:
         self.collections.reload(self._conn)
@@ -859,7 +878,7 @@ class MainWindow(QMainWindow):
         for aid in asset_ids:
             collections_repo.remove_item(self._conn, collection_id, aid)
         self._apply_filters()
-        self.statusBar().showMessage(f"{len(asset_ids)} asset(s) removidos da coleção")
+        self.statusBar().showMessage(self.tr("%1 asset(s) removidos da coleção").arg(len(asset_ids)))
 
     # ---- barra de menus (Fatia 36, redistribuída na Fatia 67) ----
 
@@ -979,7 +998,7 @@ class MainWindow(QMainWindow):
     def _update_brand_context(self) -> None:
         from assetdeck import config  # import local, como o resto do arquivo
 
-        modo = "Escuro" if config.load_config().get("theme_mode") == "escuro" else "Claro"
+        modo = self.tr("Escuro") if config.load_config().get("theme_mode") == "escuro" else self.tr("Claro")
         self.brand_context.setText(f"{modo}   ")
 
     def _build_empty_library_widget(self) -> QWidget:
@@ -997,20 +1016,20 @@ class MainWindow(QMainWindow):
         card_layout.setSpacing(14)
         card_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        titulo = QLabel("Nenhuma biblioteca selecionada")
+        titulo = QLabel(self.tr("Nenhuma biblioteca selecionada"))
         titulo.setObjectName("title")
         titulo.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         desc = QLabel(
-            "Escolha uma pasta no seu computador para indexar e gerenciar seus "
-            "modelos 3D, materiais e texturas."
+            self.tr("Escolha uma pasta no seu computador para indexar e gerenciar seus "
+                    "modelos 3D, materiais e texturas.")
         )
         desc.setObjectName("dialogDescription")
         desc.setAlignment(Qt.AlignmentFlag.AlignCenter)
         desc.setWordWrap(True)
         desc.setMaximumWidth(460)
 
-        self.btn_escolher_biblioteca = QPushButton("Escolher pasta da biblioteca…")
+        self.btn_escolher_biblioteca = QPushButton(self.tr("Escolher pasta da biblioteca…"))
         self.btn_escolher_biblioteca.setObjectName("primary")
         self.btn_escolher_biblioteca.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_escolher_biblioteca.setIcon(icons.icon("nav-pastas", theme.current_colors()["on_accent"], 16))
@@ -1030,7 +1049,7 @@ class MainWindow(QMainWindow):
         from PySide6.QtWidgets import QFileDialog
 
         escolhido = QFileDialog.getExistingDirectory(
-            self, "Onde está a biblioteca?", str(Path.home())
+            self, self.tr("Onde está a biblioteca?"), str(Path.home())
         )
         if not escolhido:
             return
@@ -1045,9 +1064,9 @@ class MainWindow(QMainWindow):
             self.empty_state_widget.show()
             self.grid.hide()
             self.rescan_btn.setEnabled(False)
-            self.list_scope.setText("Nenhuma pasta selecionada")
-            self.list_count.setText("0 assets")
-            self.footer_count.setText("0 assets")
+            self.list_scope.setText(self.tr("Nenhuma pasta selecionada"))
+            self.list_count.setText(self.tr("0 assets"))
+            self.footer_count.setText(self.tr("0 assets"))
             self.footer_size.setText("0 B")
 
     def _on_switch_library(self, root_path: str) -> None:
@@ -1065,20 +1084,20 @@ class MainWindow(QMainWindow):
 
         nome = Path(root_path).name or root_path
         if self._has_library:
-            titulo = "Trocar de biblioteca"
-            msg = (
-                f'Trocar a biblioteca ativa para "{nome}"?\n\n{root_path}\n\n'
+            titulo = self.tr("Trocar de biblioteca")
+            msg = self.tr(
+                'Trocar a biblioteca ativa para "%1"?\n\n%2\n\n'
                 "O AssetDeck precisa fechar e abrir de novo pra aplicar — a "
                 "próxima abertura reindexa essa pasta (pode demorar se ela "
                 "for grande)."
-            )
+            ).arg(nome).arg(root_path)
             padrao = QMessageBox.StandardButton.No
         else:
-            titulo = "Definir biblioteca"
-            msg = (
-                f'Definir a pasta da biblioteca como "{nome}"?\n\n{root_path}\n\n'
+            titulo = self.tr("Definir biblioteca")
+            msg = self.tr(
+                'Definir a pasta da biblioteca como "%1"?\n\n%2\n\n'
                 "O AssetDeck precisa reiniciar para indexar os arquivos desta pasta."
-            )
+            ).arg(nome).arg(root_path)
             padrao = QMessageBox.StandardButton.Yes
 
         escolha = QMessageBox.question(
@@ -1136,7 +1155,7 @@ class MainWindow(QMainWindow):
         cfg["theme_mode"] = modo
         config.save_config(cfg)
         self._update_brand_context()  # o canto direito da faixa diz o modo
-        self.statusBar().showMessage(f"Modo {modo} aplicado.")
+        self.statusBar().showMessage(self.tr("Modo %1 aplicado.").arg(modo))
 
     def _toggle_reduce_motion(self, reduzir: bool) -> None:
         from assetdeck import config
@@ -1149,8 +1168,8 @@ class MainWindow(QMainWindow):
         if self._reduce_motion:
             self._size_value_animation.stop()
             self._size_value_effect.setOpacity(1.0)
-        estado = "reduzido" if self._reduce_motion else "normal"
-        self.statusBar().showMessage(f"Movimento {estado} aplicado.")
+        estado = self.tr("reduzido") if self._reduce_motion else self.tr("normal")
+        self.statusBar().showMessage(self.tr("Movimento %1 aplicado.").arg(estado))
 
     def _on_icon_size_changed(self, pixels: int) -> None:
         """Atualiza o valor visível e dá um retorno breve ao ajuste contínuo."""
@@ -1233,31 +1252,31 @@ class MainWindow(QMainWindow):
             acao.setChecked(True)
         self._left_splitter.setSizes(self._left_default_sizes)
         self._main_splitter.setSizes(self._main_default_sizes)
-        self.statusBar().showMessage("Layout restaurado ao padrão")
+        self.statusBar().showMessage(self.tr("Layout restaurado ao padrão"))
 
     # ---- ações do menu Editar que dependem da seleção da grid ----
 
     def _copy_tags_selected(self) -> None:
         ids = self._selected_asset_ids()
         if len(ids) != 1:
-            self.statusBar().showMessage("Selecione exatamente 1 asset para copiar as tags.")
+            self.statusBar().showMessage(self.tr("Selecione exatamente 1 asset para copiar as tags."))
             return
         self._copy_tags(ids[0])
 
     def _paste_tags_selected(self, replace: bool) -> None:
         ids = self._selected_asset_ids()
         if not ids:
-            self.statusBar().showMessage("Selecione ao menos 1 asset antes de colar tags.")
+            self.statusBar().showMessage(self.tr("Selecione ao menos 1 asset antes de colar tags."))
             return
         if not self._tag_clipboard:
-            self.statusBar().showMessage("Nenhuma tag copiada ainda.")
+            self.statusBar().showMessage(self.tr("Nenhuma tag copiada ainda."))
             return
         self._paste_tags(ids, replace=replace)
 
     def _batch_rename_dos_selecionados(self) -> None:
         ids = self._selected_asset_ids()
         if not ids:
-            self.statusBar().showMessage("Selecione ao menos 1 asset para renomear em lote.")
+            self.statusBar().showMessage(self.tr("Selecione ao menos 1 asset para renomear em lote."))
             return
         self._batch_rename_selected(ids)
 
@@ -1269,8 +1288,8 @@ class MainWindow(QMainWindow):
         dlg = PreferencesDialog(self)
         if dlg.exec():
             self.statusBar().showMessage(
-                "Preferências salvas — porta/ativação da ponte com o Blender "
-                "só valem depois de reabrir o AssetDeck"
+                self.tr("Preferências salvas — porta/ativação da ponte com o Blender "
+                        "só valem depois de reabrir o AssetDeck")
             )
 
     def _abrir_pasta_config(self) -> None:
@@ -1305,32 +1324,32 @@ class MainWindow(QMainWindow):
         plano = mover.planejar(self._conn, self._library_id, self._library_root,
                                [int(i) for i in asset_ids], destino)
 
-        onde = destino or "a raiz da biblioteca"
+        onde = destino or self.tr("a raiz da biblioteca")
         if not plano.mover:
             # Nada a fazer: explica POR QUE, item a item. "Não deu" sem
             # motivo é o tipo de mensagem que faz o Rafael abrir o log.
             detalhe = "\n".join(f"• {r.nome}: {r.motivo}" for r in plano.recusar)
             QMessageBox.information(
-                self, "Nada para mover",
-                f"Nenhum dos assets selecionados pode ir para {onde}.\n\n{detalhe}")
+                self, self.tr("Nada para mover"),
+                self.tr("Nenhum dos assets selecionados pode ir para %1.\n\n%2").arg(onde).arg(detalhe))
             return
 
-        linhas = [f"• {m.nome}  ({m.arquivos} arquivo(s))" for m in plano.mover[:12]]
+        linhas = [self.tr("• %1  (%2 arquivo(s))").arg(m.nome).arg(m.arquivos) for m in plano.mover[:12]]
         if len(plano.mover) > 12:
-            linhas.append(f"…e mais {len(plano.mover) - 12}")
+            linhas.append(self.tr("…e mais %1").arg(len(plano.mover) - 12))
         texto = (
-            f"Mover {len(plano.mover)} asset(s) para {onde}?\n\n"
+            self.tr("Mover %1 asset(s) para %2?\n\n").arg(len(plano.mover)).arg(onde)
             + "\n".join(linhas)
-            + f"\n\nTotal: {plano.total_arquivos} arquivos, "
-              f"{human_size(plano.total_bytes)}.\n"
-              "A pasta de cada asset vai inteira — texturas e previews junto."
+            + "\n\n"
+            + self.tr("Total: %1 arquivos, %2.\nA pasta de cada asset vai inteira — texturas e previews junto.")
+              .arg(plano.total_arquivos).arg(human_size(plano.total_bytes))
         )
         if plano.recusar:
-            texto += f"\n\n{len(plano.recusar)} asset(s) ficam onde estão:\n"
+            texto += "\n\n" + self.tr("%1 asset(s) ficam onde estão:").arg(len(plano.recusar)) + "\n"
             texto += "\n".join(f"• {r.nome}: {r.motivo}" for r in plano.recusar[:6])
 
         escolha = QMessageBox.question(
-            self, "Mover assets", texto,
+            self, self.tr("Mover assets"), texto,
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
             QMessageBox.StandardButton.Cancel,   # padrão é NÃO mexer
         )
@@ -1340,17 +1359,11 @@ class MainWindow(QMainWindow):
 
         movidos, falhas = mover.executar(self._conn, self._library_id,
                                          self._library_root, plano)
-        # `warmup=False` (Fatia 89): mover NÃO traz arquivo novo pra
-        # biblioteca — são os mesmos arquivos em outro lugar, e a miniatura é
-        # indexada por `content_hash`, não por caminho, então continua
-        # valendo. Com o padrão `warmup=True` cada arrasto pagava o
-        # pente-fino de ~127 mil itens (medido na Fatia 88: 1,9s de UI
-        # congelada) sem ter o que descobrir. É exatamente o caso que a
-        # docstring de `_reload_all` descreve.
         self._reload_all(warmup=False)
-        recado = f"{movidos} asset(s) movidos para {onde}"
         if falhas:
-            recado += f" — {falhas} falharam (ver log)"
+            recado = self.tr("%1 asset(s) movidos para %2 — %3 falharam (ver log)").arg(movidos).arg(onde).arg(falhas)
+        else:
+            recado = self.tr("%1 asset(s) movidos para %2").arg(movidos).arg(onde)
         self.statusBar().showMessage(recado)
 
     def _relocate_lost_assets(self) -> None:
@@ -1362,9 +1375,9 @@ class MainWindow(QMainWindow):
         candidatos = relocator.find_candidates(self._conn, lib_id)
         if not candidatos:
             QMessageBox.information(
-                self, "Nada para religar",
-                "Nenhum arquivo sumido bate com um arquivo encontrado em outro "
-                "lugar da biblioteca (mesmo conteúdo).",
+                self, self.tr("Nada para religar"),
+                self.tr("Nenhum arquivo sumido bate com um arquivo encontrado em outro "
+                        "lugar da biblioteca (mesmo conteúdo)."),
             )
             return
 
@@ -1381,7 +1394,7 @@ class MainWindow(QMainWindow):
                 religados += 1
 
         self._reload_all()
-        self.statusBar().showMessage(f"{religados} asset(s) religados ao novo caminho")
+        self.statusBar().showMessage(self.tr("%1 asset(s) religados ao novo caminho").arg(religados))
 
     # ---- duplicados por conteúdo visual (Fatia 20) ----
 
@@ -1394,9 +1407,9 @@ class MainWindow(QMainWindow):
         grupos = duplicates_finder.find_duplicate_groups(self._conn, lib_id)
         if not grupos:
             QMessageBox.information(
-                self, "Nada encontrado",
-                "Nenhum grupo de assets com o mesmo conteúdo visual (phash) "
-                "foi encontrado.",
+                self, self.tr("Nada encontrado"),
+                self.tr("Nenhum grupo de assets com o mesmo conteúdo visual (phash) "
+                        "foi encontrado."),
             )
             return
 
@@ -1410,8 +1423,7 @@ class MainWindow(QMainWindow):
 
         self._reload_grid()
         self.statusBar().showMessage(
-            f"{len(ids)} asset(s) duplicado(s) ocultado(s) da grade "
-            "('Mostrar ocultos' traz de volta)"
+            self.tr("%1 asset(s) duplicado(s) ocultado(s) da grade ('Mostrar ocultos' traz de volta)").arg(len(ids))
         )
 
     # ---- purga de previews órfãos (Fatia 104) ----
@@ -1428,24 +1440,25 @@ class MainWindow(QMainWindow):
         plano = previews_cleanup.planejar(self._conn, config.previews_dir())
         if not plano.orfaos:
             QMessageBox.information(
-                self, "Nada para limpar",
-                "Todas as cópias de preview na pasta do app estão em uso por "
-                "algum asset.",
+                self, self.tr("Nada para limpar"),
+                self.tr("Todas as cópias de preview na pasta do app estão em uso por algum asset."),
             )
             return
 
         box = QMessageBox(self)
-        box.setWindowTitle("Previews órfãos")
+        box.setWindowTitle(self.tr("Previews órfãos"))
         box.setIcon(QMessageBox.Icon.Question)
         box.setText(
-            f"{plano.total_orfaos} arquivo(s) de preview não pertencem a "
-            "nenhum asset — sobra de trocas de capa e de \"assinalar por "
-            "nome\" rodado várias vezes.\n\n"
-            f"Apagar libera {human_size(plano.bytes_orfaos)}.\n\n"
-            "Os originais na biblioteca não são tocados. Cada arquivo "
-            "apagado vai pro log."
+            self.tr(
+                "%1 arquivo(s) de preview não pertencem a "
+                "nenhum asset — sobra de trocas de capa e de \"assinalar por "
+                "nome\" rodado várias vezes.\n\n"
+                "Apagar libera %2.\n\n"
+                "Os originais na biblioteca não são tocados. Cada arquivo "
+                "apagado vai pro log."
+            ).arg(plano.total_orfaos).arg(human_size(plano.bytes_orfaos))
         )
-        apagar = box.addButton(f"Apagar {plano.total_orfaos}",
+        apagar = box.addButton(self.tr("Apagar %1").arg(plano.total_orfaos),
                                QMessageBox.ButtonRole.DestructiveRole)
         box.addButton(QMessageBox.StandardButton.Cancel)
         box.setDefaultButton(QMessageBox.StandardButton.Cancel)
@@ -1454,10 +1467,9 @@ class MainWindow(QMainWindow):
             return
 
         apagados, liberados, falhas = previews_cleanup.executar(plano)
-        recado = (f"{apagados} preview(s) órfão(s) apagado(s) · "
-                  f"{human_size(liberados)} liberados")
+        recado = self.tr("%1 preview(s) órfão(s) apagado(s) · %2 liberados").arg(apagados).arg(human_size(liberados))
         if falhas:
-            recado += f" · {falhas} falharam (ver log)"
+            recado += self.tr(" · %1 falharam (ver log)").arg(falhas)
         self.statusBar().showMessage(recado)
 
     # ---- batch rename (Fatia 23) — a única exceção ao somente-leitura ----
@@ -1475,9 +1487,9 @@ class MainWindow(QMainWindow):
             return
         sucesso, falhas = batch_rename.apply_plan(self._conn, self._library_root, plano)
         self._reload_all()
-        recado = f"{sucesso} arquivo(s) renomeado(s)"
+        recado = self.tr("%1 arquivo(s) renomeado(s)").arg(sucesso)
         if falhas:
-            recado += f" · {falhas} falharam (ver log)"
+            recado += self.tr(" · %1 falharam (ver log)").arg(falhas)
         self.statusBar().showMessage(recado)
 
     # ---- coleções inteligentes / buscas salvas (Fatia 18) ----
@@ -1485,20 +1497,20 @@ class MainWindow(QMainWindow):
     def _on_save_smart_collection(self, nome: str) -> None:
         smart_collections_repo.create(self._conn, nome, self._current_filters_dict())
         self.smart_collections.reload(self._conn)
-        self.statusBar().showMessage(f"Coleção inteligente '{nome}' salva")
+        self.statusBar().showMessage(self.tr("Coleção inteligente '%1' salva").arg(nome))
 
     def _on_smart_collection_selected(self, smart_id) -> None:
         if smart_id is None:
             # "(nenhuma aplicada)" — volta os filtros pro padrão (mostra
             # tudo), em vez de deixar o que estava marcado antes parado ali
             self._restore_filters({})
-            self.statusBar().showMessage("Filtros voltaram ao padrão")
+            self.statusBar().showMessage(self.tr("Filtros voltaram ao padrão"))
             return
         registro = smart_collections_repo.get(self._conn, smart_id)
         if registro is None:
             return
         self._restore_filters(registro["query"])
-        self.statusBar().showMessage(f"Coleção inteligente '{registro['name']}' aplicada")
+        self.statusBar().showMessage(self.tr("Coleção inteligente '%1' aplicada").arg(registro['name']))
 
     def _restore_filters(self, query: dict) -> None:
         """Reescreve os widgets de filtro a partir de uma query salva e
@@ -1539,14 +1551,14 @@ class MainWindow(QMainWindow):
     def _quick_tag_dialog(self) -> None:
         ids = self._selected_asset_ids()
         if not ids:
-            self.statusBar().showMessage("Selecione asset(s) antes do Ctrl+T.")
+            self.statusBar().showMessage(self.tr("Selecione asset(s) antes do Ctrl+T."))
             return
         dlg = QuickTagDialog(self._conn, ids, self)
         if dlg.exec():
             mudancas = dlg.apply()
             if mudancas:
                 self._after_tags_changed(
-                    ids, f"Tags atualizadas em {len(ids)} asset(s)"
+                    ids, self.tr("Tags atualizadas em %1 asset(s)").arg(len(ids))
                 )
                 self._refresh_details_tags()
 
@@ -1558,7 +1570,7 @@ class MainWindow(QMainWindow):
     def _on_property_value_changed(self, asset_id: int, property_id: int, value) -> None:
         properties_repo.set_value(self._conn, asset_id, property_id, value)
         sidecar_writer.write_for_asset(self._conn, self._library_root, asset_id)
-        self.statusBar().showMessage("Propriedade salva")
+        self.statusBar().showMessage(self.tr("Propriedade salva"))
 
     def _manage_properties(self) -> None:
         dlg = PropertyDefsDialog(self._conn, self)
@@ -1578,10 +1590,10 @@ class MainWindow(QMainWindow):
 
         if blender_command() is None:
             QMessageBox.warning(
-                self, "Blender não encontrado",
-                "Não achei o Blender nesta máquina. Instale-o (blender.org "
-                "ou 'flatpak install flathub org.blender.Blender') e garanta "
-                "que o comando 'blender' esteja no PATH.",
+                self, self.tr("Blender não encontrado"),
+                self.tr("Não achei o Blender nesta máquina. Instale-o (blender.org "
+                        "ou 'flatpak install flathub org.blender.Blender') e garanta "
+                        "que o comando 'blender' esteja no PATH."),
             )
             return
 
@@ -1595,14 +1607,13 @@ class MainWindow(QMainWindow):
             QApplication.restoreOverrideCursor()
 
         if not resultado.ok:
-            QMessageBox.warning(self, "Checagem falhou", resultado.erro)
+            QMessageBox.warning(self, self.tr("Checagem falhou"), resultado.erro)
             return
         if not resultado.perdidas:
-            recado = "Nenhuma textura faltando."
+            recado = self.tr("Nenhuma textura faltando.")
             if resultado.recuperadas_auto:
-                recado += (f" ({resultado.recuperadas_auto} estavam com caminho "
-                          "quebrado, mas foram religadas automaticamente.)")
-            QMessageBox.information(self, "Texturas em ordem", recado)
+                recado += self.tr(" (%1 estavam com caminho quebrado, mas foram religadas automaticamente.)").arg(resultado.recuperadas_auto)
+            QMessageBox.information(self, self.tr("Texturas em ordem"), recado)
             return
 
         dlg = MissingTexturesDialog(Path(caminho), resultado.perdidas,
@@ -1615,10 +1626,10 @@ class MainWindow(QMainWindow):
         assets_repo.set_notes(self._conn, asset_id, texto)
         dest = sidecar_writer.write_for_asset(self._conn, self._library_root, asset_id)
         if dest is not None:
-            self.statusBar().showMessage(f"Nota salva e espelhada em {dest.name}")
+            self.statusBar().showMessage(self.tr("Nota salva e espelhada em %1").arg(dest.name))
         else:
             self.statusBar().showMessage(
-                "Nota salva no banco; sidecar adiado (arquivo sumido — ver log)"
+                self.tr("Nota salva no banco; sidecar adiado (arquivo sumido — ver log)")
             )
 
     def _reload_grid(self) -> None:
@@ -1644,16 +1655,16 @@ class MainWindow(QMainWindow):
 
     def refresh_count(self) -> int:
         if not self._has_library or self._library_id is None:
-            self.footer_count.setText("0 assets")
-            self.list_count.setText("0 assets")
+            self.footer_count.setText(self.tr("0 assets"))
+            self.list_count.setText(self.tr("0 assets"))
             self.footer_size.setText("0 B")
             return 0
         total = assets_repo.count_active(self._conn, library_id=self._library_id)
         shown = self.model.rowCount()
-        texto = f"{total} assets" if shown == total else f"{shown} de {total} assets"
+        texto = self.tr("%1 assets").arg(total) if shown == total else self.tr("%1 de %2 assets").arg(shown).arg(total)
         selecionados = len(self._selected_asset_ids())
         if selecionados > 1:
-            texto += f" · {selecionados} selecionados"
+            texto += self.tr(" · %1 selecionados").arg(selecionados)
 
         # Sumido some da grade, mas NUNCA em silêncio (Fatia 100). A
         # biblioteca do Rafael mora num disco externo: se ele não montar, a
@@ -1663,7 +1674,7 @@ class MainWindow(QMainWindow):
             sumidos = assets_repo.count_missing(self._conn,
                                                 library_id=self._library_id)
             if sumidos:
-                texto += f" · {sumidos} sumidos"
+                texto += self.tr(" · %1 sumidos").arg(sumidos)
         self.footer_count.setText(texto)
 
         # O mesmo número aparece de propósito no cabeçalho da lista: o rodapé
@@ -1671,7 +1682,7 @@ class MainWindow(QMainWindow):
         # faixa 3 fica logo acima da grade, ao lado dos controles que acabaram
         # de mudar esse número. Aqui é só o que está VISÍVEL — o total e a
         # seleção continuam sendo assunto do rodapé.
-        self.list_count.setText(f"{shown} assets")
+        self.list_count.setText(self.tr("%1 assets").arg(shown))
 
         # O tamanho não muda a cada filtro (é a biblioteca inteira), mas
         # recalcular aqui é barato — um SUM indexado — e garante que ele
@@ -1877,28 +1888,28 @@ class MainWindow(QMainWindow):
         menu = QMenu(self)
 
         # Tags: copiar/colar/substituir (funciona em qualquer visão)
-        menu.addAction("Editar tags…  (Ctrl+T)", self._quick_tag_dialog)
+        menu.addAction(self.tr("Editar tags…  (Ctrl+T)"), self._quick_tag_dialog)
         if len(ids) == 1:
-            menu.addAction("Copiar tags", lambda: self._copy_tags(ids[0]))
+            menu.addAction(self.tr("Copiar tags"), lambda: self._copy_tags(ids[0]))
         if self._tag_clipboard is not None:
             n = len(self._tag_clipboard)
-            menu.addAction(f"Colar tags (adicionar {n})",
+            menu.addAction(self.tr("Colar tags (adicionar %1)").arg(n),
                            lambda: self._paste_tags(ids, replace=False))
-            menu.addAction(f"Substituir tags (colar {n} por cima)",
+            menu.addAction(self.tr("Substituir tags (colar %1 por cima)").arg(n),
                            lambda: self._paste_tags(ids, replace=True))
 
         # Reexibir assets ocultos
         ocultos = [r for r in selecionados if r.get("hidden")]
         if ocultos:
             menu.addAction(
-                f"Reexibir {len(ocultos)} oculto(s)",
+                self.tr("Reexibir %1 oculto(s)").arg(len(ocultos)),
                 lambda: self._unhide([r["id"] for r in ocultos]),
             )
 
         # Coleções: tirar da coleção aberta no momento
         if self.collections.current_collection_id() is not None:
             menu.addAction(
-                f"Remover da coleção atual ({len(ids)})",
+                self.tr("Remover da coleção atual (%1)").arg(len(ids)),
                 lambda: self._remove_from_current_collection(ids),
             )
 
@@ -1917,14 +1928,14 @@ class MainWindow(QMainWindow):
                 menu.addSeparator()
             if sem_capa:
                 n = len(sem_capa)
-                rotulo = f"Gerar capa ({n})…" if n > 1 else "Gerar capa…"
+                rotulo = self.tr("Gerar capa (%1)…").arg(n) if n > 1 else self.tr("Gerar capa…")
                 menu.addAction(
                     rotulo,
                     lambda: self._render_covers([r["id"] for r in sem_capa]),
                 )
             if com_capa:
                 n = len(com_capa)
-                rotulo = f"Regenerar capa ({n})…" if n > 1 else "Regenerar capa…"
+                rotulo = self.tr("Regenerar capa (%1)…").arg(n) if n > 1 else self.tr("Regenerar capa…")
                 menu.addAction(
                     rotulo,
                     lambda: self._render_covers(
@@ -1934,17 +1945,17 @@ class MainWindow(QMainWindow):
 
         # Batch rename (Fatia 23) — a única exceção ao somente-leitura
         menu.addSeparator()
-        menu.addAction("Renomear em lote…", lambda: self._batch_rename_selected(ids))
+        menu.addAction(self.tr("Renomear em lote…"), lambda: self._batch_rename_selected(ids))
 
         # Agrupamento: só na visão agrupada
         if self.group_check.isChecked():
             menu.addSeparator()
             if len(selecionados) >= 2:
-                act = menu.addAction(f"Agrupar {len(selecionados)} assets como um set")
+                act = menu.addAction(self.tr("Agrupar %1 assets como um set").arg(len(selecionados)))
                 act.triggered.connect(lambda: self._group_selected(selecionados))
             atual = selecionados[0]
             if len(selecionados) == 1 and atual["files_count"] > 1:
-                act = menu.addAction(f"Desagrupar ({atual['files_count']} arquivos)")
+                act = menu.addAction(self.tr("Desagrupar (%1 arquivos)").arg(atual['files_count']))
                 act.triggered.connect(lambda: self._ungroup(atual))
         return menu
 
@@ -1952,19 +1963,22 @@ class MainWindow(QMainWindow):
         for aid in asset_ids:
             assets_repo.set_hidden(self._conn, aid, False)
         self._reload_grid()
-        self.statusBar().showMessage(f"{len(asset_ids)} asset(s) reexibidos")
+        self.statusBar().showMessage(self.tr("%1 asset(s) reexibidos").arg(len(asset_ids)))
 
     def _copy_tags(self, asset_id: int) -> None:
         self._tag_clipboard = [t["id"] for t in tags_repo.tags_of(self._conn, asset_id)]
-        self.statusBar().showMessage(f"{len(self._tag_clipboard)} tag(s) copiadas")
+        self.statusBar().showMessage(self.tr("%1 tag(s) copiadas").arg(len(self._tag_clipboard)))
 
     def _paste_tags(self, asset_ids: list[int], replace: bool) -> None:
         if not self._tag_clipboard:
             return
         for aid in asset_ids:
             tags_repo.set_tags(self._conn, aid, self._tag_clipboard, replace=replace)
-        verbo = "substituídas" if replace else "coladas"
-        self._after_tags_changed(asset_ids, f"Tags {verbo} em {len(asset_ids)} asset(s)")
+        if replace:
+            msg = self.tr("Tags substituídas em %1 asset(s)").arg(len(asset_ids))
+        else:
+            msg = self.tr("Tags coladas em %1 asset(s)").arg(len(asset_ids))
+        self._after_tags_changed(asset_ids, msg)
         self._refresh_details_tags()
 
     def _group_selected(self, rows) -> None:
@@ -1973,7 +1987,7 @@ class MainWindow(QMainWindow):
             sidecar_writer.write_for_asset(self._conn, self._library_root, keeper)
             self._reload_all()
             self.statusBar().showMessage(
-                f"{len(rows)} assets agrupados à mão (travado contra reagrupamento)"
+                self.tr("%1 assets agrupados à mão (travado contra reagrupamento)").arg(len(rows))
             )
 
     def _ungroup(self, row) -> None:
@@ -1981,7 +1995,7 @@ class MainWindow(QMainWindow):
         if n:
             self._reload_all()
             self.statusBar().showMessage(
-                f"Set desfeito em {n} assets (travados: o agrupador não refaz)"
+                self.tr("Set desfeito em %1 assets (travados: o agrupador não refaz)").arg(n)
             )
 
     # ---- ponte com o Blender (F2) ----
@@ -2015,7 +2029,7 @@ class MainWindow(QMainWindow):
         cfg = config.load_config()
         self._bridge = None
         if not cfg.get("bridge_enabled", True):
-            self._set_bridge_status("inativo", "Blender: ponte desligada")
+            self._set_bridge_status("inativo", self.tr("Blender: ponte desligada"))
             return
 
         token = config.ensure_bridge_token(cfg)
@@ -2023,18 +2037,18 @@ class MainWindow(QMainWindow):
         self._bridge = BridgeServer(self._conn, self._library_root or Path(""), token,
                                     thumbs_dir=self._thumbs_dir, parent=self)
         if self._bridge.start(porta):
-            self._set_bridge_status("atencao", f"Blender: ouvindo :{self._bridge.port}")
+            self._set_bridge_status("atencao", self.tr("Blender: ouvindo :%1").arg(self._bridge.port))
         else:
-            self._set_bridge_status("erro", "Blender: porta ocupada (ver log)")
+            self._set_bridge_status("erro", self.tr("Blender: porta ocupada (ver log)"))
         # Ouvindo é ÂMBAR, conectado é VERDE: "ouvindo" quer dizer que a ponte
         # subiu mas o Blender ainda não falou com ela — pintar isso de verde
         # faria o rodapé afirmar uma conexão que não existe.
         self._bridge.client_connected.connect(
-            lambda: self._set_bridge_status("ok", "Blender: conectado")
+            lambda: self._set_bridge_status("ok", self.tr("Blender: conectado"))
         )
         self._bridge.client_disconnected.connect(
             lambda: self._set_bridge_status(
-                "atencao", f"Blender: ouvindo :{self._bridge.port}")
+                "atencao", self.tr("Blender: ouvindo :%1").arg(self._bridge.port))
         )
         # O Blender salvou algo novo na biblioteca → reindexar
         self._bridge.rescan_requested.connect(self.start_scan)
@@ -2067,17 +2081,16 @@ class MainWindow(QMainWindow):
 
         if self._render.running:
             QMessageBox.information(
-                self, "Já tem um render em andamento",
-                "Espere a fila atual terminar (ou clique em Parar) antes de "
-                "pedir outra.",
+                self, self.tr("Já tem um render em andamento"),
+                self.tr("Espere a fila atual terminar (ou clique em Parar) antes de pedir outra."),
             )
             return
         if blender_command() is None:
             QMessageBox.warning(
-                self, "Blender não encontrado",
-                "Não achei o Blender nesta máquina. Instale-o (blender.org "
-                "ou 'flatpak install flathub org.blender.Blender') e garanta "
-                "que o comando 'blender' esteja no PATH.",
+                self, self.tr("Blender não encontrado"),
+                self.tr("Não achei o Blender nesta máquina. Instale-o (blender.org "
+                        "ou 'flatpak install flathub org.blender.Blender') e garanta "
+                        "que o comando 'blender' esteja no PATH."),
             )
             return
 
@@ -2096,37 +2109,37 @@ class MainWindow(QMainWindow):
             com_capa = 0
         if not pendentes:
             if overwrite_existing and asset_ids is not None:
-                recado = "Nenhum asset selecionado é um modelo .blend disponível para renderizar."
+                recado = self.tr("Nenhum asset selecionado é um modelo .blend disponível para renderizar.")
             elif asset_ids is not None:
-                recado = "Nenhum dos assets selecionados é modelo .blend sem capa."
+                recado = self.tr("Nenhum dos assets selecionados é modelo .blend sem capa.")
             else:
-                recado = "Todos os modelos .blend já têm capa."
-            QMessageBox.information(self, "Nada a fazer", recado)
+                recado = self.tr("Todos os modelos .blend já têm capa.")
+            QMessageBox.information(self, self.tr("Nada a fazer"), recado)
             return
 
         if asset_ids is not None:
             if overwrite_existing:
-                pergunta = (f"{len(pendentes)} modelo(s) selecionado(s) terão "
-                            "a capa regenerada pelo Blender, um por vez, em segundo plano.")
+                pergunta = self.tr("%1 modelo(s) selecionado(s) terão "
+                                   "a capa regenerada pelo Blender, um por vez, em segundo plano.").arg(len(pendentes))
                 if com_capa == 1:
-                    pergunta += ("\n\nA capa atual de 1 asset será substituída; "
-                                 "a capa anterior continuará na galeria.")
+                    pergunta += "\n\n" + self.tr("A capa atual de 1 asset será substituída; "
+                                                 "a capa anterior continuará na galeria.")
                 elif com_capa > 1:
-                    pergunta += (f"\n\nAs capas atuais de {com_capa} assets serão "
-                                 "substituídas; as capas anteriores continuarão na galeria.")
+                    pergunta += "\n\n" + self.tr("As capas atuais de %1 assets serão "
+                                                 "substituídas; as capas anteriores continuarão na galeria.").arg(com_capa)
             else:
-                pergunta = (f"{len(pendentes)} modelo(s) selecionado(s) sem capa serão "
-                            "renderizados pelo Blender, um por vez, em segundo plano.")
-            pergunta += "\n\nComeçar?"
+                pergunta = self.tr("%1 modelo(s) selecionado(s) sem capa serão "
+                                   "renderizados pelo Blender, um por vez, em segundo plano.").arg(len(pendentes))
+            pergunta += "\n\n" + self.tr("Começar?")
         else:
             pergunta = (
-                f"{len(pendentes)} modelo(s) sem capa serão renderizados pelo "
-                "Blender, um por vez, em segundo plano.\n\n"
-                "Leva alguns segundos por modelo e você pode continuar usando o "
-                "AssetDeck normalmente. Começar?"
+                self.tr("%1 modelo(s) sem capa serão renderizados pelo "
+                        "Blender, um por vez, em segundo plano.\n\n"
+                        "Leva alguns segundos por modelo e você pode continuar usando o "
+                        "AssetDeck normalmente. Começar?").arg(len(pendentes))
             )
-        titulo = ("Regenerar capas dos modelos" if overwrite_existing
-                  else "Gerar capas dos modelos")
+        titulo = (self.tr("Regenerar capas dos modelos") if overwrite_existing
+                  else self.tr("Gerar capas dos modelos"))
         resposta = QMessageBox.question(self, titulo, pergunta)
         if resposta != QMessageBox.StandardButton.Yes:
             return
@@ -2141,7 +2154,7 @@ class MainWindow(QMainWindow):
 
     def _stop_render(self) -> None:
         self._render.shutdown()
-        self.statusBar().showMessage("Geração de capas interrompida.")
+        self.statusBar().showMessage(self.tr("Geração de capas interrompida."))
         self._reset_render_ui()
 
     def _reset_render_ui(self) -> None:
@@ -2152,20 +2165,20 @@ class MainWindow(QMainWindow):
     def _on_render_progress(self, feitos: int, total: int, nome: str) -> None:
         self.progress.setRange(0, total)
         self.progress.setValue(feitos)
-        self.statusBar().showMessage(f"Renderizando capa {feitos}/{total}: {nome}")
+        self.statusBar().showMessage(self.tr("Renderizando capa %1/%2: %3").arg(feitos).arg(total).arg(nome))
 
     def _on_render_finished(self, ok: int, falhas: int) -> None:
         self._reset_render_ui()
         self._reload_grid()
-        recado = f"Capas geradas: {ok}"
+        recado = self.tr("Capas geradas: %1").arg(ok)
         if falhas:
-            recado += f" · {falhas} falharam (ver log)"
+            recado += self.tr(" · %1 falharam (ver log)").arg(falhas)
         self.statusBar().showMessage(recado)
         log.info("Render em lote concluído: %d ok, %d falhas.", ok, falhas)
 
     def _on_render_failed(self, mensagem: str) -> None:
         self._reset_render_ui()
-        self.statusBar().showMessage(f"ERRO no render: {mensagem} (ver log)")
+        self.statusBar().showMessage(self.tr("ERRO no render: %1 (ver log)").arg(mensagem))
 
     def _install_addon(self) -> None:
         from PySide6.QtWidgets import QMessageBox
@@ -2180,18 +2193,17 @@ class MainWindow(QMainWindow):
             )
         except (RuntimeError, OSError) as exc:
             log.exception("Instalação do add-on falhou")
-            QMessageBox.warning(self, "Não consegui instalar o add-on", str(exc))
+            QMessageBox.warning(self, self.tr("Não consegui instalar o add-on"), str(exc))
             return
 
         onde = "\n".join(str(d) for d in destinos)
         QMessageBox.information(
-            self, "Add-on instalado",
-            "Add-on copiado para:\n\n" + onde +
-            "\n\nAgora, no Blender:\n"
-            "1. Edit → Preferences → Add-ons\n"
-            "2. Busque por 'AssetDeck' e marque a caixinha\n"
-            "3. Na viewport 3D, aperte N e escolha a aba 'AssetDeck'\n\n"
-            "Se o Blender já estava aberto, reinicie-o.",
+            self, self.tr("Add-on instalado"),
+            self.tr("Add-on copiado para:\n\n%1\n\nAgora, no Blender:\n"
+                    "1. Edit → Preferences → Add-ons\n"
+                    "2. Busque por 'AssetDeck' e marque a caixinha\n"
+                    "3. Na viewport 3D, aperte N e escolha a aba 'AssetDeck'\n\n"
+                    "Se o Blender já estava aberto, reinicie-o.").arg(onde),
         )
 
     def _bridge_help(self) -> None:
@@ -2199,12 +2211,12 @@ class MainWindow(QMainWindow):
 
         porta = self._bridge.port if self._bridge and self._bridge.listening else "—"
         QMessageBox.information(
-            self, "Ponte com o Blender",
-            f"O AssetDeck escuta em 127.0.0.1:{porta} (apenas nesta máquina, "
-            "com token — nada sai do seu computador).\n\n"
-            "No Blender: aperte N na viewport 3D → aba 'AssetDeck' → "
-            "'Conectar / Atualizar'.\n\n"
-            "O AssetDeck precisa estar ABERTO para o add-on funcionar.",
+            self, self.tr("Ponte com o Blender"),
+            self.tr("O AssetDeck escuta em 127.0.0.1:%1 (apenas nesta máquina, "
+                    "com token — nada sai do seu computador).\n\n"
+                    "No Blender: aperte N na viewport 3D → aba 'AssetDeck' → "
+                    "'Conectar / Atualizar'.\n\n"
+                    "O AssetDeck precisa estar ABERTO para o add-on funcionar.").arg(porta),
         )
 
     # ---- previews customizados (Fatia 10) ----
@@ -2217,12 +2229,12 @@ class MainWindow(QMainWindow):
             previews_repo.add(self._conn, asset_id, Path(path), config.previews_dir())
         except (FileNotFoundError, OSError) as exc:
             log.exception("Falha ao adicionar preview")
-            self.statusBar().showMessage(f"Não consegui usar essa imagem: {exc}")
+            self.statusBar().showMessage(self.tr("Não consegui usar essa imagem: %1").arg(exc))
             return
         self._reload_grid()
         self._refresh_details_tags()
-        self.statusBar().showMessage("Preview definido como capa (imagem copiada — "
-                                     "seu arquivo original não é tocado)")
+        self.statusBar().showMessage(self.tr("Preview definido como capa (imagem copiada — "
+                                             "seu arquivo original não é tocado)"))
 
     def _on_asset_preview_dropped(self, target_id: int, source_ids: list) -> None:
         """Asset de imagem arrastado de dentro da grid sobre outro asset
@@ -2253,8 +2265,8 @@ class MainWindow(QMainWindow):
             log.info("_on_asset_preview_dropped: '%s' já tem miniatura nativa (%s) — recusado",
                      alvo["name"], alvo_path)
             self.statusBar().showMessage(
-                f"'{alvo['name']}' já tem uma miniatura de verdade — "
-                "preview manual só vale para assets sem preview nativo"
+                self.tr("'%1' já tem uma miniatura de verdade — "
+                        "preview manual só vale para assets sem preview nativo").arg(alvo['name'])
             )
             return
 
@@ -2288,12 +2300,12 @@ class MainWindow(QMainWindow):
         if not aplicados:
             if falhas:
                 self.statusBar().showMessage(
-                    f"Falha ao copiar a imagem de origem: {falhas[0]} "
-                    "(confira se a biblioteca está no caminho certo — ver log)"
+                    self.tr("Falha ao copiar a imagem de origem: %1 "
+                            "(confira se a biblioteca está no caminho certo — ver log)").arg(falhas[0])
                 )
             else:
                 self.statusBar().showMessage(
-                    "Nenhuma das origens era uma imagem utilizável como preview."
+                    self.tr("Nenhuma das origens era uma imagem utilizável como preview.")
                 )
             return
 
@@ -2304,15 +2316,15 @@ class MainWindow(QMainWindow):
             from PySide6.QtWidgets import QCheckBox as _QCheck, QMessageBox
 
             box = QMessageBox(self)
-            box.setWindowTitle("Ocultar preview de origem?")
+            box.setWindowTitle(self.tr("Ocultar preview de origem?"))
             box.setText(
-                f"A(s) imagem(ns) agora são preview de '{alvo['name']}'.\n"
-                f"Deseja OCULTÁ-la(s) da grade? (reversível em 'Mostrar ocultos')"
+                self.tr("A(s) imagem(ns) agora são preview de '%1'.\n"
+                        "Deseja OCULTÁ-la(s) da grade? (reversível em 'Mostrar ocultos')").arg(alvo['name'])
             )
             box.setStandardButtons(
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
             )
-            lembrar = _QCheck("Não perguntar de novo (lembrar esta escolha)")
+            lembrar = _QCheck(self.tr("Não perguntar de novo (lembrar esta escolha)"))
             box.setCheckBox(lembrar)
             esconder = box.exec() == QMessageBox.StandardButton.Yes
             if lembrar.isChecked():
@@ -2327,18 +2339,18 @@ class MainWindow(QMainWindow):
 
         self._reload_grid()
         self._refresh_details_tags()
-        sufixo = " (origens ocultadas)" if esconder else ""
+        sufixo = self.tr(" (origens ocultadas)") if esconder else ""
         self.statusBar().showMessage(
-            f"Preview de '{alvo['name']}' definido a partir de "
-            f"{len(aplicados)} asset(s){sufixo}"
+            self.tr("Preview de '%1' definido a partir de "
+                    "%2 asset(s)%3").arg(alvo['name']).arg(len(aplicados)).arg(sufixo)
         )
 
     def _on_preview_add(self, asset_id: int) -> None:
         from PySide6.QtWidgets import QFileDialog
 
         path, _f = QFileDialog.getOpenFileName(
-            self, "Escolher imagem de preview", str(Path.home()),
-            "Imagens (*.jpg *.jpeg *.png *.tif *.tiff *.webp *.bmp *.tga *.gif)",
+            self, self.tr("Escolher imagem de preview"), str(Path.home()),
+            self.tr("Imagens (*.jpg *.jpeg *.png *.tif *.tiff *.webp *.bmp *.tga *.gif)"),
         )
         if path:
             self._on_image_dropped(asset_id, path)
@@ -2347,13 +2359,13 @@ class MainWindow(QMainWindow):
         previews_repo.set_cover(self._conn, preview_id)
         self._reload_grid()
         self._refresh_details_tags()
-        self.statusBar().showMessage("Capa atualizada")
+        self.statusBar().showMessage(self.tr("Capa atualizada"))
 
     def _on_preview_remove(self, preview_id: int) -> None:
         previews_repo.soft_delete(self._conn, preview_id)
         self._reload_grid()
         self._refresh_details_tags()
-        self.statusBar().showMessage("Preview removido da galeria")
+        self.statusBar().showMessage(self.tr("Preview removido da galeria"))
 
     def _esquecer_assets_sumidos(self) -> None:
         """Manutenção → tira da grade, de vez, os assets 100% sumidos
@@ -2374,18 +2386,18 @@ class MainWindow(QMainWindow):
         n = assets_repo.count_missing_all(self._conn, lib_id)
         if not n:
             QMessageBox.information(
-                self, "Nada a fazer",
-                "Nenhum asset está totalmente sumido no momento.",
+                self, self.tr("Nada a fazer"),
+                self.tr("Nenhum asset está totalmente sumido no momento."),
             )
             return
 
         resposta = QMessageBox.question(
-            self, "Esquecer assets sumidos",
-            f"{n} asset(s) têm TODOS os arquivos sumidos do caminho "
-            "esperado (você os moveu ou apagou fora do AssetDeck).\n\n"
-            "Eles vão sumir da grade e da busca. Os arquivos no disco, "
-            "onde quer que estejam agora, não são tocados — isto só "
-            "arruma o que o AssetDeck mostra. Continuar?",
+            self, self.tr("Esquecer assets sumidos"),
+            self.tr("%1 asset(s) têm TODOS os arquivos sumidos do caminho "
+                    "esperado (você os moveu ou apagou fora do AssetDeck).\n\n"
+                    "Eles vão sumir da grade e da busca. Os arquivos no disco, "
+                    "onde quer que estejam agora, não são tocados — isto só "
+                    "arruma o que o AssetDeck mostra. Continuar?").arg(n),
         )
         if resposta != QMessageBox.StandardButton.Yes:
             return
@@ -2393,7 +2405,7 @@ class MainWindow(QMainWindow):
         marcados = assets_repo.purge_missing(self._conn, lib_id)
         self._reload_all()
         self.statusBar().showMessage(
-            f"{marcados} asset(s) sumido(s) removido(s) da grade"
+            self.tr("%1 asset(s) sumido(s) removido(s) da grade").arg(marcados)
         )
 
     def _assinalar_previews_automaticamente(self) -> None:
@@ -2415,18 +2427,18 @@ class MainWindow(QMainWindow):
             self._reload_grid()
             self._refresh_details_tags()
             self.statusBar().showMessage(
-                f"{criadas} modelo(s) ganharam preview automático por nome igual"
+                self.tr("%1 modelo(s) ganharam preview automático por nome igual").arg(criadas)
             )
         else:
             self.statusBar().showMessage(
-                "Nenhum modelo sem capa casou com uma imagem de mesmo nome"
+                self.tr("Nenhum modelo sem capa casou com uma imagem de mesmo nome")
             )
 
     # ---- varredura ----
 
     def start_scan(self) -> None:
         if not self._has_library:
-            self.statusBar().showMessage("Nenhuma biblioteca configurada para indexar.")
+            self.statusBar().showMessage(self.tr("Nenhuma biblioteca configurada para indexar."))
             return
         if self._scan.running:
             return
@@ -2434,31 +2446,31 @@ class MainWindow(QMainWindow):
         self.rescan_btn.setEnabled(False)
         self.progress.setVisible(True)
         self.progress.setRange(0, 0)
-        self.statusBar().showMessage("Preparando varredura…")
+        self.statusBar().showMessage(self.tr("Preparando varredura…"))
         self._scan.start(self._on_progress, self._on_finished, self._on_failed)
 
     def _on_progress(self, done: int, total: int, live_count: int) -> None:
         if total == -1:
-            message = f"Descobrindo arquivos… {done} encontrados"
+            message = self.tr("Descobrindo arquivos… %1 encontrados").arg(done)
             self._scan_calc_total = 0
         elif total == -2:
-            message = f"Processando arquivos… {done} processados"
+            message = self.tr("Processando arquivos… %1 processados").arg(done)
             self._scan_calc_total = 0
         elif total == -3:
             self._scan_calc_total = done
-            message = f"Calculando fingerprints… 0/{done} neste lote"
+            message = self.tr("Calculando fingerprints… 0/%1 neste lote").arg(done)
             self.progress.setRange(0, max(done, 1))
             self.progress.setValue(0)
         elif total == -4:
             limite = max(self._scan_calc_total, 1)
-            message = f"Calculando fingerprints… {done}/{self._scan_calc_total} neste lote"
+            message = self.tr("Calculando fingerprints… %1/%2 neste lote").arg(done).arg(self._scan_calc_total)
             self.progress.setRange(0, limite)
             self.progress.setValue(min(done, limite))
         elif total <= 0:
-            message = f"Varredura em andamento… {done} arquivos percorridos"
+            message = self.tr("Varredura em andamento… %1 arquivos percorridos").arg(done)
             self._scan_calc_total = 0
         else:
-            message = f"Indexando… {done}/{total} arquivos"
+            message = self.tr("Indexando… %1/%2 arquivos").arg(done).arg(total)
             self._scan_calc_total = 0
 
         if total <= 0 and total not in (-3, -4):
@@ -2468,7 +2480,7 @@ class MainWindow(QMainWindow):
             self.progress.setRange(0, total)
         if total > 0:
             self.progress.setValue(done)
-        self.footer_count.setText(f"{live_count} assets")
+        self.footer_count.setText(self.tr("%1 assets").arg(live_count))
         self.statusBar().showMessage(message)
 
     def _on_finished(self, stats: ScanStats) -> None:
@@ -2494,19 +2506,19 @@ class MainWindow(QMainWindow):
             # impressão de app travado. `processEvents()` força o repaint
             # AGORA — sem ele o Qt só pintaria depois que este método
             # (síncrono) terminasse, tarde demais pra servir de feedback.
-            self.statusBar().showMessage("Sincronizando biblioteca…")
+            self.statusBar().showMessage(self.tr("Sincronizando biblioteca…"))
             QApplication.processEvents()
             self._reload_all(warmup=precisa_thumb_nova)
         else:
             self.refresh_count()
-        self.statusBar().showMessage(f"Indexação concluída: {stats.summary()}")
+        self.statusBar().showMessage(self.tr("Indexação concluída: %1").arg(stats.summary()))
         log.info("UI: indexação concluída — %s", stats.summary())
 
     def _on_failed(self, message: str) -> None:
         self._pipeline.set_scan_active(False)
         self.progress.setVisible(False)
         self.rescan_btn.setEnabled(True)
-        self.statusBar().showMessage(f"ERRO na indexação: {message} (detalhes no log)")
+        self.statusBar().showMessage(self.tr("ERRO na indexação: %1 (detalhes no log)").arg(message))
         log.error("UI: indexação falhou — %s", message)
 
     # ---- estado de tela entre sessões (Fatia 54) ----
@@ -2696,7 +2708,7 @@ class MainWindow(QMainWindow):
             event.ignore()
             self._closing_after_scan = True
             self.statusBar().showMessage(
-                "Encerrando a varredura antes de fechar… aguarde."
+                self.tr("Encerrando a varredura antes de fechar… aguarde.")
             )
             self._scan.stopped.connect(self._close_after_scan_stops)
             # A thread pode terminar entre o timeout e a conexão do sinal.

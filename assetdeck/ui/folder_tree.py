@@ -103,7 +103,7 @@ class FolderTree(QTreeWidget):
     def reload(self, conn: sqlite3.Connection, library_id: int | None = None) -> None:
         self.blockSignals(True)  # recarregar árvore não deve refiltar a grid
         self.clear()
-        root = QTreeWidgetItem(["Biblioteca (tudo)"])
+        root = QTreeWidgetItem([self.tr("Biblioteca (tudo)")])
         root.setData(0, _DIR_ROLE, "")
         self.addTopLevelItem(root)
 

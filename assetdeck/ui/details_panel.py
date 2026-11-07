@@ -216,7 +216,7 @@ class DetailsPanel(QWidget):
         # com um texto boiando no meio e nada dizendo que ali é o lugar da
         # imagem. Agora é uma pastilha com fundo e contorno próprios — cheia
         # ou vazia, o bloco existe.
-        self.preview = QLabel("Selecione um asset")
+        self.preview = QLabel(self.tr("Selecione um asset"))
         self.preview.setObjectName("previewTile")
         self.preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.preview.setSizePolicy(
@@ -243,7 +243,7 @@ class DetailsPanel(QWidget):
             valor.setObjectName("kvValue")
             valor.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
 
-        self.inspector_heading = QLabel("DETALHES")
+        self.inspector_heading = QLabel(self.tr("DETALHES"))
         self.inspector_heading.setObjectName("inspectorHeading")
         overview_text = QVBoxLayout()
         overview_text.setContentsMargins(0, 0, 0, 0)
@@ -267,10 +267,10 @@ class DetailsPanel(QWidget):
         form = QVBoxLayout()
         form.setSpacing(2)
         for rotulo, campo in (
-            ("Formato", self.f_format),
-            ("Resolução", self.f_dims),
-            ("Tamanho", self.f_size),
-            ("Caminho", self.f_path),
+            (self.tr("Formato"), self.f_format),
+            (self.tr("Resolução"), self.f_dims),
+            (self.tr("Tamanho"), self.f_size),
+            (self.tr("Caminho"), self.f_path),
         ):
             form.addWidget(self._kv_row(rotulo, campo))
 
@@ -279,13 +279,13 @@ class DetailsPanel(QWidget):
         # tooltip — some da tela, não da interface.
         self.open_folder_btn = QPushButton()
         self.open_folder_btn.setObjectName("acaoIcone")
-        self.open_folder_btn.setToolTip("Abrir pasta")
-        self.open_folder_btn.setAccessibleName("Abrir pasta")
+        self.open_folder_btn.setToolTip(self.tr("Abrir pasta"))
+        self.open_folder_btn.setAccessibleName(self.tr("Abrir pasta"))
         # Largura fixa: sem isto o QPushButton reserva a largura mínima de um
         # botão COM TEXTO e sobra um retângulo vazio do lado do "Abrir".
         self.open_folder_btn.setFixedWidth(38)
         self.open_folder_btn.clicked.connect(self._open_folder)
-        self.open_file_btn = QPushButton("Abrir")
+        self.open_file_btn = QPushButton(self.tr("Abrir"))
         # UM botão principal por tela (regra do tema): abrir o arquivo é a
         # ação que se espera de um gerenciador de assets — as outras são
         # apoio.
@@ -294,7 +294,7 @@ class DetailsPanel(QWidget):
         # Só faz sentido pra .blend (Fatia 40) — os outros formatos de
         # modelo (.fbx/.obj/.rvt/.skp/.usd*/.abc, Fatia 37) não têm esse
         # conceito de textura religável por caminho dentro do arquivo.
-        self.check_textures_btn = QPushButton("Checar texturas…")
+        self.check_textures_btn = QPushButton(self.tr("Checar texturas…"))
         self.check_textures_btn.clicked.connect(self._request_check_textures)
         self._set_buttons(False)
 
@@ -309,7 +309,7 @@ class DetailsPanel(QWidget):
         self.gallery.setFixedHeight(84)
         self.gallery.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.gallery.customContextMenuRequested.connect(self._gallery_menu)
-        self.add_preview_btn = QPushButton("Adicionar preview…")
+        self.add_preview_btn = QPushButton(self.tr("Adicionar preview…"))
         self.add_preview_btn.clicked.connect(self._request_add_preview)
 
         # Favorito — Fatia 9. Nota em estrelas removida na Fatia 62 (pedido
@@ -324,8 +324,8 @@ class DetailsPanel(QWidget):
 
         self.fav_btn = QPushButton()
         self.fav_btn.setObjectName("acaoIcone")
-        self.fav_btn.setToolTip("Favorito")
-        self.fav_btn.setAccessibleName("Favorito")
+        self.fav_btn.setToolTip(self.tr("Favorito"))
+        self.fav_btn.setAccessibleName(self.tr("Favorito"))
         self.fav_btn.setIconSize(_QSize(16, 16))
         self.fav_btn.setFixedWidth(38)   # mesmo motivo do "Abrir pasta"
         self.fav_btn.setCheckable(True)
@@ -351,14 +351,14 @@ class DetailsPanel(QWidget):
 
         # Custom properties (EAV tipado) — Fatia 22
         self.props_form = QFormLayout()
-        self.manage_props_btn = QPushButton("Gerenciar propriedades…")
+        self.manage_props_btn = QPushButton(self.tr("Gerenciar propriedades…"))
         self.manage_props_btn.clicked.connect(self.manage_properties_requested.emit)
 
         self.notes_edit = QPlainTextEdit()
-        self.notes_edit.setPlaceholderText("Anotações suas sobre este asset…")
+        self.notes_edit.setPlaceholderText(self.tr("Anotações suas sobre este asset…"))
         self.notes_edit.setMaximumHeight(110)
         self.notes_edit.textChanged.connect(self._on_notes_changed)
-        self.save_notes_btn = QPushButton("Salvar nota")
+        self.save_notes_btn = QPushButton(self.tr("Salvar nota"))
         self.save_notes_btn.setEnabled(False)
         self.save_notes_btn.clicked.connect(self._save_notes)
 
@@ -393,27 +393,27 @@ class DetailsPanel(QWidget):
         # As seções, na ordem em que o Rafael aprovou no mockup. As duas
         # primeiras nascem abertas: são as que ele consulta sempre. O estado
         # real vem de `restaurar_secoes()` na abertura do app.
-        self.sec_ficha = _Secao("Ficha técnica", "ficha", aberta=True)
+        self.sec_ficha = _Secao(self.tr("Ficha técnica"), "ficha", aberta=True)
         self.sec_ficha.add(form)
 
-        self.sec_tags = _Secao("Tags", "tags", aberta=True)
+        self.sec_tags = _Secao(self.tr("Tags"), "tags", aberta=True)
         self.sec_tags.add(self.tags_tree)
 
-        self.sec_galeria = _Secao("Galeria de previews", "galeria", aberta=False)
+        self.sec_galeria = _Secao(self.tr("Galeria de previews"), "galeria", aberta=False)
         self.sec_galeria.add(self.gallery)
         self.sec_galeria.add(self.add_preview_btn)
 
-        self.sec_props = _Secao("Propriedades", "props", aberta=False)
+        self.sec_props = _Secao(self.tr("Propriedades"), "props", aberta=False)
         self.sec_props.add(self.props_form)
         self.sec_props.add(self.manage_props_btn)
 
-        self.sec_notas = _Secao("Notas", "notas", aberta=False)
+        self.sec_notas = _Secao(self.tr("Notas"), "notas", aberta=False)
         self.sec_notas.add(self.notes_edit)
         self.sec_notas.add(self.save_notes_btn)
 
         # "Checar texturas" só existe pra .blend, então não merece espaço fixo
         # na vista principal — vira manutenção, fechada por padrão.
-        self.sec_manutencao = _Secao("Manutenção", "manutencao", aberta=False)
+        self.sec_manutencao = _Secao(self.tr("Manutenção"), "manutencao", aberta=False)
         self.sec_manutencao.add(self.check_textures_btn)
 
         self._secoes = [
@@ -515,7 +515,7 @@ class DetailsPanel(QWidget):
         else:
             self._preview_source = QPixmap()
             self.preview.setPixmap(QPixmap())
-            self.preview.setText("(sem preview ainda)")
+            self.preview.setText(self.tr("(sem preview ainda)"))
 
         self.name.setText(row["name"])
         # O `asset_type` cru do banco ("hdri", "pbr_set", "psd") é vocabulário
@@ -530,7 +530,7 @@ class DetailsPanel(QWidget):
         # `_RotuloElidido` guarda o texto inteiro e desenha elidido sozinho —
         # aqui é só atribuir.
         self.f_path.setText(
-            f"{row['rel_path']}  ⚠ ARQUIVO SUMIDO" if sumido else row["rel_path"])
+            f"{row['rel_path']}  ⚠ " + self.tr("ARQUIVO SUMIDO") if sumido else row["rel_path"])
         self._set_buttons(not sumido, path)
 
     def _refresh_preview_pixmap(self) -> None:
@@ -575,7 +575,7 @@ class DetailsPanel(QWidget):
                 item.setIcon(QIcon(pix.scaled(
                     56, 56, Qt.AspectRatioMode.KeepAspectRatio,
                     Qt.TransformationMode.SmoothTransformation)))
-            item.setText("capa" if p["is_cover"] else "")
+            item.setText(self.tr("capa") if p["is_cover"] else "")
             item.setData(32, p["id"])
             self.gallery.addItem(item)
         self.gallery.setVisible(bool(previews))
@@ -589,9 +589,9 @@ class DetailsPanel(QWidget):
             return
         pid = item.data(32)
         menu = QMenu(self)
-        menu.addAction("Definir como capa",
+        menu.addAction(self.tr("Definir como capa"),
                        lambda: self.preview_cover_requested.emit(pid))
-        menu.addAction("Remover da galeria",
+        menu.addAction(self.tr("Remover da galeria"),
                        lambda: self.preview_remove_requested.emit(pid))
         menu.exec(self.gallery.mapToGlobal(pos))
 
@@ -603,7 +603,7 @@ class DetailsPanel(QWidget):
 
     def set_multi_count(self, n: int) -> None:
         """n>1: avisa que as edições valem para todos os selecionados."""
-        self.multi_label.setText(f"⚠ Editando {n} assets selecionados de uma vez")
+        self.multi_label.setText(self.tr("⚠ Editando %1 assets selecionados de uma vez").arg(n))
         self.multi_label.setVisible(n > 1)
 
     # ---- seções colapsáveis (Fatia 79) ----
@@ -759,22 +759,22 @@ class DetailsPanel(QWidget):
         Falha silenciosa é justamente o que as regras do projeto proíbem.
         """
         if not alvo.exists():
-            recado = (f"{oque} não existe mais no disco: {alvo}. "
-                      "Use Manutenção → Relocalizar se ele só mudou de pasta.")
+            recado = (self.tr("%1 não existe mais no disco: %2. "
+                              "Use Manutenção → Relocalizar se ele só mudou de pasta.").arg(oque).arg(alvo))
             log.warning("Tentativa de abrir %s inexistente: %s", oque, alvo)
             self.aviso.emit(recado)
             return
         if not QDesktopServices.openUrl(QUrl.fromLocalFile(str(alvo))):
             log.error("O sistema recusou abrir %s: %s", oque, alvo)
-            self.aviso.emit(f"O sistema não conseguiu abrir {alvo}.")
+            self.aviso.emit(self.tr("O sistema não conseguiu abrir %1.").arg(alvo))
 
     def _open_folder(self) -> None:
         if self._current:
-            self._abrir_no_sistema(self._current.parent, "a pasta")
+            self._abrir_no_sistema(self._current.parent, self.tr("a pasta"))
 
     def _open_file(self) -> None:
         if self._current:
-            self._abrir_no_sistema(self._current, "o arquivo")
+            self._abrir_no_sistema(self._current, self.tr("o arquivo"))
 
     def _request_check_textures(self) -> None:
         if self._current and self._current_asset_id is not None:

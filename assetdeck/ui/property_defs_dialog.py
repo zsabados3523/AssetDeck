@@ -32,7 +32,7 @@ class PropertyDefsDialog(QDialog):
         super().__init__(parent)
         self._conn = conn
         self.changed = False
-        self.setWindowTitle("Gerenciar propriedades")
+        self.setWindowTitle(self.tr("Gerenciar propriedades"))
         self.resize(360, 420)
 
         self.list = QListWidget()
@@ -41,7 +41,7 @@ class PropertyDefsDialog(QDialog):
         self.list.customContextMenuRequested.connect(self._menu)
         self._reload()
 
-        nova_btn = QPushButton("Nova propriedade…")
+        nova_btn = QPushButton(self.tr("Nova propriedade…"))
         nova_btn.clicked.connect(self._nova)
 
         botoes = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
@@ -54,15 +54,16 @@ class PropertyDefsDialog(QDialog):
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(10)
         dialog_chrome.add_heading(
-            layout, "Propriedades dos assets",
-            "Gerencie os campos personalizados da biblioteca.")
+            layout, self.tr("Propriedades dos assets"),
+            self.tr("Gerencie os campos personalizados da biblioteca."))
         layout.addWidget(self.list)
         layout.addWidget(botoes)
 
     def _reload(self) -> None:
         self.list.clear()
         for d in properties_repo.list_defs(self._conn):
-            item = QListWidgetItem(f"{d['name']}  ({_TIPO_LABEL[d['value_type']]})")
+            tipo_nome = self.tr(_TIPO_LABEL.get(d["value_type"], d["value_type"]))
+            item = QListWidgetItem(f"{d['name']}  ({tipo_nome})")
             item.setData(32, d["id"])
             item.setData(33, d["name"])
             self.list.addItem(item)
@@ -74,45 +75,52 @@ class PropertyDefsDialog(QDialog):
         def_id = item.data(32)
         nome = item.data(33)
         menu = QMenu(self)
-        menu.addAction("Renomear…", lambda: self._renomear(def_id, nome))
-        menu.addAction("Excluir", lambda: self._excluir(def_id, nome))
+        menu.addAction(self.tr("Renomear…"), lambda: self._renomear(def_id, nome))
+        menu.addAction(self.tr("Excluir"), lambda: self._excluir(def_id, nome))
         menu.exec(self.list.mapToGlobal(pos))
 
     def _nova(self) -> None:
-        nome, ok = QInputDialog.getText(self, "Nova propriedade", "Nome:")
+        nome, ok = QInputDialog.getText(self, self.tr("Nova propriedade"), self.tr("Nome:"))
         if not (ok and nome.strip()):
             return
+        opcoes = [self.tr(v) for v in _TIPO_LABEL.values()]
         label_tipo, ok = QInputDialog.getItem(
-            self, "Tipo da propriedade", "Tipo:",
-            list(_TIPO_LABEL.values()), 0, editable=False,
+            self, self.tr("Tipo da propriedade"), self.tr("Tipo:"),
+            opcoes, 0, editable=False,
         )
         if not ok:
             return
+        tipo_chave = next(
+            (k for k, v in _TIPO_LABEL.items() if self.tr(v) == label_tipo or v == label_tipo),
+            "text"
+        )
         try:
-            properties_repo.create_def(self._conn, nome, _LABEL_TIPO[label_tipo])
+            properties_repo.create_def(self._conn, nome, tipo_chave)
         except ValueError as exc:
-            QMessageBox.warning(self, "Não deu", str(exc))
+            QMessageBox.warning(self, self.tr("Não deu"), str(exc))
             return
         self.changed = True
         self._reload()
 
     def _renomear(self, def_id: int, atual: str) -> None:
-        nome, ok = QInputDialog.getText(self, "Renomear propriedade", "Novo nome:", text=atual)
+        nome, ok = QInputDialog.getText(self, self.tr("Renomear propriedade"), self.tr("Novo nome:"), text=atual)
         if not (ok and nome.strip()):
             return
         try:
             properties_repo.rename_def(self._conn, def_id, nome)
         except ValueError as exc:
-            QMessageBox.warning(self, "Não deu", str(exc))
+            QMessageBox.warning(self, self.tr("Não deu"), str(exc))
             return
         self.changed = True
         self._reload()
 
     def _excluir(self, def_id: int, nome: str) -> None:
         resp = QMessageBox.question(
-            self, "Excluir propriedade",
-            f"Excluir '{nome}'? Os valores já preenchidos nos assets somem "
-            "da tela (o dado fica no banco, é soft delete, como tudo aqui).",
+            self, self.tr("Excluir propriedade"),
+            self.tr(
+                "Excluir '%1'? Os valores já preenchidos nos assets somem "
+                "da tela (o dado fica no banco, é soft delete, como tudo aqui)."
+            ).arg(nome),
         )
         if resp == QMessageBox.StandardButton.Yes:
             properties_repo.soft_delete_def(self._conn, def_id)

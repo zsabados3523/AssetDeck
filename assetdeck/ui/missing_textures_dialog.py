@@ -31,24 +31,27 @@ class MissingTexturesDialog(QDialog):
                  recuperadas_auto: int, parent=None) -> None:
         super().__init__(parent)
         self._blend_path = blend_path
-        self.setWindowTitle(f"Texturas — {blend_path.name}")
+        self.setWindowTitle(self.tr("Texturas — %1").arg(blend_path.name))
         self.resize(640, 380)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(10)
         dialog_chrome.add_heading(
-            layout, "Texturas não encontradas",
-            f"Relatório das referências dentro de {blend_path.name}.")
+            layout, self.tr("Texturas não encontradas"),
+            self.tr("Relatório das referências dentro de %1.").arg(blend_path.name))
 
-        resumo = f"{len(perdidas)} continuam quebradas"
         if recuperadas_auto:
-            resumo += f" · {recuperadas_auto} religadas automaticamente ao renderizar"
+            resumo = self.tr("%1 continuam quebradas · %2 religadas automaticamente ao renderizar").arg(
+                len(perdidas)
+            ).arg(recuperadas_auto)
+        else:
+            resumo = self.tr("%1 continuam quebradas").arg(len(perdidas))
         layout.addWidget(QLabel(resumo))
 
         self.table = QTableWidget(len(perdidas), 2)
         self.table.setObjectName("cardFlat")
-        self.table.setHorizontalHeaderLabels(["Textura", "Caminho esperado"])
+        self.table.setHorizontalHeaderLabels([self.tr("Textura"), self.tr("Caminho esperado")])
         self.table.horizontalHeader().setSectionResizeMode(
             0, QHeaderView.ResizeMode.ResizeToContents)
         self.table.horizontalHeader().setSectionResizeMode(
@@ -63,7 +66,7 @@ class MissingTexturesDialog(QDialog):
         # Close é RejectRole no Qt — só emite `rejected`, não `accepted`.
         botoes = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
         abrir_pasta = botoes.addButton(
-            "Abrir pasta do asset", QDialogButtonBox.ButtonRole.ActionRole)
+            self.tr("Abrir pasta do asset"), QDialogButtonBox.ButtonRole.ActionRole)
         abrir_pasta.clicked.connect(self._abrir_pasta)
         botoes.rejected.connect(self.reject)
         dialog_chrome.prepare_actions(botoes)

@@ -14,6 +14,7 @@ datas = [
     (os.path.join(ROOT, "assetdeck", "db", "migrations"), os.path.join("assetdeck", "db", "migrations")),
     (os.path.join(ROOT, "assetdeck", "blender", "scripts"), os.path.join("assetdeck", "blender", "scripts")),
     (os.path.join(ROOT, "blender_addon"), "blender_addon"),
+    (os.path.join(ROOT, "translations"), "translations"),
 ]
 
 binaries = []

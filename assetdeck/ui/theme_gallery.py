@@ -61,7 +61,7 @@ class ThemeGallery(QWidget):
         # Foi medido: sem ele o #appSurface não pinta e o fundo fica cinza.
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setObjectName("appSurface")
-        self.setWindowTitle("AssetDeck — vitrine do tema")
+        self.setWindowTitle(self.tr("AssetDeck — vitrine do tema"))
         self.resize(1180, 760)
 
         raiz = QVBoxLayout(self)
@@ -73,9 +73,9 @@ class ThemeGallery(QWidget):
 
         corpo = QHBoxLayout()
         corpo.setSpacing(14)
-        corpo.addWidget(theme.make_card(self._build_controls_sample(), titulo="Controles"), 1)
-        corpo.addWidget(theme.make_card(self._build_lists_sample(), titulo="Painéis laterais"), 1)
-        corpo.addWidget(theme.make_card(self._build_palette_sample(), titulo="Cores e texto"), 1)
+        corpo.addWidget(theme.make_card(self._build_controls_sample(), titulo=self.tr("Controles")), 1)
+        corpo.addWidget(theme.make_card(self._build_lists_sample(), titulo=self.tr("Painéis laterais")), 1)
+        corpo.addWidget(theme.make_card(self._build_palette_sample(), titulo=self.tr("Cores e texto")), 1)
         raiz.addLayout(corpo, 1)
 
         self.rodape = QLabel()
@@ -93,9 +93,9 @@ class ThemeGallery(QWidget):
         linha.setContentsMargins(0, 0, 0, 0)
         linha.setSpacing(10)
 
-        for campo, rotulo in (("background", "Fundo"), ("separation", "Separação"),
-                              ("radius", "Cantos"), ("font", "Fonte"),
-                              ("mode", "Modo")):
+        for campo, rotulo in (("background", self.tr("Fundo")), ("separation", self.tr("Separação")),
+                              ("radius", self.tr("Cantos")), ("font", self.tr("Fonte")),
+                              ("mode", self.tr("Modo"))):
             etiqueta = QLabel(rotulo)
             etiqueta.setObjectName("sectionTitle")
             linha.addWidget(etiqueta)
@@ -112,8 +112,8 @@ class ThemeGallery(QWidget):
 
         linha.addStretch(1)
 
-        recarregar = QPushButton("Recarregar tema")
-        recarregar.setToolTip("Relê o theme.qss do disco sem fechar a janela.")
+        recarregar = QPushButton(self.tr("Recarregar tema"))
+        recarregar.setToolTip(self.tr("Relê o theme.qss do disco sem fechar a janela."))
         recarregar.clicked.connect(self._apply)
         linha.addWidget(recarregar)
         return barra
@@ -125,38 +125,38 @@ class ThemeGallery(QWidget):
         col.setSpacing(9)
 
         busca = QLineEdit()
-        busca.setPlaceholderText("Buscar assets")
+        busca.setPlaceholderText(self.tr("Buscar assets"))
         busca.setClearButtonEnabled(True)
         col.addWidget(busca)
 
         combo = QComboBox()
-        combo.addItems(["Nota: todas", "★ 3 ou mais", "★ 4 ou mais", "★ 5"])
+        combo.addItems([self.tr("Nota: todas"), self.tr("★ 3 ou mais"), self.tr("★ 4 ou mais"), self.tr("★ 5")])
         col.addWidget(combo)
 
         tipos = QToolButton()
-        tipos.setText("Tipos: todos  ▾")
+        tipos.setText(self.tr("Tipos: todos  ▾"))
         menu = QMenu(tipos)
-        for nome in ("Texturas", "HDRIs", "Modelos", "LUTs"):
+        for nome in (self.tr("Texturas"), self.tr("HDRIs"), self.tr("Modelos"), self.tr("LUTs")):
             acao = menu.addAction(nome)
             acao.setCheckable(True)
         menu.addSeparator()
-        menu.addAction("Limpar")
+        menu.addAction(self.tr("Limpar"))
         tipos.setMenu(menu)
         tipos.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         col.addWidget(tipos)
 
-        for texto, marcado in (("Incluir subpastas", True), ("Agrupar sets PBR", True),
-                               ("Mostrar ocultos", False)):
+        for texto, marcado in ((self.tr("Incluir subpastas"), True), (self.tr("Agrupar sets PBR"), True),
+                               (self.tr("Mostrar ocultos"), False)):
             chk = QCheckBox(texto)
             chk.setChecked(marcado)
             col.addWidget(chk)
 
         botoes = QHBoxLayout()
-        principal = QPushButton("Reindexar")
+        principal = QPushButton(self.tr("Reindexar"))
         principal.setObjectName("primary")
         botoes.addWidget(principal)
-        botoes.addWidget(QPushButton("Cancelar"))
-        desabilitado = QPushButton("Indisponível")
+        botoes.addWidget(QPushButton(self.tr("Cancelar")))
+        desabilitado = QPushButton(self.tr("Indisponível"))
         desabilitado.setEnabled(False)
         botoes.addWidget(desabilitado)
         col.addLayout(botoes)
@@ -174,7 +174,7 @@ class ThemeGallery(QWidget):
         # Nenhuma fonte da máquina tem o glifo da estrela (conferido com
         # QRawFont): o Qt cai numa fonte substituta e o desenho sai torto e de
         # tamanho imprevisível. É exatamente o que a Fatia 26 resolve.
-        nota = QLabel("↑ estrelas ainda são texto — viram ícone SVG na Fatia 26")
+        nota = QLabel(self.tr("↑ estrelas ainda são texto — viram ícone SVG na Fatia 26"))
         nota.setObjectName("muted")
         nota.setWordWrap(True)
         col.addWidget(nota)
@@ -185,7 +185,7 @@ class ThemeGallery(QWidget):
         barra.setTextVisible(False)
         col.addWidget(barra)
 
-        notas = QPlainTextEdit("Notas do asset…")
+        notas = QPlainTextEdit(self.tr("Notas do asset…"))
         notas.setMaximumHeight(70)
         col.addWidget(notas)
         col.addStretch(1)
@@ -200,7 +200,7 @@ class ThemeGallery(QWidget):
         arvore = QTreeWidget()
         arvore.setHeaderHidden(True)
         raiz = QTreeWidgetItem(arvore, ["assetdeck-testlib"])
-        for nome in ("Texturas", "HDRIs", "Modelos"):
+        for nome in (self.tr("Texturas"), self.tr("HDRIs"), self.tr("Modelos")):
             QTreeWidgetItem(raiz, [nome])
         arvore.expandAll()
         arvore.setCurrentItem(raiz.child(0))
@@ -208,7 +208,7 @@ class ThemeGallery(QWidget):
 
         tags = QTreeWidget()
         tags.setHeaderHidden(True)
-        for nome, cor in (("madeira", "#7E9C6B"), ("tijolo", "#B07A5E"), ("metal", "#7E8DA0")):
+        for nome, cor in ((self.tr("madeira"), "#7E9C6B"), (self.tr("tijolo"), "#B07A5E"), (self.tr("metal"), "#7E8DA0")):
             item = QTreeWidgetItem(tags, [nome])
             swatch = QPixmap(12, 12)
             swatch.fill(QColor(cor))
@@ -216,7 +216,7 @@ class ThemeGallery(QWidget):
         col.addWidget(tags)
 
         colecoes = QListWidget()
-        colecoes.addItems(["(nenhuma aplicada)", "HDRIs com nota ≥ 4", "Projeto Casa X"])
+        colecoes.addItems([self.tr("(nenhuma aplicada)"), self.tr("HDRIs com nota ≥ 4"), self.tr("Projeto Casa X")])
         colecoes.setCurrentRow(1)
         col.addWidget(colecoes)
         return w
@@ -231,21 +231,21 @@ class ThemeGallery(QWidget):
         titulo.setObjectName("title")
         col.addWidget(titulo)
 
-        secundario = QLabel("Set PBR · 6 mapas · 4096 px · 42 MB")
+        secundario = QLabel(self.tr("Set PBR · 6 mapas · 4096 px · 42 MB"))
         secundario.setObjectName("muted")
         col.addWidget(secundario)
 
-        aviso = QLabel("3 assets selecionados — a edição vale para todos")
+        aviso = QLabel(self.tr("3 assets selecionados — a edição vale para todos"))
         aviso.setObjectName("multiWarn")
         aviso.setWordWrap(True)
         col.addWidget(aviso)
 
-        erro = QLabel("2 arquivos sumiram do disco")
+        erro = QLabel(self.tr("2 arquivos sumiram do disco"))
         erro.setObjectName("danger")
         col.addWidget(erro)
 
         col.addSpacing(6)
-        rotulo = QLabel("CARD SEM MINIATURA + CHIP DE EXTENSÃO")
+        rotulo = QLabel(self.tr("CARD SEM MINIATURA + CHIP DE EXTENSÃO"))
         rotulo.setObjectName("sectionTitle")
         col.addWidget(rotulo)
 

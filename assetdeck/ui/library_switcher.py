@@ -81,7 +81,7 @@ class _LinhaBiblioteca(QWidget):
         # miolo é o que pode sumir sem perda.
         metrica = QFontMetrics(rot_nome.font())
         curto = metrica.elidedText(caminho, Qt.TextElideMode.ElideMiddle, 260)
-        rot_meta = QLabel(f"{curto}   ·   {n_assets} assets")
+        rot_meta = QLabel(self.tr("%1   ·   %2 assets").arg(curto).arg(n_assets))
         rot_meta.setObjectName("libMeta")
         textos.addWidget(rot_meta)
 
@@ -141,12 +141,12 @@ class LibrarySwitcher(QToolButton):
                 self.setText(lib["name"])
                 found_active = True
         if not found_active:
-            self.setText("Sem biblioteca")
+            self.setText(self.tr("Sem biblioteca"))
         self._menu.addSeparator()
         # Continua `QAction` normal de propósito: é a única entrada que o
         # teclado ainda alcança (um `QWidgetAction` sai da navegação por
         # setas), e é a ação destrutiva-por-engano menos provável.
-        adicionar = QAction("Adicionar biblioteca…", self._menu)
+        adicionar = QAction(self.tr("Adicionar biblioteca…"), self._menu)
         adicionar.triggered.connect(lambda: self._adicionar(conn))
         self._menu.addAction(adicionar)
 
@@ -156,7 +156,7 @@ class LibrarySwitcher(QToolButton):
 
     def _adicionar(self, conn: sqlite3.Connection) -> None:
         escolhido = QFileDialog.getExistingDirectory(
-            self, "Adicionar biblioteca", str(Path.home()))
+            self, self.tr("Adicionar biblioteca"), str(Path.home()))
         if not escolhido:
             return
         libraries_repo.get_or_create(conn, Path(escolhido))

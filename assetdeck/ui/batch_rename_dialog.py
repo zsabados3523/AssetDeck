@@ -34,37 +34,39 @@ class BatchRenameDialog(QDialog):
         self._asset_ids = asset_ids
         self._plano: list[batch_rename.RenamePlanItem] = []
         self._conflitos: dict[str, str] = {}
-        self.setWindowTitle(f"Renomear em lote — {len(asset_ids)} asset(s)")
+        self.setWindowTitle(self.tr("Renomear em lote — %1 asset(s)").arg(len(asset_ids)))
         self.resize(700, 460)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(10)
         dialog_chrome.add_heading(
-            layout, "Renomear arquivos em lote",
-            "Confira a prévia: nada será alterado até você confirmar.")
+            layout, self.tr("Renomear arquivos em lote"),
+            self.tr("Confira a prévia: nada será alterado até você confirmar."))
 
         campos = QHBoxLayout()
         self.busca_edit = QLineEdit()
-        self.busca_edit.setPlaceholderText("Buscar no nome do arquivo…")
+        self.busca_edit.setPlaceholderText(self.tr("Buscar no nome do arquivo…"))
         self.substitui_edit = QLineEdit()
-        self.substitui_edit.setPlaceholderText("Substituir por… (vazio remove)")
-        campos.addWidget(QLabel("Buscar:"))
+        self.substitui_edit.setPlaceholderText(self.tr("Substituir por… (vazio remove)"))
+        campos.addWidget(QLabel(self.tr("Buscar:")))
         campos.addWidget(self.busca_edit)
-        campos.addWidget(QLabel("Substituir por:"))
+        campos.addWidget(QLabel(self.tr("Substituir por:")))
         campos.addWidget(self.substitui_edit)
         self.busca_edit.textChanged.connect(self._atualizar_previa)
         self.substitui_edit.textChanged.connect(self._atualizar_previa)
 
         self.info_label = QLabel(
-            "Digite o texto a buscar no nome dos arquivos. Nenhum arquivo é "
-            "tocado até você clicar em 'Renomear'."
+            self.tr(
+                "Digite o texto a buscar no nome dos arquivos. Nenhum arquivo é "
+                "tocado até você clicar em 'Renomear'."
+            )
         )
         self.info_label.setWordWrap(True)
 
         self.table = QTableWidget(0, 2)
         self.table.setObjectName("cardFlat")  # borda/cantos — sem isto a
         # tabela fica "flutuando" sem moldura sobre o fundo flat do diálogo
-        self.table.setHorizontalHeaderLabels(["Nome atual", "Nome novo"])
+        self.table.setHorizontalHeaderLabels([self.tr("Nome atual"), self.tr("Nome novo")])
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         self.table.verticalHeader().setVisible(False)
@@ -72,7 +74,7 @@ class BatchRenameDialog(QDialog):
 
         self.botoes = QDialogButtonBox()
         self.renomear_btn = self.botoes.addButton(
-            "Renomear", QDialogButtonBox.ButtonRole.AcceptRole
+            self.tr("Renomear"), QDialogButtonBox.ButtonRole.AcceptRole
         )
         self.botoes.addButton(QDialogButtonBox.StandardButton.Cancel)
         self.renomear_btn.clicked.connect(self.accept)
@@ -113,24 +115,30 @@ class BatchRenameDialog(QDialog):
 
         if not busca:
             self.info_label.setText(
-                "Digite o texto a buscar no nome dos arquivos. Nenhum arquivo é "
-                "tocado até você clicar em 'Renomear'."
+                self.tr(
+                    "Digite o texto a buscar no nome dos arquivos. Nenhum arquivo é "
+                    "tocado até você clicar em 'Renomear'."
+                )
             )
         elif not self._plano:
-            self.info_label.setText("Nenhum arquivo bate com essa busca.")
+            self.info_label.setText(self.tr("Nenhum arquivo bate com essa busca."))
         elif self._conflitos:
             self.info_label.setText(
-                f"⚠ {len(self._conflitos)} conflito(s) — ajuste a busca/substituição "
-                "antes de renomear (destacado em vermelho)."
+                self.tr(
+                    "⚠ %1 conflito(s) — ajuste a busca/substituição "
+                    "antes de renomear (destacado em vermelho)."
+                ).arg(len(self._conflitos))
             )
         else:
             self.info_label.setText(
-                f"{len(self._plano)} arquivo(s) serão renomeados. Nada é tocado "
-                "até você confirmar."
+                self.tr(
+                    "%1 arquivo(s) serão renomeados. Nada é tocado "
+                    "até você confirmar."
+                ).arg(len(self._plano))
             )
 
         self.renomear_btn.setEnabled(bool(self._plano) and not self._conflitos)
-        self.renomear_btn.setText(f"Renomear {len(self._plano)} arquivo(s)")
+        self.renomear_btn.setText(self.tr("Renomear %1 arquivo(s)").arg(len(self._plano)))
 
     def get_plan(self) -> list[batch_rename.RenamePlanItem]:
         return self._plano

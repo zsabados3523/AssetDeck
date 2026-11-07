@@ -31,7 +31,7 @@ class DuplicatesDialog(QDialog):
     def __init__(self, grupos: list[list[dict]], parent=None) -> None:
         super().__init__(parent)
         self._linhas: list[tuple[int, dict]] = []  # (asset_id, membro) por linha marcável
-        self.setWindowTitle("Duplicados por conteúdo visual")
+        self.setWindowTitle(self.tr("Duplicados por conteúdo visual"))
         self.resize(720, 460)
 
         layout = QVBoxLayout(self)
@@ -39,14 +39,16 @@ class DuplicatesDialog(QDialog):
         layout.setSpacing(10)
         total_itens = sum(len(g) for g in grupos)
         dialog_chrome.add_heading(
-            layout, "Revisar duplicados",
-            f"{len(grupos)} grupo(s), {total_itens} asset(s). Marcado = fica oculto "
-            "da grade (reversível em 'Mostrar ocultos'); nada é apagado do disco. "
-            "Por padrão, mantém visível o de maior resolução.")
+            layout, self.tr("Revisar duplicados"),
+            self.tr(
+                "%1 grupo(s), %2 asset(s). Marcado = fica oculto "
+                "da grade (reversível em 'Mostrar ocultos'); nada é apagado do disco. "
+                "Por padrão, mantém visível o de maior resolução."
+            ).arg(len(grupos)).arg(total_itens))
 
         self.table = QTableWidget(total_itens + len(grupos), 3)
         self.table.setObjectName("cardFlat")
-        self.table.setHorizontalHeaderLabels(["Asset", "Resolução", "Caminho"])
+        self.table.setHorizontalHeaderLabels([self.tr("Asset"), self.tr("Resolução"), self.tr("Caminho")])
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
         self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
         self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
@@ -56,7 +58,7 @@ class DuplicatesDialog(QDialog):
         linha = 0
         for grupo in grupos:
             maior = max(grupo, key=lambda m: (m["width"] or 0) * (m["height"] or 0))
-            cabecalho = QTableWidgetItem(f"— grupo ({len(grupo)} iguais) —")
+            cabecalho = QTableWidgetItem(self.tr("— grupo (%1 iguais) —").arg(len(grupo)))
             cabecalho.setFlags(Qt.ItemFlag.NoItemFlags)
             self.table.setItem(linha, 0, cabecalho)
             self.table.setSpan(linha, 0, 1, 3)
@@ -79,7 +81,7 @@ class DuplicatesDialog(QDialog):
         layout.addWidget(self.table)
 
         botoes = QDialogButtonBox()
-        ocultar = botoes.addButton("Ocultar selecionados", QDialogButtonBox.ButtonRole.AcceptRole)
+        ocultar = botoes.addButton(self.tr("Ocultar selecionados"), QDialogButtonBox.ButtonRole.AcceptRole)
         botoes.addButton(QDialogButtonBox.StandardButton.Cancel)
         ocultar.clicked.connect(self.accept)
         botoes.rejected.connect(self.reject)
