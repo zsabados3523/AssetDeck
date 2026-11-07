@@ -77,7 +77,7 @@ class SectionHeader(QWidget):
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.setAccessibleName(titulo)
-        self.setAccessibleDescription("Expandir ou recolher seção")
+        self.setAccessibleDescription(self.tr("Expandir ou recolher seção"))
         self._recolhida = False
 
         layout = QHBoxLayout(self)
@@ -275,7 +275,7 @@ class SidebarRail(QWidget):
         self.settings_btn = QToolButton()
         self.settings_btn.setObjectName("railButton")
         self.settings_btn.setIconSize(QSize(TAM_ICONE_RAIL, TAM_ICONE_RAIL))
-        self.settings_btn.setToolTip("Configurações")
+        self.settings_btn.setToolTip(self.tr("Configurações"))
         self.settings_btn.clicked.connect(self.settings_clicked.emit)
         layout.addWidget(self.settings_btn, alignment=Qt.AlignmentFlag.AlignHCenter)
 
@@ -316,10 +316,12 @@ class Sidebar(QWidget):
     """Navegação compacta com as seções existentes da biblioteca."""
 
     def __init__(self, secoes: list[tuple[str, str, str, QWidget]], parent=None,
-                 *, library_name: str = "Biblioteca",
+                 *, library_name: str | None = None,
                  library_path: str | None = None) -> None:
         """`secoes`: (chave, título, nome do ícone, view)."""
         super().__init__(parent)
+        if library_name is None:
+            library_name = self.tr("Biblioteca")
 
         # Os botões de visibilidade continuam como API interna para
         # Configurações e compatibilidade, mas o rail vertical saiu da tela:
@@ -356,7 +358,7 @@ class Sidebar(QWidget):
         self._divider.setObjectName("sidebarRule")
         self._divider.setFixedHeight(1)
 
-        self.rail.settings_btn.setText("Configurações")
+        self.rail.settings_btn.setText(self.tr("Configurações"))
         self.rail.settings_btn.setObjectName("sidebarSettings")
         self.rail.settings_btn.setToolButtonStyle(
             Qt.ToolButtonStyle.ToolButtonTextBesideIcon

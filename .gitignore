@@ -32,3 +32,4 @@ TODO.md
 .codex/
 graphify-out/
 installer-out/
+.coverage

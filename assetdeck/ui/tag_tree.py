@@ -57,7 +57,7 @@ class TagTree(QTreeWidget):
         expandidas = self._tags_expandidas()
         self.blockSignals(True)
         self.clear()
-        raiz = QTreeWidgetItem(["(sem filtro de tag)"])
+        raiz = QTreeWidgetItem([self.tr("(sem filtro de tag)")])
         raiz.setData(0, _TAG_ROLE, None)
         self.addTopLevelItem(raiz)
 
@@ -162,35 +162,35 @@ class TagTree(QTreeWidget):
         item = self.itemAt(pos)
         tag_id = item.data(0, _TAG_ROLE) if item else None
         menu = QMenu(self)
-        menu.addAction("Nova tag raiz…", lambda: self._nova(None))
+        menu.addAction(self.tr("Nova tag raiz…"), lambda: self._nova(None))
         # Não depende de ter clicado numa tag, então fica no nível sempre
         # visível do menu.
-        menu.addAction("Aplicar template…", self._template)
+        menu.addAction(self.tr("Aplicar template…"), self._template)
         if tag_id is not None:
-            menu.addAction("Nova subtag…", lambda: self._nova(tag_id))
+            menu.addAction(self.tr("Nova subtag…"), lambda: self._nova(tag_id))
             menu.addSeparator()
-            menu.addAction("Renomear…", lambda: self._renomear(tag_id, item.text(0)))
-            menu.addAction("Cor…", lambda: self._cor(tag_id))
-            menu.addAction("Ícone…", lambda: self._icone(tag_id))
-            menu.addAction("Aliases (PT/EN)…", lambda: self._aliases(tag_id))
+            menu.addAction(self.tr("Renomear…"), lambda: self._renomear(tag_id, item.text(0)))
+            menu.addAction(self.tr("Cor…"), lambda: self._cor(tag_id))
+            menu.addAction(self.tr("Ícone…"), lambda: self._icone(tag_id))
+            menu.addAction(self.tr("Aliases (PT/EN)…"), lambda: self._aliases(tag_id))
             menu.addSeparator()
-            menu.addAction("Excluir (com subtags)", lambda: self._excluir(tag_id, item.text(0)))
+            menu.addAction(self.tr("Excluir (com subtags)"), lambda: self._excluir(tag_id, item.text(0)))
         menu.exec(self.mapToGlobal(pos))
 
     def _nova(self, parent_id: int | None) -> None:
-        nome, ok = QInputDialog.getText(self, "Nova tag", "Nome da tag:")
+        nome, ok = QInputDialog.getText(self, self.tr("Nova tag"), self.tr("Nome da tag:"))
         if ok and nome.strip():
             tags_repo.create(self._conn, nome, parent_id=parent_id)
             self.structure_changed.emit()
 
     def _renomear(self, tag_id: int, atual: str) -> None:
-        nome, ok = QInputDialog.getText(self, "Renomear tag", "Novo nome:", text=atual)
+        nome, ok = QInputDialog.getText(self, self.tr("Renomear tag"), self.tr("Novo nome:"), text=atual)
         if ok and nome.strip():
             tags_repo.rename(self._conn, tag_id, nome)
             self.structure_changed.emit()
 
     def _cor(self, tag_id: int) -> None:
-        cor = QColorDialog.getColor(parent=self, title="Cor da tag")
+        cor = QColorDialog.getColor(parent=self, title=self.tr("Cor da tag"))
         if cor.isValid():
             tags_repo.set_color(self._conn, tag_id, cor.name())
             self.structure_changed.emit()
@@ -219,9 +219,11 @@ class TagTree(QTreeWidget):
 
     def _excluir(self, tag_id: int, nome: str) -> None:
         resp = QMessageBox.question(
-            self, "Excluir tag",
-            f"Excluir a tag '{nome}' e todas as subtags?\n"
-            "(Os assets continuam intactos; é soft delete, como tudo aqui.)",
+            self, self.tr("Excluir tag"),
+            self.tr(
+                "Excluir a tag '%1' e todas as subtags?\n"
+                "(Os assets continuam intactos; é soft delete, como tudo aqui.)"
+            ).arg(nome),
         )
         if resp == QMessageBox.StandardButton.Yes:
             tags_repo.soft_delete(self._conn, tag_id)

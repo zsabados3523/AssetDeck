@@ -24,6 +24,8 @@ DEFAULTS = {
     # usa fundo branco; quem já tem um config.json conserva sua preferência,
     # este padrão vale só pra primeira execução.
     "theme_mode": "claro",
+    # Idioma da interface: "pt_BR" | "en" (vazio = idioma do sistema, fallback pt-BR).
+    "language": "",
     # Desativa animações transitórias dos cards e do ajuste do grid; as ações
     # continuam funcionando sem movimento.
     "reduce_motion": False,

@@ -15,7 +15,7 @@ import logging
 import sqlite3
 from pathlib import Path
 
-from PySide6.QtCore import QObject, QRunnable, Qt, QThreadPool, Signal
+from PySide6.QtCore import QCoreApplication, QObject, QRunnable, Qt, QThreadPool, Signal
 from PySide6.QtGui import QImage, QPixmap
 from PySide6.QtWidgets import (
     QButtonGroup,
@@ -70,28 +70,28 @@ class PreviewPopup(OverlayPanel):
         self.title_label.setObjectName("pageTitle")
         self.title_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         self.title_label.setWordWrap(True)
-        self.title_label.setAccessibleName("Nome do asset visualizado")
+        self.title_label.setAccessibleName(self.tr("Nome do asset visualizado"))
 
         self.subtitle_label = QLabel()
         self.subtitle_label.setObjectName("previewSubtitle")
         self.close_button = QToolButton()
         self.close_button.setObjectName("ghost")
-        self.close_button.setText("Fechar")
-        self.close_button.setAccessibleName("Fechar preview")
+        self.close_button.setText(self.tr("Fechar"))
+        self.close_button.setAccessibleName(self.tr("Fechar preview"))
         self.close_button.clicked.connect(self.close_overlay)
 
         self.image_label = QLabel()
         self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.image_label.setAccessibleName("Preview ampliado do asset")
+        self.image_label.setAccessibleName(self.tr("Preview ampliado do asset"))
         self.info_label = QLabel()
         self.info_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         self.info_label.setObjectName("previewInfo")
-        self.info_label.setAccessibleName("Estado do preview")
+        self.info_label.setAccessibleName(self.tr("Estado do preview"))
 
         self.format_value = QLabel("—")
         self.resolution_value = QLabel("—")
         self.files_value = QLabel("—")
-        self.maps_heading = QLabel("MAPAS")
+        self.maps_heading = QLabel(self.tr("MAPAS"))
         self.maps_heading.setObjectName("previewSectionTitle")
         self.maps_count = QLabel()
         self.maps_count.setObjectName("previewMapCount")
@@ -100,9 +100,9 @@ class PreviewPopup(OverlayPanel):
         # não precisa dividir o espaço do palco com uma fileira de pastilhas.
         self.maps_bar = QWidget()
         self.maps_bar.setObjectName("previewMaps")
-        self.maps_bar.setAccessibleName("Mapas do material")
+        self.maps_bar.setAccessibleName(self.tr("Mapas do material"))
         self.maps_bar.setAccessibleDescription(
-            "Escolha o material ou um mapa PBR para visualizar")
+            self.tr("Escolha o material ou um mapa PBR para visualizar"))
         self.maps_scroll = QScrollArea()
         self.maps_scroll.setObjectName("previewMapsScroll")
         self.maps_scroll.setWidgetResizable(True)
@@ -110,7 +110,7 @@ class PreviewPopup(OverlayPanel):
         self.maps_scroll.setHorizontalScrollBarPolicy(
             Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.maps_scroll.setWidget(self.maps_bar)
-        self.maps_scroll.setAccessibleName("Lista rolável de mapas do material")
+        self.maps_scroll.setAccessibleName(self.tr("Lista rolável de mapas do material"))
         self._maps_layout = QVBoxLayout(self.maps_bar)
         self._maps_layout.setContentsMargins(0, 0, 0, 0)
         self._maps_layout.setSpacing(5)
@@ -147,15 +147,15 @@ class PreviewPopup(OverlayPanel):
         stage_divider.setFrameShape(QFrame.Shape.VLine)
         stage_divider.setFixedWidth(1)
 
-        self.properties_heading = QLabel("PROPRIEDADES")
+        self.properties_heading = QLabel(self.tr("PROPRIEDADES"))
         self.properties_heading.setObjectName("previewSectionTitle")
         property_layout = QVBoxLayout()
         property_layout.setContentsMargins(0, 0, 0, 0)
         property_layout.setSpacing(4)
         property_layout.addWidget(self.properties_heading)
-        property_layout.addWidget(self._meta_row("Formato", self.format_value))
-        property_layout.addWidget(self._meta_row("Resolução", self.resolution_value))
-        property_layout.addWidget(self._meta_row("Mapas", self.files_value))
+        property_layout.addWidget(self._meta_row(self.tr("Formato"), self.format_value))
+        property_layout.addWidget(self._meta_row(self.tr("Resolução"), self.resolution_value))
+        property_layout.addWidget(self._meta_row(self.tr("Mapas"), self.files_value))
         property_layout.addSpacing(8)
         property_layout.addWidget(self.maps_scroll, 1)
         property_layout.addStretch(1)
@@ -227,7 +227,7 @@ class PreviewPopup(OverlayPanel):
         self._material_preview_path = material_preview
         self._material_thumb = thumb
         self._material_failed = material_failed
-        self.title_label.setText(self._asset.get("name", "Asset"))
+        self.title_label.setText(self._asset.get("name", self.tr("Asset")))
         self.subtitle_label.setText(_asset_kind_label(self._asset.get("asset_type")))
         self.format_value.setText(
             Path(self._asset.get("rel_path", "")).suffix.upper().lstrip(".") or "—")
@@ -241,7 +241,7 @@ class PreviewPopup(OverlayPanel):
         else:
             self._source_pixmap = None
             self.image_label.setPixmap(QPixmap())
-            self.image_label.setText("Sem preview")
+            self.image_label.setText(self.tr("Sem preview"))
 
         self._build_maps_bar(maps, material_preview)
         self.files_value.setText(str(len(maps or [])))
@@ -278,9 +278,9 @@ class PreviewPopup(OverlayPanel):
             return
         self.maps_count.setText(str(len(maps)))
         if material_preview is not None:
-            btn = QPushButton("Material")
+            btn = QPushButton(self.tr("Material"))
             btn.setObjectName("previewMapOption")
-            btn.setAccessibleName("Preview do material PBR")
+            btn.setAccessibleName(self.tr("Preview do material PBR"))
             btn.setCheckable(True)
             btn.clicked.connect(self._on_material_clicked)
             self._maps_group.addButton(btn)
@@ -294,7 +294,7 @@ class PreviewPopup(OverlayPanel):
             label = _map_role_label(m["map_role"])
             btn = QPushButton(label)
             btn.setObjectName("previewMapOption")
-            btn.setAccessibleName(f"Visualizar mapa {label}")
+            btn.setAccessibleName(self.tr("Visualizar mapa %1").arg(label))
             btn.setCheckable(True)
             rel = m["rel_path"]
             btn.setToolTip(rel)
@@ -322,8 +322,8 @@ class PreviewPopup(OverlayPanel):
 
     def _material_status_text(self) -> str:
         if self._material_failed:
-            return "Não consegui gerar o preview do material — escolha um mapa"
-        return "Gerando preview do material…"
+            return self.tr("Não consegui gerar o preview do material — escolha um mapa")
+        return self.tr("Gerando preview do material…")
 
     def material_preview_ready(self, asset_id: int, path: str) -> None:
         """Atualiza o popup aberto só se este ainda mostra o mesmo material."""
@@ -344,14 +344,13 @@ class PreviewPopup(OverlayPanel):
     def _load(self, path: Path) -> None:
         self._loading_for = path
         if can_preview(path) and path.exists():
-            self.info_label.setText("Carregando resolução completa…")
+            self.info_label.setText(self.tr("Carregando resolução completa…"))
             # Pool interativo, não o global: a prévia não pode ficar atrás
             # da fila de miniaturas (ver `ui/pools.py`).
             pools.interativo().start(_LoadJob(self._sig, path))
         else:
             self.info_label.setText(
-                "Preview em resolução completa disponível só para imagens "
-                "e HDR/EXR por enquanto — Esc fecha"
+                self.tr("Preview em resolução completa disponível só para imagens e HDR/EXR por enquanto — Esc fecha")
             )
 
     # ---- resultado do carregamento ----
@@ -361,12 +360,12 @@ class PreviewPopup(OverlayPanel):
             return
         pix = QPixmap.fromImage(qimg)
         self._set_image(pix)
-        self.info_label.setText(f"{w} × {h} px — Esc fecha")
+        self.info_label.setText(self.tr("%1 × %2 px — Esc fecha").arg(w).arg(h))
 
     def _on_failed(self, path: str, message: str) -> None:
         if self._loading_for != Path(path) or not self.isVisible():
             return
-        self.info_label.setText(f"Não consegui carregar a imagem completa: {message}")
+        self.info_label.setText(self.tr("Não consegui carregar a imagem completa: %1").arg(message))
 
     def _fit(self, pix: QPixmap) -> QPixmap:
         """Encaixa no palco atual sem ampliar além do tamanho original."""
@@ -406,25 +405,27 @@ class PreviewPopup(OverlayPanel):
 
 def _map_role_label(role: str) -> str:
     """Nome visível de cada mapa, sem expor os identificadores do indexador."""
-    return {
-        "basecolor": "Base Color",
-        "normal": "Normal",
-        "roughness": "Roughness",
-        "height": "Height",
-        "ao": "Oclusão",
-        "metallic": "Metallic",
-        "specular": "Specular",
-        "opacity": "Opacity",
-        "emission": "Emission",
-        "none": "Arquivo",
-    }.get(role, role.replace("_", " ").title())
+    labels = {
+        "basecolor": QCoreApplication.translate("PreviewPopup", "Base Color"),
+        "normal": QCoreApplication.translate("PreviewPopup", "Normal"),
+        "roughness": QCoreApplication.translate("PreviewPopup", "Roughness"),
+        "height": QCoreApplication.translate("PreviewPopup", "Height"),
+        "ao": QCoreApplication.translate("PreviewPopup", "Oclusão"),
+        "metallic": QCoreApplication.translate("PreviewPopup", "Metallic"),
+        "specular": QCoreApplication.translate("PreviewPopup", "Specular"),
+        "opacity": QCoreApplication.translate("PreviewPopup", "Opacity"),
+        "emission": QCoreApplication.translate("PreviewPopup", "Emission"),
+        "none": QCoreApplication.translate("PreviewPopup", "Arquivo"),
+    }
+    return labels.get(role, role.replace("_", " ").title())
 
 
 def _asset_kind_label(asset_type: str | None) -> str:
-    return {
-        "pbr_set": "Material PBR",
-        "model": "Modelo 3D",
-        "hdri": "HDRI",
-        "texture": "Textura",
-        "cutout": "Recorte",
-    }.get(asset_type or "", "Asset")
+    labels = {
+        "pbr_set": QCoreApplication.translate("PreviewPopup", "Material PBR"),
+        "model": QCoreApplication.translate("PreviewPopup", "Modelo 3D"),
+        "hdri": QCoreApplication.translate("PreviewPopup", "HDRI"),
+        "texture": QCoreApplication.translate("PreviewPopup", "Textura"),
+        "cutout": QCoreApplication.translate("PreviewPopup", "Recorte"),
+    }
+    return labels.get(asset_type or "", QCoreApplication.translate("PreviewPopup", "Asset"))
