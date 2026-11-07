@@ -65,6 +65,17 @@ QT_QPA_PLATFORM=offscreen pytest -q
 
 Todos os testes devem passar.
 
+### Cobertura
+
+O CI imprime um resumo de cobertura do pacote `assetdeck` (ainda sem limite mínimo). Para ver localmente:
+
+```bash
+pip install pytest-cov
+QT_QPA_PLATFORM=offscreen pytest -q --cov=assetdeck --cov-report=term
+```
+
+Linha de base (2026-11): **81%** no total (9753 instruções, 1063 testes).
+
 ## Diretrizes e regras de desenvolvimento
 
 - **Uma mudança por PR:** mantenha Pull Requests pequenos, atômicos e focados em um único objetivo.
