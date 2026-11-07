@@ -44,11 +44,11 @@ class QuickTagDialog(QDialog):
         super().__init__(parent)
         self._conn = conn
         self._asset_ids = asset_ids
-        self.setWindowTitle(f"Tags — {len(asset_ids)} asset(s)  (Ctrl+T)")
+        self.setWindowTitle(self.tr("Tags — %1 asset(s)  (Ctrl+T)").arg(len(asset_ids)))
         self.resize(360, 480)
 
         self.search = QLineEdit()
-        self.search.setPlaceholderText("Filtrar tags…")
+        self.search.setPlaceholderText(self.tr("Filtrar tags…"))
         self.search.textChanged.connect(self._filter)
 
         self.tree = QTreeWidget()
@@ -88,7 +88,7 @@ class QuickTagDialog(QDialog):
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(10)
         dialog_chrome.add_heading(
-            layout, "Tags", f"{len(asset_ids)} assets selecionados"
+            layout, self.tr("Tags"), self.tr("%1 assets selecionados").arg(len(asset_ids))
         )
         layout.addWidget(self.search)
         layout.addWidget(self.tree)
@@ -141,20 +141,20 @@ class AliasDialog(QDialog):
         self._conn = conn
         self._tag_id = tag_id
         self._mudou = False
-        self.setWindowTitle(f"Aliases de: {tags_repo.tag_path(conn, tag_id)}")
+        self.setWindowTitle(self.tr("Aliases de: %1").arg(tags_repo.tag_path(conn, tag_id)))
         self.resize(340, 360)
 
         self.lista = QListWidget()
         self.lista.setObjectName("cardFlat")
         self.campo = QLineEdit()
-        self.campo.setPlaceholderText("novo alias (ex.: madeira)")
+        self.campo.setPlaceholderText(self.tr("novo alias (ex.: madeira)"))
         self.lang = QComboBox()
-        self.lang.addItem("(sem idioma)", None)
+        self.lang.addItem(self.tr("(sem idioma)"), None)
         self.lang.addItem("pt", "pt")
         self.lang.addItem("en", "en")
-        add = QPushButton("Adicionar")
+        add = QPushButton(self.tr("Adicionar"))
         add.clicked.connect(self._add)
-        remover = QPushButton("Remover selecionado")
+        remover = QPushButton(self.tr("Remover selecionado"))
         remover.clicked.connect(self._remove)
         fechar = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
         fechar.rejected.connect(self.reject)
@@ -169,8 +169,8 @@ class AliasDialog(QDialog):
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(10)
         dialog_chrome.add_heading(
-            layout, "Aliases",
-            f"Sinônimos de {tags_repo.tag_path(conn, tag_id)}.",
+            layout, self.tr("Aliases"),
+            self.tr("Sinônimos de %1.").arg(tags_repo.tag_path(conn, tag_id)),
         )
         layout.addWidget(self.lista)
         layout.addLayout(linha)
@@ -220,7 +220,7 @@ class TagIconDialog(QDialog):
         self._cor = row["color"] if row else None
         self.escolhido = row["icon"] if row else None
 
-        self.setWindowTitle(f"Ícone de: {tags_repo.tag_path(conn, tag_id)}")
+        self.setWindowTitle(self.tr("Ícone de: %1").arg(tags_repo.tag_path(conn, tag_id)))
 
         self._grupo = QButtonGroup(self)
         self._grupo.setExclusive(True)
@@ -231,11 +231,11 @@ class TagIconDialog(QDialog):
         layout.setSpacing(10)
         self.resize(460, 620)
         dialog_chrome.add_heading(
-            layout, "Ícone da tag", tags_repo.tag_path(conn, tag_id)
+            layout, self.tr("Ícone da tag"), tags_repo.tag_path(conn, tag_id)
         )
 
         for secao in tag_icons.SECOES:
-            titulo = QLabel(secao.titulo)
+            titulo = QLabel(self.tr(secao.titulo))
             titulo.setObjectName("sectionTitle")
             layout.addWidget(titulo)
 
@@ -246,7 +246,7 @@ class TagIconDialog(QDialog):
                 b.setCheckable(True)
                 b.setIcon(QIcon(tag_icons.pixmap_for(ti.key, self._cor, 24)))
                 b.setIconSize(QSize(24, 24))
-                b.setToolTip(ti.label)
+                b.setToolTip(self.tr(ti.label))
                 b.setChecked(ti.key == self.escolhido)
                 b.clicked.connect(lambda _c=False, k=ti.key: self._escolher(k))
                 self._grupo.addButton(b)
@@ -254,7 +254,7 @@ class TagIconDialog(QDialog):
                 grade.addWidget(b, i // self.COLUNAS, i % self.COLUNAS)
             layout.addLayout(grade)
 
-        sem = QPushButton("Sem ícone (só a cor)")
+        sem = QPushButton(self.tr("Sem ícone (só a cor)"))
         sem.clicked.connect(self._limpar)
         layout.addWidget(sem)
 

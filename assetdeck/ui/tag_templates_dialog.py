@@ -44,14 +44,14 @@ class TagTemplateDialog(QDialog):
 
         self.template_combo = QComboBox()
         for chave, tpl in tag_templates.TEMPLATES.items():
-            self.template_combo.addItem(tpl.rotulo, chave)
+            self.template_combo.addItem(self.tr(tpl.rotulo), chave)
         self.template_combo.currentIndexChanged.connect(self._trocar_template)
 
         self._grupo = QButtonGroup(self)
         self._grupo.setExclusive(True)
         linha = QHBoxLayout()
         for chave, rotulo, _prof in tag_templates.NIVEIS:
-            b = QPushButton(rotulo)
+            b = QPushButton(self.tr(rotulo))
             b.setCheckable(True)
             b.setChecked(chave == self.nivel)
             b.clicked.connect(lambda _c=False, k=chave: self._trocar_nivel(k))
@@ -66,7 +66,7 @@ class TagTemplateDialog(QDialog):
 
         self.botoes = QDialogButtonBox(QDialogButtonBox.StandardButton.Cancel)
         self.aplicar_btn = self.botoes.addButton(
-            "Aplicar", QDialogButtonBox.ButtonRole.AcceptRole)
+            self.tr("Aplicar"), QDialogButtonBox.ButtonRole.AcceptRole)
         self.aplicar_btn.clicked.connect(self._aplicar)
         self.botoes.rejected.connect(self.reject)
         dialog_chrome.prepare_actions(self.botoes)
@@ -75,9 +75,11 @@ class TagTemplateDialog(QDialog):
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(10)
         dialog_chrome.add_heading(
-            layout, "Aplicar template de tags",
-            "Cria as tags que faltam. As que você já tem ficam intactas, "
-            "incluindo cor, ícone e assets marcados.")
+            layout, self.tr("Aplicar template de tags"),
+            self.tr(
+                "Cria as tags que faltam. As que você já tem ficam intactas, "
+                "incluindo cor, ícone e assets marcados."
+            ))
         layout.addWidget(self.template_combo)
         layout.addLayout(linha)
         layout.addWidget(self.arvore, stretch=1)
@@ -89,7 +91,7 @@ class TagTemplateDialog(QDialog):
 
     def _atualizar_titulo(self) -> None:
         rotulo = tag_templates.TEMPLATES[self.template].rotulo
-        self.setWindowTitle(f"Aplicar template de tags — {rotulo}")
+        self.setWindowTitle(self.tr("Aplicar template de tags — %1").arg(self.tr(rotulo)))
 
     def _trocar_template(self, _indice: int) -> None:
         self.template = self.template_combo.currentData()
@@ -108,7 +110,7 @@ class TagTemplateDialog(QDialog):
         for no, prof, cor, existe in tag_templates.previa(
             self._conn, self.template, self.nivel
         ):
-            rotulo = no.nome + ("   (já existe)" if existe else "")
+            rotulo = no.nome + (self.tr("   (já existe)") if existe else "")
             item = QTreeWidgetItem([rotulo])
             item.setIcon(0, QIcon(tag_icons.pixmap_for(no.icone, cor)))
             if existe:
@@ -128,7 +130,7 @@ class TagTemplateDialog(QDialog):
             pilha.append(item)
 
         self.arvore.expandAll()
-        self.resumo.setText(f"{novas} tags novas · {existentes} já existem")
+        self.resumo.setText(self.tr("%1 tags novas · %2 já existem").arg(novas).arg(existentes))
         self.aplicar_btn.setEnabled(novas > 0)
 
     def _aplicar(self) -> None:

@@ -46,7 +46,7 @@ class CollectionTree(QTreeWidget):
         self._conn = conn
         self.blockSignals(True)
         self.clear()
-        raiz = QTreeWidgetItem(["(sem filtro de coleção)"])
+        raiz = QTreeWidgetItem([self.tr("(sem filtro de coleção)")])
         raiz.setData(0, _COLLECTION_ROLE, None)
         self.addTopLevelItem(raiz)
 
@@ -115,33 +115,35 @@ class CollectionTree(QTreeWidget):
         item = self.itemAt(pos)
         collection_id = item.data(0, _COLLECTION_ROLE) if item else None
         menu = QMenu(self)
-        menu.addAction("Nova coleção raiz…", lambda: self._nova(None))
+        menu.addAction(self.tr("Nova coleção raiz…"), lambda: self._nova(None))
         if collection_id is not None:
-            menu.addAction("Nova subcoleção…", lambda: self._nova(collection_id))
+            menu.addAction(self.tr("Nova subcoleção…"), lambda: self._nova(collection_id))
             menu.addSeparator()
-            menu.addAction("Renomear…", lambda: self._renomear(collection_id, item.text(0)))
+            menu.addAction(self.tr("Renomear…"), lambda: self._renomear(collection_id, item.text(0)))
             menu.addSeparator()
-            menu.addAction("Excluir (com subcoleções)",
+            menu.addAction(self.tr("Excluir (com subcoleções)"),
                             lambda: self._excluir(collection_id, item.text(0)))
         menu.exec(self.mapToGlobal(pos))
 
     def _nova(self, parent_id: int | None) -> None:
-        nome, ok = QInputDialog.getText(self, "Nova coleção", "Nome da coleção:")
+        nome, ok = QInputDialog.getText(self, self.tr("Nova coleção"), self.tr("Nome da coleção:"))
         if ok and nome.strip():
             collections_repo.create(self._conn, nome, parent_id=parent_id)
             self.structure_changed.emit()
 
     def _renomear(self, collection_id: int, atual: str) -> None:
-        nome, ok = QInputDialog.getText(self, "Renomear coleção", "Novo nome:", text=atual)
+        nome, ok = QInputDialog.getText(self, self.tr("Renomear coleção"), self.tr("Novo nome:"), text=atual)
         if ok and nome.strip():
             collections_repo.rename(self._conn, collection_id, nome)
             self.structure_changed.emit()
 
     def _excluir(self, collection_id: int, nome: str) -> None:
         resp = QMessageBox.question(
-            self, "Excluir coleção",
-            f"Excluir a coleção '{nome}' e todas as subcoleções?\n"
-            "(Os assets continuam intactos; é soft delete, como tudo aqui.)",
+            self, self.tr("Excluir coleção"),
+            self.tr(
+                "Excluir a coleção '%1' e todas as subcoleções?\n"
+                "(Os assets continuam intactos; é soft delete, como tudo aqui.)"
+            ).arg(nome),
         )
         if resp == QMessageBox.StandardButton.Yes:
             collections_repo.soft_delete(self._conn, collection_id)

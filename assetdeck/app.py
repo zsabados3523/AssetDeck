@@ -86,9 +86,11 @@ def _run_theme_preview(args) -> int:
 
     from PySide6.QtWidgets import QApplication
 
+    from assetdeck import i18n
     from assetdeck.ui.theme_gallery import ThemeGallery
 
     app = QApplication(_sys.argv[:1])
+    i18n.install_translator(app)
     _set_app_icon(app)
     win = ThemeGallery()
     win.show()
@@ -109,6 +111,7 @@ def _confirmar_biblioteca(conn, cfg: dict, silencioso: bool) -> str:
 
     Devolve o caminho da biblioteca a usar nesta sessão.
     """
+    from PySide6.QtCore import QCoreApplication
     from PySide6.QtWidgets import QFileDialog, QMessageBox
 
     from assetdeck import library_root
@@ -133,13 +136,17 @@ def _confirmar_biblioteca(conn, cfg: dict, silencioso: bool) -> str:
 
     if res.moved:
         escolha = QMessageBox.question(
-            None, "A biblioteca mudou de lugar",
-            f"O AssetDeck procurava a biblioteca em:\n{configurado}\n\n"
-            f"Ela não está lá, mas eu encontrei em:\n{res.found}\n\n"
-            "Isso costuma acontecer quando o disco externo é montado num "
-            "caminho diferente do da última vez.\n\n"
-            "Quer que eu passe a usar o caminho novo? "
-            "(nada é movido nem renomeado no disco)",
+            None,
+            QCoreApplication.translate("App", "A biblioteca mudou de lugar"),
+            QCoreApplication.translate(
+                "App",
+                "O AssetDeck procurava a biblioteca em:\n%1\n\n"
+                "Ela não está lá, mas eu encontrei em:\n%2\n\n"
+                "Isso costuma acontecer quando o disco externo é montado num "
+                "caminho diferente do da última vez.\n\n"
+                "Quer que eu passe a usar o caminho novo? "
+                "(nada é movido nem renomeado no disco)",
+            ).arg(configurado).arg(res.found),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.Yes,
         )
@@ -149,16 +156,22 @@ def _confirmar_biblioteca(conn, cfg: dict, silencioso: bool) -> str:
         novo = res.found
     else:
         QMessageBox.warning(
-            None, "Biblioteca não encontrada",
-            f"O AssetDeck não achou a biblioteca em:\n{configurado}\n\n"
-            "Procurei também nos discos montados e não estava em nenhum.\n\n"
-            "Se o disco externo estiver desconectado, feche o app, conecte "
-            "e abra de novo. Se ela mudou de pasta, escolha a nova pasta na "
-            "próxima tela (ou cancele para abrir mesmo assim — a grade "
-            "aparece, mas nada que leia os arquivos vai funcionar).",
+            None,
+            QCoreApplication.translate("App", "Biblioteca não encontrada"),
+            QCoreApplication.translate(
+                "App",
+                "O AssetDeck não achou a biblioteca em:\n%1\n\n"
+                "Procurei também nos discos montados e não estava em nenhum.\n\n"
+                "Se o disco externo estiver desconectado, feche o app, conecte "
+                "e abra de novo. Se ela mudou de pasta, escolha a nova pasta na "
+                "próxima tela (ou cancele para abrir mesmo assim — a grade "
+                "aparece, mas nada que leia os arquivos vai funcionar).",
+            ).arg(configurado),
         )
         escolhido = QFileDialog.getExistingDirectory(
-            None, "Onde está a biblioteca?", str(Path.home()),
+            None,
+            QCoreApplication.translate("App", "Onde está a biblioteca?"),
+            str(Path.home()),
         )
         if not escolhido:
             log.warning("Usuário cancelou a escolha da biblioteca — abrindo com %s",
@@ -234,6 +247,10 @@ def run(argv: list[str]) -> int:
     QApplication.setAttribute(Qt.ApplicationAttribute.AA_ShareOpenGLContexts, True)
 
     app = QApplication(sys.argv[:1])
+
+    from assetdeck import i18n
+
+    i18n.install_translator(app, cfg.get("language"))
 
     from assetdeck.ui import theme
 

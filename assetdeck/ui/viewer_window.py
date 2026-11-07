@@ -133,10 +133,10 @@ class VisualizadorWindow(QDialog):
         # ---- cabeçalho ----
         self.titulo = QLabel("—")
         self.titulo.setObjectName("pageTitle")
-        self.titulo.setAccessibleName("Nome do asset visualizado")
+        self.titulo.setAccessibleName(self.tr("Nome do asset visualizado"))
         self.chip = QLabel()
         self.chip.setObjectName("chipMini")
-        self.chip.setAccessibleName("Formato do arquivo")
+        self.chip.setAccessibleName(self.tr("Formato do arquivo"))
         # Sem ✕ próprio (Fatia 94, Rafael: "tem o botão de fechar porém ainda
         # sim tem os botões de qualquer janela, então fica meio redundante").
         # Esta é uma janela normal do sistema: minimizar/maximizar/fechar já
@@ -150,11 +150,11 @@ class VisualizadorWindow(QDialog):
 
         # ---- controles (o que aparece depende da página) ----
         self.btn_ambiente = QToolButton()
-        self.btn_ambiente.setText("Ambiente")
-        self.btn_ambiente.setAccessibleName("Modo de iluminação: ambiente")
+        self.btn_ambiente.setText(self.tr("Ambiente"))
+        self.btn_ambiente.setAccessibleName(self.tr("Modo de iluminação: ambiente"))
         self.btn_esfera = QToolButton()
-        self.btn_esfera.setText("Esfera de reflexo")
-        self.btn_esfera.setAccessibleName("Modo de iluminação: esfera de reflexo")
+        self.btn_esfera.setText(self.tr("Esfera de reflexo"))
+        self.btn_esfera.setAccessibleName(self.tr("Modo de iluminação: esfera de reflexo"))
         self._modos = QButtonGroup(self)
         self._modos.setExclusive(True)
         for indice, botao in ((hdri_viewer.MODO_AMBIENTE, self.btn_ambiente),
@@ -167,11 +167,11 @@ class VisualizadorWindow(QDialog):
 
         self.btn_enquadrar = QToolButton()
         self.btn_enquadrar.setObjectName("pillMini")
-        self.btn_enquadrar.setText("Enquadrar")
+        self.btn_enquadrar.setText(self.tr("Enquadrar"))
         self.btn_enquadrar.setToolButtonStyle(
             Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
-        self.btn_enquadrar.setToolTip("Recentraliza a câmera no modelo")
-        self.btn_enquadrar.setAccessibleName("Enquadrar modelo")
+        self.btn_enquadrar.setToolTip(self.tr("Recentraliza a câmera no modelo"))
+        self.btn_enquadrar.setAccessibleName(self.tr("Enquadrar modelo"))
         self.btn_enquadrar.clicked.connect(self._enquadrar)
 
         controles = QHBoxLayout()
@@ -198,7 +198,7 @@ class VisualizadorWindow(QDialog):
         # Inspetor lateral com estatísticas e os materiais realmente lidos
         # pelo loader. Não transforma isso em um bloco de texto no rodapé:
         # números e nomes continuam visíveis enquanto se orbita o modelo.
-        self.info_heading = QLabel("INFORMAÇÕES")
+        self.info_heading = QLabel(self.tr("INFORMAÇÕES"))
         self.info_heading.setObjectName("viewerInfoHeading")
         self.stat_values: dict[str, QLabel] = {}
         stats = QVBoxLayout()
@@ -206,22 +206,22 @@ class VisualizadorWindow(QDialog):
         stats.setSpacing(2)
         stats.addWidget(self.info_heading)
         for chave, rotulo in (
-            ("format", "Formato"), ("resolution", "Resolução"),
-            ("vertices", "Vértices"), ("triangles", "Triângulos"),
-            ("materials", "Materiais"), ("textures", "Texturas"),
+            ("format", self.tr("Formato")), ("resolution", self.tr("Resolução")),
+            ("vertices", self.tr("Vértices")), ("triangles", self.tr("Triângulos")),
+            ("materials", self.tr("Materiais")), ("textures", self.tr("Texturas")),
         ):
             valor = QLabel("—")
             self.stat_values[chave] = valor
             stats.addWidget(self._info_row(rotulo, valor))
 
-        self.materials_heading = QLabel("MATERIAIS")
+        self.materials_heading = QLabel(self.tr("MATERIAIS"))
         self.materials_heading.setObjectName("viewerInfoHeading")
         self.materials_list = QWidget()
         self.materials_list.setObjectName("viewerMaterialsList")
         self.materials_layout = QVBoxLayout(self.materials_list)
         self.materials_layout.setContentsMargins(0, 0, 0, 0)
         self.materials_layout.setSpacing(5)
-        self.materials_placeholder = QLabel("Nenhum material carregado")
+        self.materials_placeholder = QLabel(self.tr("Nenhum material carregado"))
         self.materials_placeholder.setObjectName("muted")
         self.materials_placeholder.setWordWrap(True)
         self.materials_layout.addWidget(self.materials_placeholder)
@@ -259,10 +259,10 @@ class VisualizadorWindow(QDialog):
         workspace.addWidget(inspector)
 
         # ---- rodapé ----
-        self.status = QLabel("Carregando…")
+        self.status = QLabel(self.tr("Carregando…"))
         self.status.setObjectName("muted")
-        self.status.setAccessibleName("Estado da visualização 3D")
-        self.dica = QLabel("Esc fecha")
+        self.status.setAccessibleName(self.tr("Estado da visualização 3D"))
+        self.dica = QLabel(self.tr("Esc fecha"))
         self.dica.setObjectName("visorDica")
         rodape = QHBoxLayout()
         rodape.addWidget(self.status)
@@ -317,7 +317,7 @@ class VisualizadorWindow(QDialog):
         self._clear_material_rows()
         self.materials_heading.setVisible(bool(materials))
         if not materials:
-            empty = QLabel("Nenhum material carregado")
+            empty = QLabel(self.tr("Nenhum material carregado"))
             empty.setObjectName("muted")
             self.materials_layout.addWidget(empty)
             self.materials_layout.addStretch(1)
@@ -330,7 +330,7 @@ class VisualizadorWindow(QDialog):
             if chave in vistos:
                 continue
             vistos.add(chave)
-            nome = material.name or f"Material {len(vistos)}"
+            nome = material.name or self.tr("Material %1").arg(len(vistos))
             item = QWidget()
             item.setObjectName("viewerMaterialRow")
             item_layout = QVBoxLayout(item)
@@ -340,7 +340,7 @@ class VisualizadorWindow(QDialog):
             name_label.setObjectName("viewerMaterialName")
             name_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
             item_layout.addWidget(name_label)
-            source = textura.name if textura else "Cor sólida"
+            source = textura.name if textura else self.tr("Cor sólida")
             source_label = QLabel(source)
             source_label.setObjectName("viewerMaterialSource")
             source_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
@@ -352,21 +352,21 @@ class VisualizadorWindow(QDialog):
 
     def abrir_hdri(self, path: Path) -> None:
         self.hdri.camera.reset()
-        self._preparar(path, PAGINA_HDRI, "Carregando…")
+        self._preparar(path, PAGINA_HDRI, self.tr("Carregando…"))
         hdri_viewer.iniciar_carga(self._sig_hdri, path)
 
     def abrir_modelo(self, path: Path, content_hash: str | None = None) -> None:
         """`content_hash` só é usado pelo loader de `.blend` (cache da
         exportação via Blender) — as outras extensões ignoram."""
-        recado = ("Lendo geometria do .blend (via Blender)…"
-                  if path.suffix.lower() == ".blend" else "Carregando…")
+        recado = (self.tr("Lendo geometria do .blend (via Blender)…")
+                  if path.suffix.lower() == ".blend" else self.tr("Carregando…"))
         self._preparar(path, PAGINA_MODELO, recado)
         model_viewer.iniciar_carga(self._sig_modelo, path, content_hash)
 
     def _preparar(self, path: Path, pagina: int, recado: str) -> None:
         self._alvo = path
-        rotulo = "HDRI" if pagina == PAGINA_HDRI else "Modelo"
-        self.setWindowTitle(f"{rotulo} — {path.name}")
+        rotulo = self.tr("HDRI") if pagina == PAGINA_HDRI else self.tr("Modelo")
+        self.setWindowTitle(self.tr("%1 — %2").arg(rotulo).arg(path.name))
         metricas = QFontMetrics(self.titulo.font())
         self.titulo.setText(
             metricas.elidedText(path.stem, Qt.TextElideMode.ElideRight, LARGURA_NOME))
@@ -460,8 +460,7 @@ class VisualizadorWindow(QDialog):
             f"{imagem.width()} × {imagem.height()} px")
         self.materials_heading.setVisible(False)
         self.status.setText(
-            f"{imagem.width()} × {imagem.height()} px  ·  "
-            "arraste para girar, duplo clique centraliza")
+            self.tr("%1 × %2 px  ·  arraste para girar, duplo clique centraliza").arg(imagem.width()).arg(imagem.height()))
 
     def _modelo_carregado(self, prepared: model_viewer.PreparedModel) -> None:
         malha = prepared.mesh
@@ -484,14 +483,14 @@ class VisualizadorWindow(QDialog):
         self.stat_values["materials"].setText(str(len(materials)))
         self.stat_values["textures"].setText(str(n_texturas))
         self._show_materials(materials)
-        info_textura = f"  ·  {n_texturas} textura(s)" if n_texturas else ""
+        info_textura = self.tr("  ·  %1 textura(s)").arg(n_texturas) if n_texturas else ""
         self.status.setText(
-            f"{n_tris:n} triângulos{info_textura}  ·  arraste para orbitar, roda pra zoom")
+            self.tr("%1 triângulos%2  ·  arraste para orbitar, roda pra zoom").arg(n_tris).arg(info_textura))
 
     def _falhou(self, mensagem: str) -> None:
         log.error("Visualizador não conseguiu abrir %s: %s",
                   getattr(self._alvo, "name", "?"), mensagem)
-        self.status.setText(f"Não consegui abrir: {mensagem}")
+        self.status.setText(self.tr("Não consegui abrir: %1").arg(mensagem))
         self._show_materials([])
         for key in self.stat_values:
             if key != "format":
