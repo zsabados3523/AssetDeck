@@ -50,6 +50,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+          pip install pytest-cov
 
       - name: Run tests
-        run: pytest -v --durations=20
+        run: pytest -v --durations=20 --cov=assetdeck --cov-report=term
