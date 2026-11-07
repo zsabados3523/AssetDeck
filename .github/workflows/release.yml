@@ -14,6 +14,10 @@ jobs:
     name: Build (${{ matrix.os_name }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
+    env:
+      # Exposto no nivel do job para o `if` do passo de assinatura (macOS)
+      # conseguir testar se o secret existe; sem ele, o passo e pulado.
+      MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
     strategy:
       fail-fast: false
       matrix:
@@ -152,6 +156,32 @@ jobs:
           name: AssetDeck-windows-setup.exe
           path: AssetDeck-windows-setup.exe
           if-no-files-found: error
+
+      - name: Sign and notarize (macOS)
+        if: runner.os == 'macOS' && env.MACOS_CERTIFICATE != ''
+        env:
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          MACOS_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: |
+          KEYCHAIN="$RUNNER_TEMP/build.keychain-db"
+          KEYCHAIN_PASSWORD="$(uuidgen)"
+          echo "$MACOS_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security import "$RUNNER_TEMP/cert.p12" -P "$MACOS_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security list-keychains -d user -s "$KEYCHAIN" login.keychain-db
+          codesign --force --deep --options runtime --timestamp --sign "$MACOS_SIGN_IDENTITY" dist/AssetDeck.app
+          codesign --verify --deep --strict dist/AssetDeck.app
+          ditto -c -k --keepParent dist/AssetDeck.app "$RUNNER_TEMP/notarize.zip"
+          xcrun notarytool submit "$RUNNER_TEMP/notarize.zip" \
+            --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD" --wait
+          xcrun stapler staple dist/AssetDeck.app
+
 
       - name: Package archive (macOS)
         if: runner.os == 'macOS'

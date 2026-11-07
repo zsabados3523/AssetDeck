@@ -84,6 +84,10 @@ Baseline (2026-11): **81%** total (9753 statements, 1063 tests).
 - **No `setStyleSheet` outside `assetdeck/ui/theme.py`:** Colors, radii, spacing, and fonts must be declared as tokens in `theme.py` and referenced via `$name` in `theme.qss`.
 - **Do not weaken tests:** If a test fails, fix the code and implementation; never relax or disable test assertions to make a test pass.
 
+## macOS Signing Secrets (maintainers)
+
+The release workflow signs and notarizes `AssetDeck.app` only when the `MACOS_CERTIFICATE` repository secret exists; otherwise the step is skipped and the unsigned build is published. Required secrets: `MACOS_CERTIFICATE` (base64 of the Developer ID `.p12`), `MACOS_CERTIFICATE_PASSWORD`, `MACOS_SIGN_IDENTITY` (e.g. `Developer ID Application: Name (TEAMID)`), `APPLE_ID`, `APPLE_TEAM_ID` and `APPLE_APP_PASSWORD` (app-specific password).
+
 ## Translations (i18n)
 
 AssetDeck uses Qt's localization framework (Qt Linguist) via PySide6. The source language in the code is Brazilian Portuguese (`pt-BR`), and translations are loaded offline from compiled `.qm` files in `translations/`.
