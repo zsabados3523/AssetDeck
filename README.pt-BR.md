@@ -85,7 +85,7 @@ Executáveis pré-compilados para Windows, macOS e Linux estão disponíveis na 
 > **Aviso sobre executáveis não assinados:** Como o AssetDeck é um projeto open-source mantido de forma independente, os binários de release não possuem certificados comerciais pagos:
 > - **Windows:** O Windows SmartScreen pode exibir o alerta *"O Windows protegeu o seu computador"*. Clique em **Mais informações** e em seguida em **Executar assim mesmo**. As versões para Windows trazem um instalador (`AssetDeck-windows-setup.exe`, com atalho no menu Iniciar e desinstalador) e um `.zip` portátil.
 > - **macOS:** O Gatekeeper pode bloquear a abertura inicial. Clique com o **botão direito** no aplicativo e selecione **Abrir**, ou acesse **Ajustes do Sistema → Privacidade e Segurança** e clique em **Abrir mesmo assim**.
-> - **Linux:** Baixe o arquivo `.tar.gz`, extraia o conteúdo, torne o binário executável com `chmod +x assetdeck` e execute `./assetdeck`.
+> - **Linux:** Baixe o arquivo `.tar.gz`, extraia o conteúdo, torne o binário executável com `chmod +x assetdeck` e execute `./assetdeck`. Como alternativa, baixe o `AssetDeck-x86_64.AppImage`, rode `chmod +x AssetDeck-x86_64.AppImage` e execute-o diretamente.
 
 ---
 
