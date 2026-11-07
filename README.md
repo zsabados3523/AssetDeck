@@ -85,7 +85,7 @@ Pre-compiled binaries for Windows, macOS, and Linux are available on the officia
 > **Notice regarding unsigned executables:** Because AssetDeck is an independently maintained open-source project, release binaries are not signed with commercial developer certificates:
 > - **Windows:** Windows SmartScreen may show the alert *"Windows protected your PC"*. Click **More info** and then **Run anyway**.
 > - **macOS:** Gatekeeper may block the initial launch. **Right-click** the application and select **Open**, or go to **System Settings → Privacy & Security** and click **Open Anyway**.
-> - **Linux:** Download the `.tar.gz` archive, extract the contents, make the binary executable with `chmod +x assetdeck`, and run `./assetdeck`.
+> - **Linux:** Download the `.tar.gz` archive, extract the contents, make the binary executable with `chmod +x assetdeck`, and run `./assetdeck`. Alternatively, download `AssetDeck-x86_64.AppImage`, run `chmod +x AssetDeck-x86_64.AppImage` and launch it directly.
 
 ---
 
