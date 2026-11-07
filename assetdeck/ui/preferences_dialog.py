@@ -9,7 +9,6 @@ import logging
 
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
-    QCheckBox,
     QColorDialog,
     QComboBox,
     QDialog,
@@ -18,7 +17,6 @@ from PySide6.QtWidgets import (
     QFormLayout,
     QLabel,
     QPushButton,
-    QSpinBox,
 )
 
 from assetdeck import config
@@ -49,31 +47,18 @@ _LABEL_ORIGEM = {v: k for k, v in _ORIGEM_LABEL.items()}
 
 
 class PreferencesDialog(QDialog):
-    """Editor da CENA DE RENDER das capas (Fatia 38).
-
-    Era a janela de "Preferências" inteira. Na Fatia 80 (Fase 7, Etapa 2)
-    tudo que era liga/desliga simples — ponte com o Blender, porta, backups,
-    previews automáticos — saiu daqui e virou LINHA na janela de
-    Configurações, onde aplica na hora. Sobrou o que de fato é um formulário
-    de vários campos que só faz sentido confirmar junto: cor da luz
-    ambiente, intensidade dela e intensidade da luz principal.
-
-    Os TRÊS campos continuam sendo os mesmos de sempre (`render_bg_color`,
-    `render_bg_strength`, `render_sun_energy` no config) — só o SIGNIFICADO
-    mudou na Fatia 102 (fundo virou transparente; a cena virou um 3-point
-    lighting). Continua modal, com OK/Cancelar.
-    """
+    """Editor da CENA DE RENDER das capas (Fatia 38) e preferências gerais."""
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Cena do render")
+        self.setWindowTitle(self.tr("Cena do render"))
 
         self._cfg = config.load_config()
 
         # Cena de render de capas (Fatia 38) — vale na próxima vez que
         # clicar em "Gerar capas", sem precisar reabrir o app.
         self._render_bg_color = self._cfg.get("render_bg_color", "#959599")
-        self.render_bg_color_btn = QPushButton("Escolher…")
+        self.render_bg_color_btn = QPushButton(self.tr("Escolher…"))
         self.render_bg_color_btn.setIcon(_amostra_de_cor(self._render_bg_color))
         self.render_bg_color_btn.clicked.connect(self._escolher_cor_luz_ambiente)
 
@@ -87,8 +72,18 @@ class PreferencesDialog(QDialog):
         self.render_sun_energy.setSingleStep(0.5)
         self.render_sun_energy.setValue(float(self._cfg.get("render_sun_energy", 3.0)))
 
+        # Seletor de idioma (GitHub issue #18)
+        self.language_combo = QComboBox()
+        self.language_combo.addItem("Português", "pt_BR")
+        self.language_combo.addItem("English", "en")
+        current_lang = str(self._cfg.get("language") or "").lower()
+        if current_lang.startswith("en"):
+            self.language_combo.setCurrentIndex(1)
+        else:
+            self.language_combo.setCurrentIndex(0)
+
         aviso = QLabel(
-            "Vale na próxima vez que gerar capas — não precisa reabrir o app."
+            self.tr("Vale na próxima vez que gerar capas — não precisa reabrir o app.")
         )
         aviso.setWordWrap(True)
 
@@ -103,19 +98,20 @@ class PreferencesDialog(QDialog):
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(10)
         dialog_chrome.add_heading(
-            layout, "Iluminação das capas",
-            "Ajuste as luzes usadas na próxima geração de capas.")
+            layout, self.tr("Iluminação das capas"),
+            self.tr("Ajuste as luzes usadas na próxima geração de capas."))
         # Fatia 102: o fundo é sempre transparente agora — estes três
         # campos afinam a ILUMINAÇÃO, não mais um fundo visível.
-        layout.addRow("Cor da luz ambiente:", self.render_bg_color_btn)
-        layout.addRow("Intensidade da luz ambiente:", self.render_bg_strength)
-        layout.addRow("Intensidade da luz principal:", self.render_sun_energy)
+        layout.addRow(self.tr("Cor da luz ambiente:"), self.render_bg_color_btn)
+        layout.addRow(self.tr("Intensidade da luz ambiente:"), self.render_bg_strength)
+        layout.addRow(self.tr("Intensidade da luz principal:"), self.render_sun_energy)
+        layout.addRow(self.tr("Idioma:"), self.language_combo)
         layout.addRow(aviso)
         layout.addRow(botoes)
 
     def _escolher_cor_luz_ambiente(self) -> None:
         cor = QColorDialog.getColor(QColor(self._render_bg_color), self,
-                                    "Cor da luz ambiente")
+                                    self.tr("Cor da luz ambiente"))
         if cor.isValid():
             self._render_bg_color = cor.name()
             self.render_bg_color_btn.setIcon(_amostra_de_cor(self._render_bg_color))
@@ -124,6 +120,7 @@ class PreferencesDialog(QDialog):
         self._cfg["render_bg_color"] = self._render_bg_color
         self._cfg["render_bg_strength"] = self.render_bg_strength.value()
         self._cfg["render_sun_energy"] = self.render_sun_energy.value()
+        self._cfg["language"] = self.language_combo.currentData()
         config.save_config(self._cfg)
         log.info("Preferências salvas (Fatia 36).")
         self.accept()

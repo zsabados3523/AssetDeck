@@ -24,6 +24,8 @@ from functools import partial
 from pathlib import Path
 from typing import Callable
 
+from PySide6.QtCore import QCoreApplication
+
 from assetdeck.sidecar.reader import read_sidecar, restorable_fields
 from assetdeck.sidecar.writer import sidecar_path
 
@@ -111,23 +113,26 @@ class ScanStats:
     ignored_exts: dict[str, int] = field(default_factory=dict)
 
     def summary(self) -> str:
-        parts = [f"{self.added} novos", f"{self.unchanged} inalterados"]
+        parts = [
+            QCoreApplication.translate("ScanStats", "%1 novos").arg(self.added),
+            QCoreApplication.translate("ScanStats", "%1 inalterados").arg(self.unchanged),
+        ]
         if self.restored:
-            parts.append(f"{self.restored} restaurados de sidecar")
+            parts.append(QCoreApplication.translate("ScanStats", "%1 restaurados de sidecar").arg(self.restored))
         if self.grouped_sets:
-            parts.append(f"{self.grouped_sets} sets PBR agrupados")
+            parts.append(QCoreApplication.translate("ScanStats", "%1 sets PBR agrupados").arg(self.grouped_sets))
         if self.updated:
-            parts.append(f"{self.updated} atualizados")
+            parts.append(QCoreApplication.translate("ScanStats", "%1 atualizados").arg(self.updated))
         if self.missing:
-            parts.append(f"{self.missing} sumidos")
+            parts.append(QCoreApplication.translate("ScanStats", "%1 sumidos").arg(self.missing))
         if self.reappeared:
-            parts.append(f"{self.reappeared} reapareceram")
+            parts.append(QCoreApplication.translate("ScanStats", "%1 reapareceram").arg(self.reappeared))
         if self.ignored:
-            parts.append(f"{self.ignored} ignorados")
+            parts.append(QCoreApplication.translate("ScanStats", "%1 ignorados").arg(self.ignored))
         if self.errors:
-            parts.append(f"{self.errors} erros (ver log)")
+            parts.append(QCoreApplication.translate("ScanStats", "%1 erros (ver log)").arg(self.errors))
         if self.aborted:
-            parts.append("interrompida")
+            parts.append(QCoreApplication.translate("ScanStats", "interrompida"))
         return ", ".join(parts)
 
 

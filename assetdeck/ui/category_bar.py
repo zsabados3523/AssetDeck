@@ -100,7 +100,7 @@ class CategoryButton(QToolButton):
             layout.addWidget(cb)
             self._ext_checks[ext] = cb
         if ext_counts:
-            limpar = QPushButton("Todas as extensões")
+            limpar = QPushButton(self.tr("Todas as extensões"))
             limpar.clicked.connect(self._clear_extensions)
             layout.addWidget(limpar)
 
@@ -164,11 +164,12 @@ class CategoryButton(QToolButton):
         """
         exts = self.selected_extensions()
         detalhe = (", ".join(f".{e}" for e in exts) if exts
-                   else "todas as extensões")
-        self.setToolTip(f"{self.categoria.label} — {self._total} assets ({detalhe})")
+                   else self.tr("todas as extensões"))
+        cat_nome = self.tr(self.categoria.label)
+        self.setToolTip(self.tr("%1 — %2 assets (%3)").arg(cat_nome).arg(self._total).arg(detalhe))
 
         if self.isChecked():
-            self.setText(f"{self.categoria.label}  {self._total}")
+            self.setText(f"{cat_nome}  {self._total}")
         else:
             self.setText(str(self._total))
         self._sync_icon()

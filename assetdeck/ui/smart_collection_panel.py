@@ -41,7 +41,7 @@ class SmartCollectionPanel(QListWidget):
         self._conn = conn
         self.blockSignals(True)
         self.clear()
-        raiz = QListWidgetItem("(nenhuma aplicada)")
+        raiz = QListWidgetItem(self.tr("(nenhuma aplicada)"))
         raiz.setData(_SMART_ROLE, None)
         self.addItem(raiz)
         for r in smart_repo.list_all(conn):
@@ -67,29 +67,38 @@ class SmartCollectionPanel(QListWidget):
         item = self.itemAt(pos)
         smart_id = item.data(_SMART_ROLE) if item else None
         menu = QMenu(self)
-        menu.addAction("Salvar filtros atuais…", self._salvar)
+        menu.addAction(self.tr("Salvar filtros atuais…"), self._salvar)
         if smart_id is not None:
             menu.addSeparator()
-            menu.addAction("Renomear…", lambda: self._renomear(smart_id, item.text()))
-            menu.addAction("Excluir", lambda: self._excluir(smart_id, item.text()))
+            menu.addAction(self.tr("Renomear…"), lambda: self._renomear(smart_id, item.text()))
+            menu.addAction(self.tr("Excluir"), lambda: self._excluir(smart_id, item.text()))
         menu.exec(self.mapToGlobal(pos))
 
     def _salvar(self) -> None:
-        nome, ok = QInputDialog.getText(self, "Salvar coleção inteligente",
-                                        "Nome (ex.: 'HDRIs com nota ≥ 4'):")
+        nome, ok = QInputDialog.getText(
+            self,
+            self.tr("Salvar coleção inteligente"),
+            self.tr("Nome (ex.: 'HDRIs com nota ≥ 4'):"),
+        )
         if ok and nome.strip():
             self.save_requested.emit(nome.strip())
 
     def _renomear(self, smart_id: int, atual: str) -> None:
-        nome, ok = QInputDialog.getText(self, "Renomear", "Novo nome:", text=atual)
+        nome, ok = QInputDialog.getText(
+            self,
+            self.tr("Renomear"),
+            self.tr("Novo nome:"),
+            text=atual,
+        )
         if ok and nome.strip():
             smart_repo.rename(self._conn, smart_id, nome)
             self.structure_changed.emit()
 
     def _excluir(self, smart_id: int, nome: str) -> None:
         resp = QMessageBox.question(
-            self, "Excluir coleção inteligente",
-            f"Excluir '{nome}'? (Os filtros salvos somem; nenhum asset é afetado.)",
+            self,
+            self.tr("Excluir coleção inteligente"),
+            self.tr("Excluir '%1'? (Os filtros salvos somem; nenhum asset é afetado.)").arg(nome),
         )
         if resp == QMessageBox.StandardButton.Yes:
             smart_repo.soft_delete(self._conn, smart_id)

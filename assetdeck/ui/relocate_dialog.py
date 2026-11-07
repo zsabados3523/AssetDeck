@@ -23,20 +23,23 @@ class RelocateDialog(QDialog):
     def __init__(self, candidatos: list[dict], parent=None) -> None:
         super().__init__(parent)
         self._candidatos = candidatos
-        self.setWindowTitle("Relocalizar assets perdidos")
+        self.setWindowTitle(self.tr("Relocalizar assets perdidos"))
         self.resize(680, 420)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(10)
-        dialog_chrome.add_heading(layout, "Relocalizar assets perdidos",
-            f"{len(candidatos)} asset(s) sumido(s) batem com um arquivo "
-            "encontrado em outro lugar (mesmo conteúdo). Desmarque o que não "
-            "quiser religar — nada é apagado do disco; só o banco é ajustado.")
+        dialog_chrome.add_heading(
+            layout, self.tr("Relocalizar assets perdidos"),
+            self.tr(
+                "%1 asset(s) sumido(s) batem com um arquivo "
+                "encontrado em outro lugar (mesmo conteúdo). Desmarque o que não "
+                "quiser religar — nada é apagado do disco; só o banco é ajustado."
+            ).arg(len(candidatos)))
 
         self.table = QTableWidget(len(candidatos), 3)
         self.table.setObjectName("cardFlat")
-        self.table.setHorizontalHeaderLabels(["Asset", "Caminho antigo (sumido)", "Caminho novo"])
+        self.table.setHorizontalHeaderLabels([self.tr("Asset"), self.tr("Caminho antigo (sumido)"), self.tr("Caminho novo")])
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
         self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
@@ -56,7 +59,7 @@ class RelocateDialog(QDialog):
         layout.addWidget(self.table)
 
         botoes = QDialogButtonBox()
-        religar = botoes.addButton("Religar selecionados", QDialogButtonBox.ButtonRole.AcceptRole)
+        religar = botoes.addButton(self.tr("Religar selecionados"), QDialogButtonBox.ButtonRole.AcceptRole)
         botoes.addButton(QDialogButtonBox.StandardButton.Cancel)
         religar.clicked.connect(self.accept)
         botoes.rejected.connect(self.reject)

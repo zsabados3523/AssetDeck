@@ -31,7 +31,7 @@ Novas ideias e melhorias são muito bem-vindas:
 Se você deseja colaborar com código ou testes, destacamos algumas áreas prioritárias:
 
 - **Testes em Windows e macOS reais:** verificação de atalhos, renderização de fontes, caminhos de arquivo e estabilidade da interface gráfica em diferentes versões dos sistemas operacionais.
-- **Traduções e localização da interface (i18n):** hoje a UI é em pt-BR e não há sistema de internacionalização implementado no código; contribuições para viabilizar i18n (gettext / Qt Linguist) e traduzir o app são bem-vindas.
+- **Traduções e localização da interface (i18n):** traduzir a interface para outros idiomas (espanhol, francês, alemão, japonês, etc.) e manter as traduções existentes atualizadas. Consulte a seção [Traduções (i18n)](#traduções-i18n) abaixo.
 - **Empacotamento e distribuição:** geração de instaladores, suporte a assinaturas digitais de binários para Windows (SmartScreen) e macOS (Gatekeeper / notarização com Apple ID).
 - **Documentação e tutoriais:** guias de uso, tutoriais de integração com o Blender e documentação de arquitetura.
 - **Novos formatos de asset:** novos loaders e importadores para formatos 3D, materiais ou texturas.
@@ -65,6 +65,17 @@ QT_QPA_PLATFORM=offscreen pytest -q
 
 Todos os testes devem passar.
 
+### Cobertura
+
+O CI imprime um resumo de cobertura do pacote `assetdeck` (ainda sem limite mínimo). Para ver localmente:
+
+```bash
+pip install pytest-cov
+QT_QPA_PLATFORM=offscreen pytest -q --cov=assetdeck --cov-report=term
+```
+
+Linha de base (2026-11): **81%** no total (9753 instruções, 1063 testes).
+
 ## Diretrizes e regras de desenvolvimento
 
 - **Uma mudança por PR:** mantenha Pull Requests pequenos, atômicos e focados em um único objetivo.
@@ -76,3 +87,44 @@ Todos os testes devem passar.
 ## Secrets de assinatura do macOS (mantenedores)
 
 O workflow de release só assina e notariza o `AssetDeck.app` quando o secret `MACOS_CERTIFICATE` existe no repositório; sem ele o passo é pulado e o build sem assinatura é publicado. Secrets necessários: `MACOS_CERTIFICATE` (base64 do `.p12` Developer ID), `MACOS_CERTIFICATE_PASSWORD`, `MACOS_SIGN_IDENTITY` (ex.: `Developer ID Application: Nome (TEAMID)`), `APPLE_ID`, `APPLE_TEAM_ID` e `APPLE_APP_PASSWORD` (senha específica de app).
+
+## Traduções (i18n)
+
+O AssetDeck utiliza o sistema de internacionalização do Qt (Qt Linguist) via PySide6. O idioma-fonte no código é o Português do Brasil (`pt-BR`), e as traduções são carregadas 100% offline a partir de arquivos compilados `.qm` em `translations/`.
+
+### Diretrizes para desenvolvedores
+
+1. **Strings visíveis para o usuário:** Sempre envolva textos de interface com `self.tr("...")` em subclasses de `QObject` ou `QCoreApplication.translate("Contexto", "...")` fora delas.
+2. **Parâmetros dinâmicos:** Use marcadores `%1`, `%2` do Qt com `.arg(...)`:
+   ```python
+   self.tr("Processando %1 arquivos...").arg(total)
+   ```
+3. **Não traduza:** Mensagens de log, identificadores ou colunas do banco de dados, chaves internas de configuração ou nomes de formatos de arquivo.
+4. **Texto-fonte:** Sempre mantenha o texto original no código em Português do Brasil (`pt-BR`).
+
+### Atualizando traduções existentes
+
+Quando novas strings forem adicionadas ou alteradas no código:
+
+1. Extraia as strings atualizadas para os arquivos `.ts`:
+   ```bash
+   python tools/build_translations.py --update
+   ```
+2. Edite `translations/assetdeck_<idioma>.ts` (usando o Qt Linguist ou editor de texto) para preencher as traduções e remover `type="unfinished"`.
+3. Compile os arquivos `.ts` para binários `.qm`:
+   ```bash
+   python tools/build_translations.py --release
+   ```
+4. Execute os testes para garantir integridade e que não há entradas pendentes:
+   ```bash
+   QT_QPA_PLATFORM=offscreen pytest tests/test_i18n.py
+   ```
+5. Envie tanto o arquivo `.ts` quanto o `.qm` no Pull Request.
+
+### Adicionando um novo idioma
+
+1. Execute `python tools/build_translations.py --update --lang <codigo_iso>` (ex.: `es` ou `fr`).
+2. Traduza todas as entradas em `translations/assetdeck_<codigo_iso>.ts`.
+3. Compile com `python tools/build_translations.py --release --lang <codigo_iso>`.
+4. Registre o novo idioma em `SUPPORTED_LANGUAGES` em `assetdeck/i18n.py` e adicione a opção no seletor de idiomas em `assetdeck/ui/preferences_dialog.py`.
+

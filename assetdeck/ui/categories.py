@@ -55,4 +55,7 @@ def category_of(asset_type: str) -> Category | None:
 
 def type_label_of(asset_type: str) -> str:
     """Rótulo de tela mais específico que a categoria de filtro."""
-    return TYPE_LABELS.get(asset_type, asset_type)
+    from PySide6.QtCore import QCoreApplication
+
+    raw = TYPE_LABELS.get(asset_type, asset_type)
+    return QCoreApplication.translate("Categories", raw)
