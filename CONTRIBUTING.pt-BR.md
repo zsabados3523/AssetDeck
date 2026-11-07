@@ -72,3 +72,7 @@ Todos os testes devem passar.
 - **Nenhum `except` silencioso:** trate exceções com contexto e registre-as no log (`log.warning`, `log.error` ou `log.exception`). Nunca use `except: pass` sem tratamento ou logging adequado.
 - **Nenhum `setStyleSheet` fora de `assetdeck/ui/theme.py`:** cores, raios, espaçamentos e fontes devem ser declarados como tokens em `theme.py` e usados via `$nome` em `theme.qss`.
 - **Não enfraqueça testes:** se um teste falhar, conserte o código e a implementação, nunca relaxe ou desative as asserções de um teste para que ele passe.
+
+## Secrets de assinatura do macOS (mantenedores)
+
+O workflow de release só assina e notariza o `AssetDeck.app` quando o secret `MACOS_CERTIFICATE` existe no repositório; sem ele o passo é pulado e o build sem assinatura é publicado. Secrets necessários: `MACOS_CERTIFICATE` (base64 do `.p12` Developer ID), `MACOS_CERTIFICATE_PASSWORD`, `MACOS_SIGN_IDENTITY` (ex.: `Developer ID Application: Nome (TEAMID)`), `APPLE_ID`, `APPLE_TEAM_ID` e `APPLE_APP_PASSWORD` (senha específica de app).
