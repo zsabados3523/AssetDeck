@@ -118,11 +118,44 @@ jobs:
         run: |
           tar -czf AssetDeck-ubuntu.tar.gz -C dist assetdeck
 
+      - name: Build AppImage (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          curl -fsSL -o appimagetool https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x appimagetool
+          APPIMAGETOOL=./appimagetool packaging/appimage/build_appimage.sh
+
+      - name: Upload AppImage (Linux)
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: AssetDeck-x86_64.AppImage
+          path: AssetDeck-x86_64.AppImage
+          if-no-files-found: error
+
       - name: Package archive (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           Compress-Archive -Path dist/assetdeck -DestinationPath AssetDeck-windows.zip
+
+      - name: Build installer (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}".TrimStart("v")
+          if (-not ($version -match '^\d')) { $version = "0.0.0" }
+          choco install innosetup -y --no-progress
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "/DMyAppVersion=$version" packaging/assetdeck.iss
+          Move-Item installer-out/AssetDeck-windows-setup.exe AssetDeck-windows-setup.exe
+
+      - name: Upload installer (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: AssetDeck-windows-setup.exe
+          path: AssetDeck-windows-setup.exe
+          if-no-files-found: error
 
       - name: Sign and notarize (macOS)
         if: runner.os == 'macOS' && env.MACOS_CERTIFICATE != ''
@@ -148,6 +181,7 @@ jobs:
           xcrun notarytool submit "$RUNNER_TEMP/notarize.zip" \
             --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD" --wait
           xcrun stapler staple dist/AssetDeck.app
+
 
       - name: Package archive (macOS)
         if: runner.os == 'macOS'
@@ -182,7 +216,9 @@ jobs:
         with:
           files: |
             release-artifacts/AssetDeck-ubuntu.tar.gz
+            release-artifacts/AssetDeck-x86_64.AppImage
             release-artifacts/AssetDeck-windows.zip
+            release-artifacts/AssetDeck-windows-setup.exe
             release-artifacts/AssetDeck-macos.zip
           generate_release_notes: true
         env:
