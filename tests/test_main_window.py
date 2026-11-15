@@ -1440,3 +1440,26 @@ def test_abrir_a_janela_nao_pre_aquece_a_biblioteca_inteira(janela, monkeypatch)
         assert chamadas == []
     finally:
         segunda.close()
+
+
+def test_abrir_a_janela_consulta_a_grade_uma_vez_sem_filtro_salvo(janela, monkeypatch):
+    """Issue #31: sem filtro salvo, a abertura consulta a grade uma única vez
+    (antes: `model.reload()` + `_go_to_dir`)."""
+    consultas = []
+    cls = type(janela.model)
+    original = cls.set_filters
+    monkeypatch.setattr(cls, "set_filters",
+                        lambda self, **kw: (consultas.append(1), original(self, **kw))[1])
+    recargas = []
+    original_reload = cls.reload
+    monkeypatch.setattr(cls, "reload",
+                        lambda self: (recargas.append(1), original_reload(self))[1])
+
+    segunda = MainWindow(janela._conn, str(janela.model._root),
+                         config.db_path(), config.thumbs_dir())
+    try:
+        assert len(consultas) == 1
+        assert recargas == []
+        assert segunda.model.rowCount() == 2
+    finally:
+        segunda.close()
