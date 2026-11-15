@@ -583,7 +583,10 @@ class MainWindow(QMainWindow):
         # registrado caso o Rafael queira.
         self.statusBar().layout().setContentsMargins(18, 0, 18, 0)
 
-        self._reload_all()
+        # Sem pré-aquecimento na abertura (Issue #31): ele percorre a
+        # biblioteca inteira antes da janela aparecer (~4,5 s medidos) e a
+        # thumb que falta continua sendo pedida pela célula visível.
+        self._reload_all(warmup=False)
         # Precisa vir DEPOIS de `_reload_all()`: restaurar filtro/tag/pasta
         # exige pastas e tags já carregadas na árvore (Fatia 54).
         self._restore_ui_state()
@@ -1538,6 +1541,9 @@ class MainWindow(QMainWindow):
         self.missing_check.setChecked(bool(query.get("include_missing")))
         self.tags.select(query.get("tag_id"))
         self.collections.select(query.get("collection_id"))
+        # O `setText` acima armou o debounce da busca; `_go_to_dir` já aplica
+        # os filtros, então deixá-lo disparar refaria a consulta à toa.
+        self._search_debounce.stop()
         # Por último: `_go_to_dir` já reaplica os filtros com tudo no lugar,
         # e registra a pasta no histórico (decisão do Rafael — aplicar uma
         # Smart Collection é navegação como qualquer outra).
