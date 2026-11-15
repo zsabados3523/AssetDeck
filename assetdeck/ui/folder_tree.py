@@ -29,9 +29,11 @@ def list_dirs(conn: sqlite3.Connection, library_id: int | None = None) -> list[s
         sql += " AND a.library_id = ?"
         params.append(library_id)
     for row in conn.execute(sql, params):
-        parts = row["rel_path"].split("/")[:-1]  # tira o nome do arquivo
-        for i in range(1, len(parts) + 1):
-            dirs.add("/".join(parts[:i]))
+        d = row["rel_path"].rpartition("/")[0]  # tira o nome do arquivo
+        # Se a pasta já está no conjunto, os ancestrais dela também estão.
+        while d and d not in dirs:
+            dirs.add(d)
+            d = d.rpartition("/")[0]
     return sorted(dirs)
 
 

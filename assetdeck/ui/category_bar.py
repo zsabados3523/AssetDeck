@@ -200,10 +200,13 @@ class CategoryBar(QWidget):
 
     def reload(self, conn: sqlite3.Connection, counts: dict[str, int]) -> None:
         """`counts`: contagem por categoria (de `assets_repo.count_by_category`)."""
+        por_tipo = assets_repo.extension_counts_by_type(conn)
         for key, b in self.buttons.items():
-            ext_counts = assets_repo.extension_counts(
-                conn, asset_types=list(b.categoria.asset_types))
-            b.reload(ext_counts, counts.get(key, 0))
+            ext_counts: dict[str, int] = {}
+            for tipo in b.categoria.asset_types:
+                for ext, n in por_tipo.get(tipo, {}).items():
+                    ext_counts[ext] = ext_counts.get(ext, 0) + n
+            b.reload(dict(sorted(ext_counts.items())), counts.get(key, 0))
 
     def update_counts(self, counts: dict[str, int]) -> None:
         """Só os números — sem remontar os menus (roda a cada filtro aplicado)."""
