@@ -11,10 +11,41 @@ from pathlib import Path
 from PySide6.QtCore import QObject, QRunnable, QThreadPool, Signal
 
 from assetdeck.blender.material_preview import preview_path, render_material_preview
-from assetdeck.thumbs.cache import thumb_name, thumb_path
+from assetdeck.thumbs.cache import falha_name, falha_path, thumb_name, thumb_path
 from assetdeck.thumbs.preview import make_any_thumbnail
 
 log = logging.getLogger(__name__)
+
+
+def _versao_pillow() -> str:
+    import PIL
+    return PIL.__version__
+
+
+def _falha_e_definitiva(exc: Exception) -> bool:
+    """Imagem ilegível de verdade (decoder, formato desconhecido), não um
+    problema passageiro. `OSError` com `errno` é falha de E/S (rede fora do
+    ar, arquivo sumiu, sem permissão) e pode passar; o do decoder não tem."""
+    return not (isinstance(exc, OSError) and exc.errno is not None)
+
+
+def _marcar_falha(marcador: Path) -> None:
+    try:
+        marcador.write_text(_versao_pillow(), encoding="utf-8")
+    except OSError:
+        log.warning("Não consegui gravar o marcador de falha %s", marcador, exc_info=True)
+
+
+def _falha_conhecida(marcador: Path) -> bool:
+    """Há marcador feito com a MESMA versão do Pillow? Uma atualização do
+    Pillow pode passar a ler o arquivo, então o marcador antigo não vale."""
+    try:
+        return marcador.read_text(encoding="utf-8") == _versao_pillow()
+    except FileNotFoundError:
+        return False
+    except OSError:
+        log.warning("Não consegui ler o marcador de falha %s", marcador, exc_info=True)
+        return False
 
 
 class _Signaller(QObject):
@@ -101,9 +132,12 @@ class _ThumbJob(QRunnable):
         try:
             make_any_thumbnail(self._src, self._dest)
             self._sig.ready.emit(self._asset_id, str(self._dest))
-        except Exception:
+        except Exception as exc:
             # Uma imagem corrompida não pode derrubar o app — mas fica no log.
             log.exception("Thumbnail falhou para %s", self._src)
+            if _falha_e_definitiva(exc):
+                # Mesmo nome que `falha_path` dá a partir do content_hash.
+                _marcar_falha(self._dest.with_name(self._dest.name + ".falhou"))
             self._sig.failed.emit(self._asset_id)
 
 
@@ -237,6 +271,9 @@ class ThumbnailPipeline(QObject):
             return dest
         if asset_id in self._inflight or asset_id in self._failed:
             return None
+        if _falha_conhecida(falha_path(self._thumbs_dir, content_hash)):
+            self._failed.add(asset_id)  # falhou numa sessão anterior
+            return None
         self._inflight.add(asset_id)
         self._pool.start(_ThumbJob(
             self._sig, asset_id, src, dest,
@@ -280,6 +317,10 @@ class ThumbnailPipeline(QObject):
             if thumb_name(content_hash) in existentes:
                 continue
             if asset_id in self._inflight or asset_id in self._failed:
+                continue
+            if (falha_name(content_hash) in existentes
+                    and _falha_conhecida(falha_path(self._thumbs_dir, content_hash))):
+                self._failed.add(asset_id)  # falhou numa sessão anterior
                 continue
             self._inflight.add(asset_id)
             self._pool.start(
