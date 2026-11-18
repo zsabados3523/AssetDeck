@@ -165,6 +165,9 @@ class MainWindow(QMainWindow):
             icons.icon("search", theme.current_colors()["text_muted"]),
             QLineEdit.ActionPosition.LeadingPosition,
         )
+        # Verdadeiro depois da primeira consulta da grade (Issue #31): a
+        # abertura deixa a consulta para o restore e só faz uma se ele não fez.
+        self._grade_consultada = False
         self._search_debounce = QTimer(self)
         self._search_debounce.setSingleShot(True)
         self._search_debounce.setInterval(250)  # espera parar de digitar
@@ -586,15 +589,19 @@ class MainWindow(QMainWindow):
         # Sem pré-aquecimento na abertura (Issue #31): ele percorre a
         # biblioteca inteira antes da janela aparecer (~4,5 s medidos) e a
         # thumb que falta continua sendo pedida pela célula visível.
-        self._reload_all(warmup=False)
+        self._reload_all(warmup=False, consultar_grade=False)
         # Precisa vir DEPOIS de `_reload_all()`: restaurar filtro/tag/pasta
         # exige pastas e tags já carregadas na árvore (Fatia 54).
         self._restore_ui_state()
+        if not self._grade_consultada:
+            # Sem filtro salvo o restore não consulta a grade: faz aqui, uma vez.
+            self._go_to_dir(self.history.current(), record=False)
         self._update_library_state_view()
 
     # ---- filtros e contagem ----
 
-    def _reload_all(self, *, warmup: bool = True) -> None:
+    def _reload_all(self, *, warmup: bool = True,
+                    consultar_grade: bool = True) -> None:
         """Recarga completa: pastas, tags, checklist de tipos e grid — E (se
         `warmup=True`) o pré-aquecimento de thumbnails da biblioteca inteira
         (`warmup_library`, não o `reload()` barato). Só é chamada depois de
@@ -614,6 +621,11 @@ class MainWindow(QMainWindow):
         é este. Pastas/tags/contagens continuam sempre atualizadas — só o
         `_warmup()` caro fica de fora.
 
+        `consultar_grade=False` (Issue #31): só a abertura usa; recarrega
+        pastas, tags e categorias mas deixa a consulta da grade para
+        `_restore_ui_state`, que já a faz com o filtro salvo (antes eram
+        3 consultas seguidas, ~2,4 s medidos).
+
         `folders.reload` reseta a seleção para a raiz — antes da Fatia 32
         isso jogava o Rafael de volta pra "tudo" no fim de cada varredura, e
         ainda deixava o breadcrumb mostrando a pasta antiga. Agora a pasta é
@@ -624,6 +636,8 @@ class MainWindow(QMainWindow):
         self.collections.reload(self._conn)
         self.smart_collections.reload(self._conn)
         self.categories.reload(self._conn, self._category_counts())
+        if not consultar_grade:
+            return
         if warmup:
             self.model.warmup_library()
         else:
@@ -665,6 +679,7 @@ class MainWindow(QMainWindow):
         )
 
     def _apply_filters(self) -> None:
+        self._grade_consultada = True
         self.model.set_filters(**self._current_filters_dict())
         self.categories.update_counts(self._category_counts())
         self.refresh_count()
