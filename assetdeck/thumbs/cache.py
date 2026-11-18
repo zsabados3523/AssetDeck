@@ -28,6 +28,17 @@ def thumb_name(content_hash: str, size: int = THUMB_SIZE) -> str:
     return f"{content_hash}_{size}_v{THUMB_VERSION}.png"
 
 
+def falha_name(content_hash: str, size: int = THUMB_SIZE) -> str:
+    """Nome do marcador "esta imagem não tem como virar thumbnail" (Issue #31).
+    Carrega a versão do formato no nome, então subir `THUMB_VERSION` também
+    esquece as falhas."""
+    return thumb_name(content_hash, size) + ".falhou"
+
+
+def falha_path(thumbs_dir: Path, content_hash: str, size: int = THUMB_SIZE) -> Path:
+    return thumbs_dir / falha_name(content_hash, size)
+
+
 def thumb_path(thumbs_dir: Path, content_hash: str, size: int = THUMB_SIZE) -> Path:
     """Onde a thumbnail deste conteúdo vive (exista ela ou não)."""
     return thumbs_dir / thumb_name(content_hash, size)
