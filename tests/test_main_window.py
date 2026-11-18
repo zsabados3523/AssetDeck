@@ -1424,3 +1424,19 @@ def test_fechar_aguarda_a_thread_da_varredura(janela, monkeypatch):
     janela._scan.stopped.emit()
 
     assert not janela._closing_after_scan
+
+
+def test_abrir_a_janela_nao_pre_aquece_a_biblioteca_inteira(janela, monkeypatch):
+    """Issue #31: o pré-aquecimento percorre a biblioteca toda antes da janela
+    aparecer (~4,5 s medidos na biblioteca real). Só deve rodar depois de uma
+    varredura que trouxe conteúdo visual novo."""
+    chamadas = []
+    monkeypatch.setattr(type(janela.model), "warmup_library",
+                        lambda self: chamadas.append(1))
+
+    segunda = MainWindow(janela._conn, str(janela.model._root),
+                         config.db_path(), config.thumbs_dir())
+    try:
+        assert chamadas == []
+    finally:
+        segunda.close()
