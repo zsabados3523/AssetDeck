@@ -397,3 +397,11 @@ def test_a_contagem_de_sumidos_alimenta_o_aviso_do_rodape(tmp_path):
     conn, lib = _biblioteca_com_um_sumido(tmp_path)
 
     assert repo.count_missing(conn, library_id=lib) == 1
+
+
+def test_contagem_de_extensoes_de_todos_os_tipos_de_uma_vez(conn, lib):
+    """Issue #31: uma consulta só, igual a chamar `extension_counts` por tipo."""
+    por_tipo = assets_repo.extension_counts_by_type(conn)
+    assert por_tipo == {"texture": {"jpg": 4, "png": 2}, "hdri": {"hdr": 1}}
+    for tipo, esperado in por_tipo.items():
+        assert assets_repo.extension_counts(conn, [tipo]) == dict(sorted(esperado.items()))

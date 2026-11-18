@@ -368,6 +368,24 @@ def extension_counts(conn: sqlite3.Connection,
     return dict(sorted(contagem.items()))
 
 
+def extension_counts_by_type(conn: sqlite3.Connection) -> dict[str, dict[str, int]]:
+    """`extension_counts` de TODOS os tipos de uma vez: {asset_type: {ext: n}}.
+    A barra de categorias chamava `extension_counts` uma vez por botão, cada
+    uma refazendo o mesmo SELECT (Issue #31)."""
+    contagem: dict[str, dict[str, int]] = {}
+    for row in conn.execute(
+            """SELECT a.asset_type, f.rel_path FROM files f
+               JOIN assets a ON a.id = f.asset_id
+               WHERE f.is_primary = 1 AND f.deleted_at IS NULL
+                 AND a.deleted_at IS NULL"""):
+        nome = row["rel_path"].rsplit("/", 1)[-1]
+        if "." in nome:
+            ext = nome.rsplit(".", 1)[-1].lower()
+            por_ext = contagem.setdefault(row["asset_type"], {})
+            por_ext[ext] = por_ext.get(ext, 0) + 1
+    return contagem
+
+
 def count_by_category(conn: sqlite3.Connection, categorias, **filtros) -> dict[str, int]:
     """Quantos assets cada categoria tem, respeitando os filtros ATIVOS
     (busca, pasta, tag, nota...) mas ignorando o próprio filtro de
