@@ -39,12 +39,18 @@ def _aid(conn, name):
     ).fetchone()["id"]
 
 
+def _outra(externa):
+    destino = externa.with_name("outro_render.png")
+    Image.new("RGB", (128, 128), (40, 200, 40)).save(destino)
+    return destino
+
+
 def test_orfao_de_linha_soft_deletada_e_apagado_ativo_preservado(env):
     conn, _, pdir, externa = env
     aid = _aid(conn, "modelo")
 
     vivo = previews_repo.add(conn, aid, externa, pdir)
-    orfao = previews_repo.add(conn, aid, externa, pdir)
+    orfao = previews_repo.add(conn, aid, _outra(externa), pdir)
     pid_orfao = previews_repo.list_for(conn, aid)[-1]["id"]
     previews_repo.soft_delete(conn, pid_orfao)
 
@@ -106,7 +112,7 @@ def test_falha_ao_apagar_um_nao_derruba_o_lote(env, monkeypatch):
     conn, _, pdir, externa = env
     aid = _aid(conn, "modelo")
     a = previews_repo.add(conn, aid, externa, pdir)
-    b = previews_repo.add(conn, aid, externa, pdir)
+    b = previews_repo.add(conn, aid, _outra(externa), pdir)
     for pid in [r["id"] for r in previews_repo.list_for(conn, aid)]:
         previews_repo.soft_delete(conn, pid)
 
@@ -134,3 +140,17 @@ def test_pasta_inexistente_da_plano_vazio(env, tmp_path):
     plano = previews_cleanup.planejar(conn, tmp_path / "nem_existe")
     assert plano.total_orfaos == 0
     assert previews_cleanup.executar(plano) == (0, 0, 0)
+
+
+def test_arquivo_compartilhado_sobrevive_enquanto_um_asset_usar(env):
+    conn, root, pdir, externa = env
+    (root / "outro.blend").write_bytes(b"outro" * 40)
+    scan_library(conn, libraries_repo.get_or_create(conn, root), root)
+    outro = _aid(conn, "outro")
+    um = _aid(conn, "modelo")
+    arquivo = previews_repo.add(conn, um, externa, pdir)
+    previews_repo.add(conn, outro, externa, pdir)
+    previews_repo.soft_delete(conn, previews_repo.list_for(conn, um)[0]["id"])
+
+    assert previews_cleanup.planejar(conn, pdir).orfaos == []
+    assert arquivo.exists()
