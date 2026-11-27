@@ -140,3 +140,17 @@ def test_pasta_inexistente_da_plano_vazio(env, tmp_path):
     plano = previews_cleanup.planejar(conn, tmp_path / "nem_existe")
     assert plano.total_orfaos == 0
     assert previews_cleanup.executar(plano) == (0, 0, 0)
+
+
+def test_arquivo_compartilhado_sobrevive_enquanto_um_asset_usar(env):
+    conn, root, pdir, externa = env
+    (root / "outro.blend").write_bytes(b"outro" * 40)
+    scan_library(conn, libraries_repo.get_or_create(conn, root), root)
+    outro = _aid(conn, "outro")
+    um = _aid(conn, "modelo")
+    arquivo = previews_repo.add(conn, um, externa, pdir)
+    previews_repo.add(conn, outro, externa, pdir)
+    previews_repo.soft_delete(conn, previews_repo.list_for(conn, um)[0]["id"])
+
+    assert previews_cleanup.planejar(conn, pdir).orfaos == []
+    assert arquivo.exists()
