@@ -32,6 +32,36 @@ def _id(conn, name):
     return conn.execute("SELECT id FROM assets WHERE name = ?", (name,)).fetchone()["id"]
 
 
+def _outra(externa):
+    """Segunda imagem, de conteúdo diferente da primeira."""
+    destino = externa.with_name("outro_render.png")
+    Image.new("RGB", (128, 128), (40, 200, 40)).save(destino)
+    return destino
+
+
+def test_mesma_imagem_em_dois_assets_ocupa_um_arquivo(env):
+    conn, _, pdir, externa = env
+    a, b = _id(conn, "modelo"), _id(conn, "textura")
+
+    um = previews_repo.add(conn, a, externa, pdir)
+    dois = previews_repo.add(conn, b, externa, pdir)
+
+    assert um == dois
+    assert list(pdir.iterdir()) == [um]
+
+
+def test_mesma_imagem_duas_vezes_no_asset_nao_duplica_a_galeria(env):
+    conn, _, pdir, externa = env
+    aid = _id(conn, "modelo")
+    previews_repo.add(conn, aid, externa, pdir)
+    previews_repo.add(conn, aid, _outra(externa), pdir)
+
+    previews_repo.add(conn, aid, externa, pdir)  # repetida volta a ser capa
+
+    galeria = previews_repo.list_for(conn, aid)
+    assert [p["is_cover"] for p in galeria] == [1, 0]
+
+
 def test_add_copia_para_pasta_gerenciada_e_vira_capa(env):
     conn, _, pdir, externa = env
     aid = _id(conn, "modelo")
@@ -51,7 +81,7 @@ def test_novo_preview_assume_a_capa(env):
     conn, _, pdir, externa = env
     aid = _id(conn, "modelo")
     previews_repo.add(conn, aid, externa, pdir)
-    previews_repo.add(conn, aid, externa, pdir)  # segundo
+    previews_repo.add(conn, aid, _outra(externa), pdir)
 
     galeria = previews_repo.list_for(conn, aid)
     assert len(galeria) == 2
@@ -62,7 +92,7 @@ def test_set_cover_troca_a_capa(env):
     conn, _, pdir, externa = env
     aid = _id(conn, "modelo")
     previews_repo.add(conn, aid, externa, pdir)
-    previews_repo.add(conn, aid, externa, pdir)
+    previews_repo.add(conn, aid, _outra(externa), pdir)
     primeiro = previews_repo.list_for(conn, aid)[0]
 
     previews_repo.set_cover(conn, primeiro["id"])

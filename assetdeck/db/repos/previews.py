@@ -7,7 +7,9 @@ original dele pode ser movido/apagado sem quebrar nada.
 
 from __future__ import annotations
 
+import hashlib
 import logging
+import os
 import shutil
 import sqlite3
 from datetime import datetime, timezone
@@ -26,12 +28,32 @@ def add(conn: sqlite3.Connection, asset_id: int, src: Path, dest_dir: Path,
     """Copia a imagem para a pasta gerenciada e registra na galeria.
 
     Retorna o caminho da cópia. make_cover=True troca a capa do asset.
+    A cópia é nomeada pelo conteúdo: a mesma imagem ocupa o disco uma vez
+    só, mesmo em vários assets.
     """
     if not src.is_file():
         raise FileNotFoundError(f"Imagem de preview não existe: {src}")
     dest_dir.mkdir(parents=True, exist_ok=True)
-    stored = dest_dir / f"{uuid4().hex}{src.suffix.lower()}"
-    shutil.copy2(src, stored)
+    with src.open("rb") as f:
+        digest = hashlib.file_digest(f, "sha1").hexdigest()
+    stored = dest_dir / f"{digest}{src.suffix.lower()}"
+    if not stored.is_file():
+        # Cópia atômica: um arquivo pela metade nunca ganha o nome final.
+        temp = dest_dir / f"{uuid4().hex}.tmp"
+        try:
+            shutil.copy2(src, temp)
+            os.replace(temp, stored)
+        finally:
+            temp.unlink(missing_ok=True)
+
+    repetida = conn.execute(
+        "SELECT id FROM previews WHERE asset_id = ? AND file_path = ? "
+        "AND deleted_at IS NULL", (asset_id, str(stored)),
+    ).fetchone()
+    if repetida is not None:
+        if make_cover:
+            set_cover(conn, repetida["id"])
+        return stored
 
     ordem = conn.execute(
         "SELECT COALESCE(MAX(sort_order), -1) + 1 AS o FROM previews "
