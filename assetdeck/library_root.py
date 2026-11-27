@@ -23,19 +23,39 @@ from __future__ import annotations
 
 import logging
 import sqlite3
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 
 log = logging.getLogger(__name__)
 
 
+# Pasta de rede fora do ar pode segurar um `stat` por minutos; a folga cobre
+# um NAS acordando o disco, que não pode virar "biblioteca não encontrada".
+_ESPERA_MAXIMA_S = 30.0
+
+
 def _is_dir(path: Path, contexto: str) -> bool:
-    """Verifica um diretório sem derrubar a busca quando o caminho é ilegível."""
-    try:
-        return path.is_dir()
-    except OSError as exc:
-        log.warning("Não consegui verificar %s durante %s: %s", path, contexto, exc)
+    """Verifica um diretório sem derrubar a busca quando o caminho é ilegível
+    nem travar a abertura quando ele não responde."""
+    resposta: list[bool] = []
+
+    def _consultar() -> None:
+        try:
+            resposta.append(path.is_dir())
+        except OSError as exc:
+            log.warning("Não consegui verificar %s durante %s: %s", path, contexto, exc)
+            resposta.append(False)
+
+    # daemon: se o `stat` nunca voltar, não pode segurar o encerramento do app
+    consulta = threading.Thread(target=_consultar, daemon=True)
+    consulta.start()
+    consulta.join(_ESPERA_MAXIMA_S)
+    if not resposta:
+        log.warning("%s não respondeu em %.0f s durante %s",
+                    path, _ESPERA_MAXIMA_S, contexto)
         return False
+    return resposta[0]
 
 
 # Onde o Linux costuma montar disco externo. `/media/<user>` é o padrão do

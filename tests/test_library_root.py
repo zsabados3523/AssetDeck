@@ -140,3 +140,17 @@ def test_modo_screenshot_nao_trava_num_dialogo(conn, tmp_path, qapp):
     cfg = {"library_root": str(sumida)}
 
     assert _confirmar_biblioteca(conn, cfg, silencioso=True) == str(sumida)
+
+
+def test_caminho_que_nao_responde_nao_trava_a_busca(tmp_path, monkeypatch):
+    import threading
+
+    from assetdeck import library_root
+
+    liberar = threading.Event()
+    monkeypatch.setattr(library_root, "_ESPERA_MAXIMA_S", 0.05)
+    monkeypatch.setattr(type(tmp_path), "is_dir", lambda self: liberar.wait(5))
+    try:
+        assert library_root._is_dir(tmp_path, "teste") is False
+    finally:
+        liberar.set()
