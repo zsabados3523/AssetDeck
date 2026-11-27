@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -32,6 +33,19 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
 # extensão) — é o "nome" que o GNOME usa pra casar a janela aberta com o
 # ícone fixado no dock. Tem que bater com os dois lugares.
 DESKTOP_FILE_ID = "assetdeck"
+
+
+def _preferir_x11() -> None:
+    """Em sessão Wayland, abre pelo XWayland (`xcb`), com Wayland de reserva.
+
+    No Wayland nativo o app já ficou rodando sem mostrar janela nenhuma
+    (GNOME, duas placas NVIDIA); por X11 ela aparece. A causa exata não foi
+    isolada. Quem quiser o Wayland nativo define `QT_QPA_PLATFORM`. Tem de
+    rodar antes do QApplication.
+    """
+    if (sys.platform.startswith("linux") and os.environ.get("WAYLAND_DISPLAY")
+            and os.environ.get("DISPLAY")):
+        os.environ.setdefault("QT_QPA_PLATFORM", "xcb;wayland")
 
 
 def _set_app_icon(app) -> None:
@@ -205,6 +219,7 @@ def varrer_na_abertura(cfg: dict) -> bool:
 
 def run(argv: list[str]) -> int:
     args = parse_args(argv)
+    _preferir_x11()
 
     config.ensure_dirs()
     setup_logging(config.logs_dir())
