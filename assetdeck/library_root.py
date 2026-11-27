@@ -30,8 +30,9 @@ from pathlib import Path
 log = logging.getLogger(__name__)
 
 
-# Pasta de rede com o servidor fora do ar pode segurar um `stat` por minutos.
-_ESPERA_MAXIMA_S = 10.0
+# Pasta de rede fora do ar pode segurar um `stat` por minutos; a folga cobre
+# um NAS acordando o disco, que não pode virar "biblioteca não encontrada".
+_ESPERA_MAXIMA_S = 30.0
 
 
 def _is_dir(path: Path, contexto: str) -> bool:
