@@ -4,9 +4,9 @@ Pillow==12.3.0
 pytest==9.2.0
 # HDR/EXR (Fatia 7): OpenCV lê .hdr; OpenEXR oficial lê .exr.
 # (imageio foi descartado: seu leitor HDR baixa binário em runtime — viola o 100% offline)
-opencv-python-headless==5.0.0.93
-numpy==2.5.4
-OpenEXR==3.5.3
+opencv-python-headless==5.1.0.95
+numpy==2.5.5
+OpenEXR==3.5.5
 # Leitura de .fbx no visualizador 3D (Fase 6) — wheel autocontido, sem
 # pacote de sistema (o binding "oficial" pyassimp quebrou no Python 3.12,
 # ver TODO.md).
